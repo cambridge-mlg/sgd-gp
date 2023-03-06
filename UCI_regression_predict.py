@@ -48,7 +48,7 @@ if __name__ == '__main__':
     parser.add_argument("--iterations", default=50000, type=int,
                         help="number of training iterations")
     # results path
-    parser.add_argument("--results_path", default="plots/UCI/prior_sample_noise_in_error/lr=1e-2/{}.png", type=str,
+    parser.add_argument("--results_path", default="plots/UCI/loss_1/lr=1e-2/{}.png", type=str,
                         help="filepath to results destination")
     args = parser.parse_args()
     results_dict = vars(args)
@@ -81,11 +81,11 @@ if __name__ == '__main__':
         fig = plt.figure(figsize=[20, 5 * rows])
         fig.suptitle(f"{dataset_name}, N = {N}, D = {D}, lr = {args.learning_rate:.0e}")
 
-        for row, B in enumerate(args.batch_sizes):
-            assert B <= N
+        for row, M in enumerate(args.random_features):
             ax = [fig.add_subplot(rows, cols, row * cols + idx + 1) for idx in range(cols)]
 
-            for M in args.random_features:
+            for B in args.batch_sizes:
+                assert B <= N
                 print(f"B = {B}, M = {M}")
 
                 # create jax random keys for prior sample
@@ -162,12 +162,12 @@ if __name__ == '__main__':
                     alpha_rmse_trace.append(alpha_rmse.item())
                     test_rmse_trace.append(test_rmse.item())
                 
-                ax[0].plot(exact_loss_trace, label=f'M = {M}')
-                ax[1].plot(grad_var_trace, label=f'M = {M}')
-                ax[2].plot(alpha_rmse_trace, label=f'M = {M}')
-                ax[3].plot(test_rmse_trace, label=f'M = {M}')
+                ax[0].plot(exact_loss_trace, label=f'B = {B}')
+                ax[1].plot(grad_var_trace, label=f'B = {B}')
+                ax[2].plot(alpha_rmse_trace, label=f'B = {B}')
+                ax[3].plot(test_rmse_trace, label=f'B = {B}')
 
-            ax[0].set_ylabel(f"Batch Size = {B}")
+            ax[0].set_ylabel(f"Number of RFFs = {M}")
             ax[0].axhline(exact_loss_fn(alpha_sample_exact), color='k', linestyle='--', label='Exact')
             ax[2].axhline(0., color='k', linestyle='--', label='Exact')
             ax[3].axhline(test_rmse_exact, color='k', linestyle='--', label='Exact')
