@@ -7,7 +7,7 @@ import optax
 import matplotlib.pyplot as plt
 from utils import apply_z_score, RMSE
 from kernels import RBF, RFF
-from linear_model import exact_solution, predict, error_grad_sample, regularizer_grad_sample, loss_fn
+from linear_model import exact_solution, predict, error_grad_sample, regularizer_grad_sample, loss_fn, draw_prior_function_sample, draw_prior_noise_sample
 from uci_datasets import Dataset
 from tqdm import tqdm
 
@@ -15,8 +15,12 @@ from tqdm import tqdm
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     # random seed and device config
-    parser.add_argument("--seed", default=12345, type=int,
+    parser.add_argument("--optimizer_seed", default=12345, type=int,
                         help="PyTorch initial random seed")
+    parser.add_argument("--feature_seed", default=1234, type=int,
+                        help="random seed for function sample")
+    parser.add_argument("--sample_seed", default=123, type=int,
+                        help="random seed for function sample")
     parser.add_argument("--device", default='cpu', type=str,
                         help="which compute device (usually 'cpu' or 'cuda')")
     # data config
@@ -44,7 +48,7 @@ if __name__ == '__main__':
     parser.add_argument("--iterations", default=50000, type=int,
                         help="number of training iterations")
     # results path
-    parser.add_argument("--results_path", default="plots/UCI/rff_prior/lr=1e-2/{}.png", type=str,
+    parser.add_argument("--results_path", default="plots/UCI/prior_sample_noise_in_error/lr=1e-2/{}.png", type=str,
                         help="filepath to results destination")
     args = parser.parse_args()
     results_dict = vars(args)
@@ -64,16 +68,12 @@ if __name__ == '__main__':
         y_train, mu_y, sigma_y = apply_z_score(jnp.array(y_train.squeeze()))
         x_test = apply_z_score(jnp.array(x_test), mu=mu_x, sigma=sigma_x)
         y_test = apply_z_score(jnp.array(y_test.squeeze()), mu=mu_y, sigma=sigma_y)
+
         # compute kernel matrix
         K = kernel_fn(x_train, x_train)
-
+        
         # compute exact solution
         alpha_exact = exact_solution(y_train, K, noise_scale=args.noise_scale)
-        y_pred_exact = predict(alpha_exact, x_test, x_train, kernel_fn=kernel_fn)
-        test_rmse_exact = RMSE(y_pred_exact, y_test, mu=mu_y, sigma=sigma_y)
-
-        # define auxiliary functions
-        exact_loss_fn = jax.jit(lambda params: loss_fn(params, y_train, K, noise_scale=args.noise_scale))
 
         # create figure
         rows = len(args.batch_sizes)
@@ -88,11 +88,34 @@ if __name__ == '__main__':
             for M in args.random_features:
                 print(f"B = {B}, M = {M}")
 
+                # create jax random keys for prior sample
+                feature_key = jr.PRNGKey(args.feature_seed)
+                prior_function_key, prior_noise_key = jr.split(jr.PRNGKey(args.sample_seed))
+
+                # draw prior function sample evaluated at train and test data
+                prior_function_sample_train = draw_prior_function_sample(feature_key, prior_function_key, M, x_train, feature_fn)
+                prior_function_sample_test = draw_prior_function_sample(feature_key, prior_function_key, M, x_test, feature_fn)
+
+                # draw prior noise sample
+                prior_noise_sample = draw_prior_noise_sample(prior_noise_key, N, noise_scale=args.noise_scale)
+
+                # compute exact solution
+                alpha_sample_exact = exact_solution(prior_function_sample_train + prior_noise_sample, K, noise_scale=args.noise_scale)
+
+                # compute exact prediction and RMSE of sample
+                y_pred_sample_exact =  prior_function_sample_test + predict(alpha_exact - alpha_sample_exact, x_test, x_train, kernel_fn=kernel_fn)
+                test_rmse_exact = RMSE(y_pred_sample_exact, y_test, mu=mu_y, sigma=sigma_y)
+
+                # define auxiliary functions
+                exact_loss_fn = jax.jit(lambda params: loss_fn(params, prior_function_sample_train + prior_noise_sample, K, noise_scale=args.noise_scale))
+
                 @jax.jit
                 def stochastic_gradient(params, key):
                     error_key, regularizer_key = jr.split(key)
-                    error_grad = error_grad_sample(params, error_key, B, x_train, y_train, kernel_fn)
+                    error_grad = error_grad_sample(params, error_key, B, x_train, prior_function_sample_train + prior_noise_sample, kernel_fn)
                     regularizer_grad = regularizer_grad_sample(params, regularizer_key, M, x_train, feature_fn)
+                    # error_grad = error_grad_sample(params, error_key, B, x_train, prior_function_sample_train, kernel_fn)
+                    # regularizer_grad = regularizer_grad_sample(params - prior_noise_sample, regularizer_key, M, x_train, feature_fn)
                     return error_grad + (args.noise_scale ** 2) * regularizer_grad
                 
                 alpha = jnp.zeros((N,))
@@ -115,22 +138,20 @@ if __name__ == '__main__':
                 alpha_rmse_trace = []
                 test_rmse_trace = []
 
-                key = jr.PRNGKey(args.seed)
+                key = jr.PRNGKey(args.optimizer_seed)
                 iterator = tqdm(range(args.iterations))
                 for i in iterator:
                     # perform update
                     key, subkey = jr.split(key)
                     opt_state, alpha, alpha_polyak = update(opt_state, alpha, alpha_polyak, subkey)
-                    # compute trace statistics
-                    exact_loss = exact_loss_fn(alpha_polyak)
-                    y_pred = predict(alpha_polyak, x_test, x_train, kernel_fn=kernel_fn)
 
                     if i % 100 == 0:
+                        # compute trace statistics
                         exact_loss = exact_loss_fn(alpha_polyak)
                         
-                        y_pred = predict(alpha_polyak, x_test, x_train, kernel_fn=kernel_fn)
-                        alpha_rmse = RMSE(alpha_exact, alpha_polyak)
-                        test_rmse = RMSE(y_pred, y_test, mu=mu_y, sigma=sigma_y)
+                        y_pred_sample =  prior_function_sample_test + predict(alpha_exact - alpha_polyak, x_test, x_train, kernel_fn=kernel_fn)
+                        alpha_rmse = RMSE(alpha_sample_exact, alpha_polyak)
+                        test_rmse = RMSE(y_pred_sample, y_test, mu=mu_y, sigma=sigma_y)
 
                         grad_var_key = jr.split(jr.PRNGKey(12345), 100)
                         grad_samples = jax.vmap(stochastic_gradient, (None, 0))(alpha_polyak, grad_var_key)
@@ -147,7 +168,7 @@ if __name__ == '__main__':
                 ax[3].plot(test_rmse_trace, label=f'M = {M}')
 
             ax[0].set_ylabel(f"Batch Size = {B}")
-            ax[0].axhline(exact_loss_fn(alpha_exact), color='k', linestyle='--', label='Exact')
+            ax[0].axhline(exact_loss_fn(alpha_sample_exact), color='k', linestyle='--', label='Exact')
             ax[2].axhline(0., color='k', linestyle='--', label='Exact')
             ax[3].axhline(test_rmse_exact, color='k', linestyle='--', label='Exact')
             ax[0].semilogy()

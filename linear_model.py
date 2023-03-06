@@ -35,6 +35,17 @@ def predict(params, x_pred, x_train, kernel_fn, **kernel_kwargs):
     return kernel_fn(x_pred, x_train, **kernel_kwargs) @ params
 
 
+def draw_prior_function_sample(feature_key, prior_function_key, M, x, feature_fn, **feature_kwargs):
+    R = feature_fn(feature_key, M, x, **feature_kwargs)
+    w = jr.normal(prior_function_key, (M,))
+    return R @ w
+
+
+def draw_prior_noise_sample(prior_noise_key, N, noise_scale=1.):
+    return noise_scale * jr.normal(prior_noise_key, (N,))
+
+
+
 if __name__ == '__main__':
     key = jax.random.PRNGKey(12345)
     import numpy as np
