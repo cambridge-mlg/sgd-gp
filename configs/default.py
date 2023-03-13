@@ -1,0 +1,57 @@
+import ml_collections
+from uci_datasets import all_datasets
+
+
+def get_dataset_config(name):
+    config = ml_collections.ConfigDict()
+    if name == 'toy_sin':
+        config.n_train = 100
+        config.noise_scale = 1.0
+        config.n_test = 500
+        config.n_per_period = 100
+    elif name in all_datasets.keys():
+        pass
+    
+    return config
+        
+        
+        
+def get_config():
+    config = ml_collections.ConfigDict()
+
+    # Saving configs
+    config.save_dir = 'results/toy_sin'
+
+    config.seed = 12345
+
+    # Data Configs
+    config.dataset_name = "toy_sin"
+    
+    config.dataset_config = ml_collections.ConfigDict()
+    config.dataset_config = get_dataset_config(config.dataset_name)
+    
+    config.dataset_config.normalise = True
+    
+    config.batch_size = 4
+
+    # Kernel Configs
+    config.signal_scale = 1.
+    config.length_scale = 1.
+    config.num_features = 100
+    
+    # Full-batch training configs
+    config.learning_rate = 1e-2
+    config.momentum = 0.9
+    config.polyak = 1e-2
+    config.iterations = 50000
+
+    config.optimiser = 'sgd'
+
+    # Wandb Configs
+    config.wandb = ml_collections.ConfigDict()
+    config.wandb.log = False
+    config.wandb.project = "scalable-gps"
+    config.wandb.entity = "shreyaspadhy"
+    config.wandb.code_dir = "/home/shreyaspadhy_gmail_com/scalable-gaussian-processes"
+    
+    return config
