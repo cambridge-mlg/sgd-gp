@@ -24,6 +24,9 @@ class Model:
     
     def compute_representer_weights(self):
         raise NotImplementedError("compute_representer_weights() must be implemented in the derived class.")
+    
+    def compute_posterior_sample(self):
+        raise NotImplementedError("compute_posterior_sample() must be implemented in the derived class.")
 
 
 class ExactGPModel(Model):
@@ -144,6 +147,7 @@ class SamplingGPModel(Model):
         # Define the gradient update function
         update_fn = get_update_fn(grad_fn, train_ds.N, train_config.polyak)
         
+        # TODO: Implement eval fn that calculates test RMSE with the sample?
         eval_fn = None
 
         # Initialise alpha and alpha_polyak for sample

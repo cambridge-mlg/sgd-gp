@@ -6,7 +6,7 @@ import jax.random as jr
 def error(params, targets, K):
     return .5 * jnp.sum((targets - K @ params) ** 2)
 
-
+# TODO: pmap over B.
 def error_grad_sample(params, key, B, x, target, kernel_fn):
     N = x.shape[0]
     idx = jr.randint(key, shape=(B,), minval=0, maxval=N)
@@ -18,6 +18,7 @@ def regularizer(params, K):
     return .5 * params @ K @ params
 
 
+# TODO: pmap over M.
 def regularizer_grad_sample(params, key, M, x, target, feature_fn):
     R = feature_fn(key, M, x)
     return R @ (R.T @ (params + target))
