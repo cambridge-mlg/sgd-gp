@@ -1,13 +1,14 @@
 from pathlib import Path
 
 import jax
+import jax.random as jr
 import ml_collections.config_flags
 from absl import app, flags
 
 import wandb
 from data import get_dataset
 from kernels import RBF, RFF
-from train_utils import compute_exact_solution, compute_optimised_solution
+from models import ExactGPModel, SamplingGPModel
 from utils import flatten_nested_dict, update_config_dict
 
 ml_collections.config_flags.DEFINE_config_file(
@@ -49,16 +50,28 @@ def main(config):
         save_dir.mkdir(parents=True, exist_ok=True)
         
         # Compute exact solution
-        alpha_exact = None
+        exact_model = None
         if config.compute_exact_soln is True:
-            alpha_exact, y_pred_exact, test_rmse_exact = compute_exact_solution(
-                train_ds, test_ds, kernel_fn, noise_scale=config.noise_scale)
-
+            exact_model = ExactGPModel(config.noise_scale, kernel_fn)
+            exact_model.compute_representer_weights(train_ds)
+            
+            test_rmse_exact = exact_model.calculate_test_rmse(train_ds, test_ds)
+            
             wandb.log({"test_rmse_exact": test_rmse_exact})
         
         # Compute stochastic optimised solution
-        alpha_polyak, aux = compute_optimised_solution(
-            config, train_ds, test_ds, K, kernel_fn, feature_fn, alpha_exact)
+        key = jr.PRNGKey(config.seed)
+        model = SamplingGPModel(config.noise_scale, kernel_fn, feature_fn)
+        
+        model.compute_representer_weights(train_ds, test_ds, config.train_config, key, 
+                                          alpha_exact=exact_model.alpha if exact_model is not None else None,)
+        
+        
+        # Compute a posterior sample
+        post_sample = model.compute_posterior_sample(train_ds, config.train_config, 1, key)
+        
+        return post_sample
+        
         
         
     
