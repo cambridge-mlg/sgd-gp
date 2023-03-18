@@ -50,7 +50,7 @@ def main(config):
         save_dir.mkdir(parents=True, exist_ok=True)
         
         # Compute exact solution
-        exact_model = None
+        exact_model, compare_exact_vals = None, None
         if config.compute_exact_soln is True:
             exact_model = ExactGPModel(config.dataset_config.noise_scale, kernel_fn)
             exact_model.compute_representer_weights(train_ds)
