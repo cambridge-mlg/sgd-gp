@@ -27,23 +27,24 @@ class Dataset:
 
 
 def get_toy_sin_dataset(
-    key: PRNGKey, 
+    key: int, 
     n: int, 
-    noise: float, 
+    noise_scale: float, 
     n_test: int, 
     n_periods: int = 25, 
     normalise: bool = False,
     **kwargs: KwArgs
     ) -> Tuple[Dataset, Dataset]:
+    key = jr.PRNGKey(key)
     k1, k2, key = jr.split(key, 3)
 
-    x = jnp.linspace( -n / n_periods, n / n_periods, num = n).reshape(-1,1)
+    x = jnp.linspace( -n / n_periods, n / n_periods, num = n).reshape(-1, 1)
 
     def f(x):
         return jnp.sin(2 * x) + jnp.cos(5 * x)
 
     signal = f(x)
-    y = signal + jr.normal(k2, shape=signal.shape) * noise
+    y = signal + jr.normal(k2, shape=signal.shape) * noise_scale
 
     x_test = jnp.linspace(-3.1, 3.1, 500).reshape(-1, 1)
     y_test = f(x_test)

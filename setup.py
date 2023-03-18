@@ -17,7 +17,7 @@ except:
     reqs = [str(ir.requirement) for ir in install_reqs]
 
 git_reqs = [
-    "jaxutils @ git+https://github.com/shreyaspadhy/jaxutils"
+    # "jaxutils @ git+https://github.com/shreyaspadhy/jaxutils"
 ]
 
 

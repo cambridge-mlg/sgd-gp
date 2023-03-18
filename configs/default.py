@@ -1,14 +1,15 @@
 import ml_collections
 from uci_datasets import all_datasets
-
+import jax.random as jr
 
 def get_dataset_config(name):
     config = ml_collections.ConfigDict()
     if name == 'toy_sin':
-        config.n_train = 100
+        config.n = 100
         config.noise_scale = 1.0
         config.n_test = 500
         config.n_per_period = 100
+        config.key = 42
     elif name in all_datasets.keys():
         pass
     
@@ -23,6 +24,9 @@ def get_config():
     config.save_dir = 'results/toy_sin'
 
     config.seed = 12345
+    
+    config.compute_exact_soln = True
+    config.use_tpu = True
 
     # Data Configs
     config.dataset_name = "toy_sin"
@@ -32,20 +36,25 @@ def get_config():
     
     config.dataset_config.normalise = True
     
-    config.batch_size = 4
 
     # Kernel Configs
     config.signal_scale = 1.
     config.length_scale = 1.
-    config.num_features = 100
     
-    # Full-batch training configs
-    config.learning_rate = 1e-2
-    config.momentum = 0.9
-    config.polyak = 1e-2
-    config.iterations = 50000
+    config.train_config = ml_collections.ConfigDict()
+    
+    # Full-batch training configs that get passed
+    config.train_config.learning_rate = 1e-2
+    config.train_config.momentum = 0.9
+    config.train_config.polyak = 1e-2
+    config.train_config.iterations = 50000
+    config.train_config.batch_size = 4
+    config.train_config.eval_every = 100
+    # RFF Configs
+    config.train_config.num_features = 100
 
     config.optimiser = 'sgd'
+    
 
     # Wandb Configs
     config.wandb = ml_collections.ConfigDict()

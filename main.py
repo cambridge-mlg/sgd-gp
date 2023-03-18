@@ -9,11 +9,11 @@ import wandb
 from data import get_dataset
 from kernels import RBF, RFF
 from models import ExactGPModel, SamplingGPModel
-from utils import flatten_nested_dict, update_config_dict
+from utils import flatten_nested_dict, update_config_dict, setup_training
 
 ml_collections.config_flags.DEFINE_config_file(
     "config",
-    "configs/toy_sin.py",
+    "configs/default.py",
     "Training configuration.",
     lock_config=True,
 )
@@ -30,7 +30,7 @@ def main(config):
         "settings": wandb.Settings(code_dir=config.wandb.code_dir),
     }
     with wandb.init(**wandb_kwargs) as run:
-
+        setup_training(run)
         # If there are any config values dependent on sweep values, recompute them here.
         computed_configs = {}
         update_config_dict(config, run, computed_configs)
@@ -52,19 +52,20 @@ def main(config):
         # Compute exact solution
         exact_model = None
         if config.compute_exact_soln is True:
-            exact_model = ExactGPModel(config.noise_scale, kernel_fn)
+            exact_model = ExactGPModel(config.dataset_config.noise_scale, kernel_fn)
             exact_model.compute_representer_weights(train_ds)
             
-            test_rmse_exact = exact_model.calculate_test_rmse(train_ds, test_ds)
-            
+            test_rmse_exact, y_pred_exact = exact_model.calculate_test_rmse(train_ds, test_ds)
+            print(f'test_rmse_exact = {test_rmse_exact}')
             wandb.log({"test_rmse_exact": test_rmse_exact})
-        
+            compare_exact_vals = [exact_model.alpha, y_pred_exact, test_rmse_exact]
         # Compute stochastic optimised solution
         key = jr.PRNGKey(config.seed)
-        model = SamplingGPModel(config.noise_scale, kernel_fn, feature_fn)
+        model = SamplingGPModel(config.dataset_config.noise_scale, kernel_fn, feature_fn)
         
-        model.compute_representer_weights(train_ds, test_ds, config.train_config, key, 
-                                          alpha_exact=exact_model.alpha if exact_model is not None else None,)
+        model.compute_representer_weights(
+            train_ds, test_ds, config.train_config, key, 
+            compare_exact_vals=compare_exact_vals if config.compute_exact_soln else None)
         
         
         # Compute a posterior sample

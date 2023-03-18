@@ -8,14 +8,18 @@ def error(params, targets, K):
 
 # TODO: pmap over B.
 def error_grad_sample(params, key, B, x, target, kernel_fn):
+    
+    print(f'error_grad_sample: x.shape = {x.shape}, {params.shape}, {B}, {target.shape}')
     N = x.shape[0]
     idx = jr.randint(key, shape=(B,), minval=0, maxval=N)
     K = kernel_fn(x[idx], x)
+    
+    print(f'shapes : {K.shape}, {target[idx].shape}')
     return -K.T @ (target[idx] - K @ params) * (N / B)
 
 
-def regularizer(params, K):
-    return .5 * params @ K @ params
+def regularizer(params, target, K):
+    return .5 * (params + target) @ K @ (params + target)
 
 
 # TODO: pmap over M.
@@ -24,8 +28,9 @@ def regularizer_grad_sample(params, key, M, x, target, feature_fn):
     return R @ (R.T @ (params + target))
 
 
-def loss_fn(params, targets, K, noise_scale=1.):
-    return error(params, targets, K) + (noise_scale ** 2) * regularizer(params, K)
+def loss_fn(params, target_tuple, K, noise_scale=1.):
+    error_target, regularizer_target = target_tuple
+    return error(params, error_target, K) + (noise_scale ** 2) * regularizer(params, regularizer_target, K)
 
 
 def exact_solution(targets, K, noise_scale=1.):

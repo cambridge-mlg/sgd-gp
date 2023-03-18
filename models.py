@@ -65,17 +65,17 @@ class ExactGPModel(Model):
         self.set_alpha(train_ds)
         # Compute the representer weights by solving alpha = (K + sigma^2 I)^{-1} y
         
-        y_pred = calc_Kstar_v(self.alpha, test_ds.x, train_ds.x, kernel_fn=self.kernel_fn)
+        y_pred = calc_Kstar_v(test_ds.x, train_ds.x, self.alpha, kernel_fn=self.kernel_fn)
         
         return y_pred
 
     
     def calculate_test_rmse(self, train_ds, test_ds):
-    
-        test_rmse = RMSE(
-            self.predict(train_ds, test_ds), test_ds.y, mu=train_ds.mu_y, sigma=train_ds.sigma_y)
         
-        return test_rmse
+        y_pred = self.predict(train_ds, test_ds)
+        test_rmse = RMSE(y_pred, test_ds.y, mu=train_ds.mu_y, sigma=train_ds.sigma_y)
+        
+        return test_rmse, y_pred
 
 
 class SamplingGPModel(Model):
@@ -92,11 +92,12 @@ class SamplingGPModel(Model):
 
     
     def _init_params(self, train_ds):
-        self.alpha = jnp.zeros((train_ds.x.N,))
-        self.alpha_polyak = jnp.zeros((train_ds.x.N,))
+        self.alpha = jnp.zeros((train_ds.N,))
+        self.alpha_polyak = jnp.zeros((train_ds.N,))
     
 
-    def compute_representer_weights(self, train_ds: Dataset, test_ds: Dataset, train_config, key, alpha_exact=None):
+    def compute_representer_weights(
+        self, train_ds: Dataset, test_ds: Dataset, train_config, key: jr.PRNGKey, compare_exact_vals=None):
         
         target_tuple = (train_ds.y, jnp.zeros_like(train_ds.y))
         grad_fn = get_stochastic_gradient_fn(
@@ -108,7 +109,7 @@ class SamplingGPModel(Model):
 
         # @jax.jit
         eval_fn = get_eval_fn(
-            train_ds, test_ds, loss_fn, grad_fn, target_tuple, self.kernel_fn, self.noise_scale, alpha_exact)
+            train_ds, test_ds, loss_fn, grad_fn, target_tuple, self.kernel_fn, self.noise_scale, compare_exact_vals)
 
         # Initialise alpha and alpha_polyak
         self._init_params(train_ds)
