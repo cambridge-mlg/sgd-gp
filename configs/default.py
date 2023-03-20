@@ -38,8 +38,12 @@ def get_config():
     
 
     # Kernel Configs
-    config.signal_scale = 1.
-    config.length_scale = 1.
+    config.kernel_config = ml_collections.ConfigDict()
+    config.kernel_config.signal_scale = 1.
+    config.kernel_config.length_scale = 1.
+    
+    # Copy kernel configs to feature configs
+    config.feature_config = config.kernel_config.copy_and_resolve_references()
     
     config.train_config = ml_collections.ConfigDict()
     

@@ -15,6 +15,7 @@ from utils import RMSE
 from functools import partial
 
 
+# TODO: if for error_fn pmap and reg_fn pmap
 def get_stochastic_gradient_fn(x, target_tuple, kernel_fn, feature_fn, batch_size, num_features, noise_scale):
     
     error_target, regularizer_target = target_tuple
@@ -22,9 +23,10 @@ def get_stochastic_gradient_fn(x, target_tuple, kernel_fn, feature_fn, batch_siz
     def _fn(params, key):
         error_key, regularizer_key = jr.split(key)
         error_grad = error_grad_sample(params, error_key, batch_size, x, error_target, kernel_fn)
-        regularizer_grad = regularizer_grad_sample(params, regularizer_key, num_features, x, regularizer_target, feature_fn)
+        regularizer_grad = regularizer_grad_sample(
+            params, regularizer_key, num_features, x, regularizer_target, feature_fn, noise_scale)
         
-        return error_grad + (noise_scale ** 2) * regularizer_grad
+        return error_grad + regularizer_grad
     
     return _fn
 

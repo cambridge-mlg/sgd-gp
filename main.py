@@ -7,7 +7,7 @@ from absl import app, flags
 
 import wandb
 from data import get_dataset
-from kernels import RBF, RFF
+from kernels import RBFKernel
 from models import ExactGPModel, SamplingGPModel
 from utils import flatten_nested_dict, update_config_dict, setup_training
 
@@ -41,10 +41,7 @@ def main(config):
         print(f'train_ds.x.shape: {train_ds.x.shape}')
         print(f'train_ds.y.shape: {train_ds.y.shape}')
 
-        def kernel_fn(x, y):
-            return RBF(x, y, s=config.signal_scale, l=config.length_scale)
-        def feature_fn(key, n_features, x):
-            return RFF(key, n_features, x, s=config.signal_scale, l=config.length_scale)
+        kernel = RBFKernel(config.kernel_config, config.feature_config)
 
         save_dir = Path(config.save_dir).resolve()
         save_dir.mkdir(parents=True, exist_ok=True)
@@ -52,7 +49,7 @@ def main(config):
         # Compute exact solution
         exact_model, compare_exact_vals = None, None
         if config.compute_exact_soln is True:
-            exact_model = ExactGPModel(config.dataset_config.noise_scale, kernel_fn)
+            exact_model = ExactGPModel(config.dataset_config.noise_scale, kernel)
             exact_model.compute_representer_weights(train_ds)
             
             test_rmse_exact, y_pred_exact = exact_model.calculate_test_rmse(train_ds, test_ds)
@@ -61,15 +58,17 @@ def main(config):
             compare_exact_vals = [exact_model.alpha, y_pred_exact, test_rmse_exact]
         # Compute stochastic optimised solution
         key = jr.PRNGKey(config.seed)
-        model = SamplingGPModel(config.dataset_config.noise_scale, kernel_fn, feature_fn)
+        optim_key, sampling_key, key = jr.split(key, 3)
+        model = SamplingGPModel(config.dataset_config.noise_scale, kernel)
         
         model.compute_representer_weights(
-            train_ds, test_ds, config.train_config, key, 
+            train_ds, test_ds, config.train_config, optim_key, 
             compare_exact_vals=compare_exact_vals if config.compute_exact_soln else None)
         
         
+        # TODO: vmap and pmap sampling to obtain multiple samples in parallel
         # Compute a posterior sample
-        post_sample = model.compute_posterior_sample(train_ds, config.train_config, 1, key)
+        post_sample = model.compute_posterior_sample(train_ds, config.train_config, 1, sampling_key)
         
         return post_sample
         

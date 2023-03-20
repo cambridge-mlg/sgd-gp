@@ -4,6 +4,8 @@ from chex import Array
 
 def solve_K_inv_v(K: Array, v: Array, noise_scale: float = 1.):
     """Solves (K + noise_scale^2 I) x = v for x."""
+    # TODO: use jax.scipy.linalg.solve with sym_pos=True
+    # TODO: jit to cpu
     return jnp.linalg.solve(K + (noise_scale ** 2) * jnp.identity(v.shape[0]), v)
 
 

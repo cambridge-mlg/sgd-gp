@@ -35,8 +35,8 @@ def get_toy_sin_dataset(
     normalise: bool = False,
     **kwargs: KwArgs
     ) -> Tuple[Dataset, Dataset]:
-    key = jr.PRNGKey(key)
-    k1, k2, key = jr.split(key, 3)
+    key = jr.PRNGKey(key) # type: ignore
+    k1, k2, key = jr.split(key, 3) # type: ignore
 
     x = jnp.linspace( -n / n_periods, n / n_periods, num = n).reshape(-1, 1)
 
