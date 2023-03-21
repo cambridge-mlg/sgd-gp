@@ -43,10 +43,16 @@ def predict(params, x_pred, x_train, kernel_fn, **kernel_kwargs):
     return kernel_fn(x_pred, x_train, **kernel_kwargs) @ params
 
 
-def draw_prior_function_sample(feature_key, prior_function_key, M, x, feature_fn, **feature_kwargs):
-    R = feature_fn(feature_key, M, x, **feature_kwargs)
-    w = jr.normal(prior_function_key, (M,))
-    return R @ w
+def draw_prior_function_sample(feature_key, prior_function_key, M, x, feature_fn, K=None, use_chol=False):
+    N = x.shape[0]
+    if use_chol:
+        L = jnp.linalg.cholesky(K + 1e-5 * jnp.identity(N))
+        eps = jr.normal(prior_function_key, (N,))
+    else:
+        L = feature_fn(feature_key, M, x)
+        eps = jr.normal(prior_function_key, (M,))
+
+    return L @ eps, L
 
 
 def draw_prior_noise_sample(prior_noise_key, N, noise_scale=1.):

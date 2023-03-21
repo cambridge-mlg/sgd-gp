@@ -46,6 +46,9 @@ def main(config):
         save_dir = Path(config.save_dir).resolve()
         save_dir.mkdir(parents=True, exist_ok=True)
         
+        key = jr.PRNGKey(config.seed)
+        optim_key, sampling_key, key = jr.split(key, 3)
+
         # Compute exact solution
         exact_model, compare_exact_vals = None, None
         if config.compute_exact_soln is True:
@@ -53,29 +56,36 @@ def main(config):
             exact_model.compute_representer_weights(train_ds)
             
             test_rmse_exact, y_pred_exact = exact_model.calculate_test_rmse(train_ds, test_ds)
+            
+            alpha_sample_exact, y_pred_sample_exact = exact_model.compute_posterior_sample(
+                sampling_key, train_ds, test_ds, config.train_config.num_features, use_rff_features=True)
             print(f'test_rmse_exact = {test_rmse_exact}')
             wandb.log({"test_rmse_exact": test_rmse_exact})
-            compare_exact_vals = [exact_model.alpha, y_pred_exact, test_rmse_exact]
+            compare_exact_vals = [exact_model.alpha, y_pred_exact, test_rmse_exact, alpha_sample_exact, y_pred_sample_exact]
         # Compute stochastic optimised solution
-        key = jr.PRNGKey(config.seed)
-        optim_key, sampling_key, key = jr.split(key, 3)
         model = SamplingGPModel(config.dataset_config.noise_scale, kernel)
         
         metrics = ['loss', 'grad_var', 'test_rmse']
         if config.compute_exact_soln:
-            metrics.extend(['alpha_diff', 'y_pred_diff', 'test_rmse_diff'])
+            metrics.extend(['alpha_sample_diff', 'y_pred_diff', 'test_rmse_diff'])
 
         model.compute_representer_weights(
             train_ds, test_ds, config.train_config, optim_key, 
             compare_exact_vals=compare_exact_vals if config.compute_exact_soln else None,
-            metrics=metrics)
+            metrics=metrics, metrics_prefix='train')
         
         
         # TODO: vmap and pmap sampling to obtain multiple samples in parallel
+        sampling_metrics = ['loss', 'grad_var', 'test_rmse']
+        if config.compute_exact_soln:
+            sampling_metrics.extend(['alpha_diff', 'y_pred_diff', 'loss_diff'])
+    
         # Compute a posterior sample
-        post_sample = model.compute_posterior_sample(train_ds, config.train_config, 1, sampling_key)
-        
-        post_sample = model.compute_posterior_sample(train_ds, config.train_config, 1, sampling_key)
+        loss_objective = config.sampling_loss_objective
+        post_sample = model.compute_posterior_sample(
+            train_ds, test_ds, config.train_config, loss_objective, sampling_key, sampling_metrics, 
+            compare_exact_vals=compare_exact_vals if config.compute_exact_soln else None,
+            metrics_prefix=f'sampling_{loss_objective}')
         
         return post_sample
         

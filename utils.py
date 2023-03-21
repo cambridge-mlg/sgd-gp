@@ -20,13 +20,6 @@ def revert_z_score(data: Array, mu: Array, sigma: Array):
     return sigma * data + mu
 
 
-def RMSE(x: Array, x_hat: Array, mu: Optional[Array]=None, sigma: Optional[Array]=None):
-    if mu is not None and sigma is not None:
-        x = revert_z_score(x, mu, sigma)
-        x_hat = revert_z_score(x_hat, mu, sigma)
-    return jnp.sqrt(jnp.mean((x - x_hat) ** 2))
-
-
 # Taken from https://stackoverflow.com/questions/6027558/flatten-nested-dictionaries-compressing-keys
 def flatten_nested_dict(nested_dict, parent_key="", sep="."):
     items = []

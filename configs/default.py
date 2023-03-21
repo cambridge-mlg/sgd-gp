@@ -58,6 +58,7 @@ def get_config():
     config.train_config.num_features = 100
 
     config.optimiser = 'sgd'
+    config.sampling_loss_objective = 1
     
 
     # Wandb Configs

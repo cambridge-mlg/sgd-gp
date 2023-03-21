@@ -11,6 +11,7 @@ from linear_model import (
 )
 from train_utils import (
     get_eval_fn,
+    get_sampling_eval_fn,
     get_stochastic_gradient_fn,
     get_update_fn,
     train,
@@ -78,32 +79,26 @@ class ExactGPModel(Model):
         
         return test_rmse, y_pred
 
-    
+
     def compute_posterior_sample(
-        self, train_ds: Dataset, test_ds: Dataset, train_config, loss_type, key, num_features, use_rff_features: bool = False):
+        self, key, train_ds: Dataset, test_ds: Dataset, num_features, use_rff_features: bool = False):
         # TODO: Implement posterior sample using Cholesky of K
         x = jnp.vstack((train_ds.x, test_ds.x))
         N, T = train_ds.N, test_ds.N
         
         prior_fn_key, prior_noise_key, feature_key = jr.split(key, 3)
         
+        K_full, K_train = None, None
+
         if not use_rff_features:
             K_full = self.kernel.K(x, x)
-            L = jnp.linalg.cholesky(K_full + 1e-5 * jnp.identity(N + T))
-            
             K_train = K_full[:N, :N]
-            # Calculate the random eps that we will then multiply by the cholesky of K
 
-            eps = jr.normal(prior_fn_key, (N + T,))
-    
-        else:
-            L = self.kernel.Phi(feature_key, num_features, x)  # (N + T, num_features)
-            eps = jr.normal(prior_fn_key, (num_features,))
-            
-            K_train = L[:N, :] @ L[:N, :].T
-
-            
-        prior_fn_sample = L @ eps  # (N + T,), function sampled at x_train and x_test points
+        prior_fn_sample, L = draw_prior_function_sample(
+            feature_key, prior_fn_key, num_features, x, self.kernel.Phi, K_full, use_chol=not use_rff_features)
+        
+        if use_rff_features:
+            K_train = L[:N] @ L[:N].T
 
         prior_fn_sample_train = prior_fn_sample[:N]
         prior_fn_sample_test = prior_fn_sample[N:]
@@ -145,7 +140,7 @@ class SamplingGPModel(Model):
     
 
     def compute_representer_weights(
-        self, train_ds: Dataset, test_ds: Dataset, train_config, key: PRNGKey, metrics, compare_exact_vals=None):
+        self, train_ds: Dataset, test_ds: Dataset, train_config, key: PRNGKey, metrics, metrics_prefix='', compare_exact_vals=None):
         
         # @ K (alpha + target)
         target_tuple = (train_ds.y, jnp.zeros_like(train_ds.y))
@@ -157,8 +152,8 @@ class SamplingGPModel(Model):
         update_fn = get_update_fn(grad_fn, train_ds.N, train_config.polyak)
 
         eval_fn = get_eval_fn(
-            metrics,
-            train_ds, test_ds, loss_fn, grad_fn, target_tuple, self.kernel.K, self.noise_scale, compare_exact_vals)
+            metrics, train_ds, test_ds, loss_fn, grad_fn, target_tuple, self.kernel.K, self.noise_scale, 
+            metrics_prefix, compare_exact_vals)
 
         # Initialise alpha and alpha_polyak
         self._init_params(train_ds)
@@ -169,26 +164,31 @@ class SamplingGPModel(Model):
         return self.alpha_polyak, aux
 
     
-    def compute_posterior_sample(self, train_ds: Dataset, train_config, loss_type, key):
-        # Draw prior function sample evaluated at the train and test data
-        feature_key, prior_fn_key, prior_noise_key, key = jr.split(key, 4)
-        prior_function_sample_train = draw_prior_function_sample(
-            feature_key, prior_fn_key, train_config.num_features, train_ds.x, self.kernel.Phi)
-        # prior_function_sample_test = draw_prior_function_sample(
-        #     feature_key, prior_fn_key, config.num_features, test_ds.x, feature_fn)
+    def compute_posterior_sample(self, train_ds: Dataset, test_ds, train_config, loss_type, key, metrics, 
+                                 metrics_prefix='', compare_exact_vals=None):
 
+        x = jnp.vstack((train_ds.x, test_ds.x))
+        N, T = train_ds.N, test_ds.N
+        
+        prior_fn_key, prior_noise_key, feature_key = jr.split(key, 3)
+        
+        prior_fn_sample, L = draw_prior_function_sample(
+            feature_key, prior_fn_key, train_config.num_features, x, self.kernel.Phi, use_chol=False)
+
+        prior_fn_sample_train = prior_fn_sample[:N]
+        prior_fn_sample_test = prior_fn_sample[N:]
+        
         # draw prior noise sample
         prior_noise_sample = draw_prior_noise_sample(prior_noise_key, train_ds.N, noise_scale=self.noise_scale)
         
         # Depending on the three types of losses we can compute the gradient of the loss function accordingly
         target_tuple = None
         if loss_type == 1:
-            target_tuple = (prior_function_sample_train + prior_noise_sample, jnp.zeros_like(train_ds.y))
+            target_tuple = (prior_fn_sample_train + prior_noise_sample, jnp.zeros_like(train_ds.y))
         elif loss_type == 2:
-            target_tuple = (prior_function_sample_train, prior_noise_sample)
+            target_tuple = (prior_fn_sample_train, prior_noise_sample)
         elif loss_type == 3:
-            target_tuple = (jnp.zeros_like(train_ds.y), prior_function_sample_train + prior_noise_sample)
-        
+            target_tuple = (jnp.zeros_like(train_ds.y), prior_fn_sample_train + prior_noise_sample)
         
         grad_fn = get_stochastic_gradient_fn(
             train_ds.x, target_tuple, self.kernel.K, self.kernel.Phi, 
@@ -198,12 +198,17 @@ class SamplingGPModel(Model):
         update_fn = get_update_fn(grad_fn, train_ds.N, train_config.polyak)
         
         # TODO: Implement eval fn that calculates test RMSE with the sample?
-        eval_fn = None
+        eval_fn = get_sampling_eval_fn(
+            metrics, train_ds, test_ds, prior_fn_sample_test, self.alpha, 
+            loss_fn, grad_fn, target_tuple, self.kernel.K, self.noise_scale, metrics_prefix, compare_exact_vals)
 
         # Initialise alpha and alpha_polyak for sample
         alpha = jnp.zeros((train_ds.N,)) # TODO: Can init at MAP solution.
         alpha_polyak = jnp.zeros((train_ds.N,))
         
         alpha_polyak, aux = train(key, train_config, update_fn, eval_fn, alpha, alpha_polyak)
+        
+        y_pred_sample = prior_fn_sample_test + calc_Kstar_v(
+            test_ds.x, train_ds.x, self.alpha - alpha_polyak, kernel_fn=self.kernel.K)
         
         return alpha_polyak, aux
