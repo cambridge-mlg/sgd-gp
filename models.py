@@ -15,7 +15,7 @@ from train_utils import (
     get_update_fn,
     train,
 )
-from utils import RMSE
+from metrics import RMSE
 from chex import Array, PRNGKey
 from kernels import Kernel
 
@@ -79,9 +79,49 @@ class ExactGPModel(Model):
         return test_rmse, y_pred
 
     
-    def compute_posterior_sample(self, train_ds: Dataset, train_config, loss_type, key):
-        # TODO: Implement posterior sample using Choleswky of K
-       pass
+    def compute_posterior_sample(
+        self, train_ds: Dataset, test_ds: Dataset, train_config, loss_type, key, num_features, use_rff_features: bool = False):
+        # TODO: Implement posterior sample using Cholesky of K
+        x = jnp.vstack((train_ds.x, test_ds.x))
+        N, T = train_ds.N, test_ds.N
+        
+        prior_fn_key, prior_noise_key, feature_key = jr.split(key, 3)
+        
+        if not use_rff_features:
+            K_full = self.kernel.K(x, x)
+            L = jnp.linalg.cholesky(K_full + 1e-5 * jnp.identity(N + T))
+            
+            K_train = K_full[:N, :N]
+            # Calculate the random eps that we will then multiply by the cholesky of K
+
+            eps = jr.normal(prior_fn_key, (N + T,))
+    
+        else:
+            L = self.kernel.Phi(feature_key, num_features, x)  # (N + T, num_features)
+            eps = jr.normal(prior_fn_key, (num_features,))
+            
+            K_train = L[:N, :] @ L[:N, :].T
+
+            
+        prior_fn_sample = L @ eps  # (N + T,), function sampled at x_train and x_test points
+
+        prior_fn_sample_train = prior_fn_sample[:N]
+        prior_fn_sample_test = prior_fn_sample[N:]
+
+        # draw prior noise sample
+        prior_noise_sample = draw_prior_noise_sample(prior_noise_key, N, noise_scale=self.noise_scale)
+
+        
+        alpha_sample = solve_K_inv_v(
+                K_train, prior_fn_sample_train + prior_noise_sample, noise_scale=self.noise_scale)
+        
+        
+        # Optionally, make prediction at x_test using one sample
+        y_pred_sample = prior_fn_sample_test + calc_Kstar_v(
+            test_ds.x, train_ds.x, self.alpha - alpha_sample, kernel_fn=self.kernel.K)
+        
+        return alpha_sample, y_pred_sample
+
 
 
 class SamplingGPModel(Model):
@@ -94,6 +134,9 @@ class SamplingGPModel(Model):
         # Initialize alpha and alpha_polyak
         self.alpha = None
         self.alpha_polyak = None
+        
+        self.omega = None
+        self.phi = None
 
     
     def _init_params(self, train_ds):
@@ -102,7 +145,7 @@ class SamplingGPModel(Model):
     
 
     def compute_representer_weights(
-        self, train_ds: Dataset, test_ds: Dataset, train_config, key: PRNGKey, compare_exact_vals=None):
+        self, train_ds: Dataset, test_ds: Dataset, train_config, key: PRNGKey, metrics, compare_exact_vals=None):
         
         # @ K (alpha + target)
         target_tuple = (train_ds.y, jnp.zeros_like(train_ds.y))
@@ -114,6 +157,7 @@ class SamplingGPModel(Model):
         update_fn = get_update_fn(grad_fn, train_ds.N, train_config.polyak)
 
         eval_fn = get_eval_fn(
+            metrics,
             train_ds, test_ds, loss_fn, grad_fn, target_tuple, self.kernel.K, self.noise_scale, compare_exact_vals)
 
         # Initialise alpha and alpha_polyak

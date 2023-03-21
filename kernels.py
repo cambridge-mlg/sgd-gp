@@ -38,20 +38,28 @@ class RBFKernel(Kernel):
         d2 = jnp.sum((x[:, None] - y[None, :]) ** 2, axis=-1)
         return (s ** 2) * jnp.exp(-.5 * d2 / (l ** 2))
     
+    
+    def omega_fn(self, key, D, M):
+        return jr.normal(key, shape=(D, M))
+
+    def phi_fn(self, key, M):
+        return jr.uniform(key, shape=(1, M), minval=-jnp.pi, maxval=jnp.pi)
+
+
     def Phi(self, key: PRNGKey, n_features: int, x: Array, recompute=False):
         self.check_required_hparams_in_config(['signal_scale', 'length_scale'], self.feature_config)
 
         s = self.feature_config['signal_scale']
         l = self.feature_config['length_scale']
         M = n_features
+        D = x.shape[-1]
 
         if recompute or self.omega is None or self.phi is None:
-            # compute single random Fourier feature for RBF kernel
-            D = x.shape[-1]
-            omega_key, phi_key = jr.split(key)
+        # compute single random Fourier feature for RBF kernel
+            omega_key, phi_key = jr.split(key, 2)
+            omega = self.omega_fn(omega_key, D, M)
+            phi = self.phi_fn(phi_key, M)
+        else:
+            omega, phi = self.omega, self.phi
 
-            self.omega = jr.normal(omega_key, shape=(D, M))
-            self.phi = jr.uniform(phi_key, shape=(1, M), minval=-jnp.pi, maxval=jnp.pi)
-
-        return s * jnp.sqrt(2. / M) * jnp.cos(x @ (self.omega / l) + self.phi)
-
+        return s * jnp.sqrt(2. / M) * jnp.cos(x @ (omega / l) + phi)

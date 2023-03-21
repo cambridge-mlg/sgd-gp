@@ -11,7 +11,7 @@ from linear_model import (
     error_grad_sample,
     regularizer_grad_sample,
 )
-from utils import RMSE
+from metrics import RMSE, grad_var_fn
 from functools import partial
 
 
@@ -46,36 +46,37 @@ def get_update_fn(grad_fn, n_train, polyak_step_size):
     return _fn
 
 
-def get_eval_fn(train_ds, test_ds, loss_fn, grad_fn, target_tuple, kernel_fn, noise_scale, compare_exact_vals=None):
+def get_eval_fn(
+    metrics, train_ds, test_ds, loss_fn, grad_fn, target_tuple, kernel_fn, noise_scale, compare_exact_vals=None):
     
     def _fn(params):
-        K = kernel_fn(train_ds.x, train_ds.x)
-        loss = loss_fn(params, target_tuple, K, noise_scale=noise_scale)
-        # compute trace statistics
         
-        metrics_update_dict = {}
-        
+        # Calculate all quantities of interest here, and each metric_fn gets passed all quantities.
+        K_train = kernel_fn(train_ds.x, train_ds.x)
         y_pred_test = calc_Kstar_v(test_ds.x, train_ds.x, params, kernel_fn=kernel_fn)
-        test_rmse = RMSE(test_ds.y, y_pred_test, mu=train_ds.mu_y, sigma=train_ds.sigma_y)
-        
-        grad_var_key = jr.split(jr.PRNGKey(12345), 100)
-        grad_samples = jax.vmap(grad_fn, (None, 0))(params, grad_var_key)
-        grad_var = jnp.var(grad_samples, axis=0).mean()
-        
-        metrics_update_dict = {
-            'loss': loss,
-            'grad_var': grad_var,
-            'test_rmse': test_rmse,}
 
         if compare_exact_vals is not None:
             alpha_exact, y_pred_exact, test_rmse_exact = compare_exact_vals
-            alpha_diff = RMSE(alpha_exact, params)
-            test_rmse_diff = RMSE(test_rmse, test_rmse_exact)
-            y_pred_diff = RMSE(y_pred_test, y_pred_exact)
-            
-            metrics_update_dict['alpha_diff'] = alpha_diff
-            metrics_update_dict['test_rmse_diff'] = test_rmse_diff
-            metrics_update_dict['y_pred_diff'] = y_pred_diff
+
+        # Define all metric function calls here for now, refactor later.
+        def _get_metric(metric):
+            if metric == 'loss':
+                return loss_fn(params, target_tuple, K_train, noise_scale=noise_scale)
+            elif metric == 'grad_var':
+                return grad_var_fn(params, grad_fn)
+            elif metric == 'test_rmse':
+                return RMSE(test_ds.y, y_pred_test, mu=train_ds.mu_y, sigma=train_ds.sigma_y)
+            elif metric == 'alpha_diff':
+                return RMSE(alpha_exact, params)
+            elif metric == 'test_rmse_diff':
+                return RMSE(_get_metric('test_rmse'), test_rmse_exact)
+            elif metric == 'y_pred_diff':
+                return RMSE(y_pred_test, y_pred_exact)
+
+        metrics_update_dict = {}
+
+        for metric in metrics:
+            metrics_update_dict[metric] = _get_metric(metric)
 
         wandb.log(metrics_update_dict)
 

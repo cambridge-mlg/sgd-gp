@@ -61,13 +61,20 @@ def main(config):
         optim_key, sampling_key, key = jr.split(key, 3)
         model = SamplingGPModel(config.dataset_config.noise_scale, kernel)
         
+        metrics = ['loss', 'grad_var', 'test_rmse']
+        if config.compute_exact_soln:
+            metrics.extend(['alpha_diff', 'y_pred_diff', 'test_rmse_diff'])
+
         model.compute_representer_weights(
             train_ds, test_ds, config.train_config, optim_key, 
-            compare_exact_vals=compare_exact_vals if config.compute_exact_soln else None)
+            compare_exact_vals=compare_exact_vals if config.compute_exact_soln else None,
+            metrics=metrics)
         
         
         # TODO: vmap and pmap sampling to obtain multiple samples in parallel
         # Compute a posterior sample
+        post_sample = model.compute_posterior_sample(train_ds, config.train_config, 1, sampling_key)
+        
         post_sample = model.compute_posterior_sample(train_ds, config.train_config, 1, sampling_key)
         
         return post_sample
