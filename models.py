@@ -208,7 +208,4 @@ class SamplingGPModel(Model):
         
         alpha_polyak, aux = train(key, train_config, update_fn, eval_fn, alpha, alpha_polyak)
         
-        y_pred_sample = prior_fn_sample_test + calc_Kstar_v(
-            test_ds.x, train_ds.x, self.alpha - alpha_polyak, kernel_fn=self.kernel.K)
-        
         return alpha_polyak, aux
