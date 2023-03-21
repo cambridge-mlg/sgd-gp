@@ -165,15 +165,15 @@ class SamplingGPModel(Model):
 
     
     def compute_posterior_sample(self, train_ds: Dataset, test_ds, train_config, loss_type, key, metrics, 
-                                 metrics_prefix='', compare_exact_vals=None):
+                                 metrics_prefix='', compare_exact_vals=None, use_chol: bool = False):
 
         x = jnp.vstack((train_ds.x, test_ds.x))
         N, T = train_ds.N, test_ds.N
         
         prior_fn_key, prior_noise_key, feature_key = jr.split(key, 3)
-        
+        K_full = self.kernel.K(x, x) if use_chol else None
         prior_fn_sample, L = draw_prior_function_sample(
-            feature_key, prior_fn_key, train_config.num_features, x, self.kernel.Phi, use_chol=False)
+            feature_key, prior_fn_key, train_config.num_features, x, self.kernel.Phi, K_full, use_chol=use_chol)
 
         prior_fn_sample_train = prior_fn_sample[:N]
         prior_fn_sample_test = prior_fn_sample[N:]

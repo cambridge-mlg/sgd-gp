@@ -50,7 +50,7 @@ def get_config():
     # Full-batch training configs that get passed
     config.train_config.learning_rate = 1e-2
     config.train_config.momentum = 0.9
-    config.train_config.polyak = 1e-2
+    config.train_config.polyak = 1e-3
     config.train_config.iterations = 50000
     config.train_config.batch_size = 4
     config.train_config.eval_every = 100

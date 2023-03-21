@@ -113,7 +113,10 @@ def get_sampling_eval_fn(
                 return RMSE(y_pred_sample_exact, y_pred_sample)
             elif metric == 'loss_diff':
                 exact_loss = loss_fn(alpha_sample_exact, target_tuple, K_train, noise_scale=noise_scale)
-                return RMSE(exact_loss, _get_metric('loss'))
+                return _get_metric('loss') - exact_loss
+            elif metric == 'test_rmse_diff':
+                test_rmse_exact = RMSE(test_ds.y, y_pred_sample_exact, mu=train_ds.mu_y, sigma=train_ds.sigma_y)
+                return RMSE(_get_metric('test_rmse'), test_rmse_exact)
 
         metrics_update_dict = {}
 
