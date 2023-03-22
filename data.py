@@ -59,10 +59,10 @@ def get_toy_sin_dataset(
 
 
 def get_uci_dataset(
-    dataset_name: str, normalise: bool = False, **kwargs: KwArgs) -> Tuple[Dataset, Dataset]:
+    dataset_name: str, normalise: bool = False, split: int = 0, **kwargs: KwArgs) -> Tuple[Dataset, Dataset]:
 
     dataset = uci_dataset(dataset_name)
-    x_train, y_train, x_test, y_test = dataset.get_split(0)
+    x_train, y_train, x_test, y_test = dataset.get_split(split)
     N, D = x_train.shape
     N_test, _ = x_test.shape
 

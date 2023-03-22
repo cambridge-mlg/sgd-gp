@@ -6,13 +6,17 @@ import ml_collections
 from chex import Array
 import jax
 import os
+from collections import namedtuple
+
+
+TargetTuple = namedtuple('TargetTuple', ['error_target', 'regularizer_target'])
 
 def apply_z_score(data: Array, mu: Optional[Array]=None, sigma: Optional[Array]=None):
     if (mu is not None) and (sigma is not None):
         return (data - mu) / sigma
     else:
-        mu = jnp.mean(data, axis=0)
-        sigma = jnp.std(data, axis=0)
+        mu = jnp.mean(data, axis=0, keepdims=True)
+        sigma = jnp.std(data, axis=0, keepdims=True)
         return (data - mu) / sigma, mu, sigma
 
 

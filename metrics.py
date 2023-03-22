@@ -2,13 +2,14 @@
 import jax
 import jax.random as jr
 import jax.numpy as jnp
-from chex import Array
+from chex import Array, PRNGKey
 from typing import Optional
 from utils import revert_z_score
+from typing import Callable
 
 
-def grad_var_fn(params, grad_fn, num_evals=100):
-    grad_var_key = jr.split(jr.PRNGKey(12345), num_evals)
+def grad_var_fn(params: Array, grad_fn: Callable, num_evals: int = 100, key: PRNGKey=jr.PRNGKey(12345)):
+    grad_var_key = jr.split(key, num_evals)
     grad_samples = jax.vmap(grad_fn, (None, 0))(params, grad_var_key)
     grad_var = jnp.var(grad_samples, axis=0).mean()
     

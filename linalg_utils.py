@@ -11,4 +11,5 @@ def solve_K_inv_v(K: Array, v: Array, noise_scale: float = 1.):
 
 def calc_Kstar_v(x_pred, x_train, v, kernel_fn, **kernel_kwargs):
     """Calculates K(x_pred, x_train) @ v, with the kernel matrix between x_pred and x_train."""
+    # TODO: Minibatch over x_pred potentially, to prevent memory blow up.
     return kernel_fn(x_pred, x_train, **kernel_kwargs) @ v

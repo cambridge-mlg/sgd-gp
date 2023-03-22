@@ -25,6 +25,9 @@ class Kernel:
 
     def Phi(self, key: PRNGKey, n_features: int, x, recompute: bool=False):
         raise NotImplementedError("Subclasses should implement this method.")
+    
+    def phi_fn(self, key: PRNGKey, num_features: int):
+        return jr.uniform(key, shape=(1, num_features), minval=-jnp.pi, maxval=jnp.pi)
 
 
 class RBFKernel(Kernel):
@@ -39,14 +42,11 @@ class RBFKernel(Kernel):
         return (s ** 2) * jnp.exp(-.5 * d2 / (l ** 2))
     
     
-    def omega_fn(self, key, D, M):
-        return jr.normal(key, shape=(D, M))
-
-    def phi_fn(self, key, M):
-        return jr.uniform(key, shape=(1, M), minval=-jnp.pi, maxval=jnp.pi)
+    def omega_fn(self, key: PRNGKey, num_input_dims: int, num_features: int):
+        return jr.normal(key, shape=(num_input_dims, num_features))
 
 
-    def Phi(self, key: PRNGKey, n_features: int, x: Array, recompute=False):
+    def Phi(self, key: PRNGKey, n_features: int, x: Array, recompute: bool = False):
         self.check_required_hparams_in_config(['signal_scale', 'length_scale'], self.feature_config)
 
         s = self.feature_config['signal_scale']

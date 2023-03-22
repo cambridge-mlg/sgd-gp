@@ -19,6 +19,9 @@ from train_utils import (
 from metrics import RMSE
 from chex import Array, PRNGKey
 from kernels import Kernel
+from collections import namedtuple
+from typing import List, Tuple, Optional
+from utils import TargetTuple
 
 class Model:
     def __init__(self):
@@ -82,7 +85,6 @@ class ExactGPModel(Model):
 
     def compute_posterior_sample(
         self, key, train_ds: Dataset, test_ds: Dataset, num_features, use_rff_features: bool = False):
-        # TODO: Implement posterior sample using Cholesky of K
         x = jnp.vstack((train_ds.x, test_ds.x))
         N, T = train_ds.N, test_ds.N
         
@@ -111,7 +113,7 @@ class ExactGPModel(Model):
                 K_train, prior_fn_sample_train + prior_noise_sample, noise_scale=self.noise_scale)
         
         
-        # Optionally, make prediction at x_test using one sample
+        # Make prediction at x_test using one sample
         y_pred_sample = prior_fn_sample_test + calc_Kstar_v(
             test_ds.x, train_ds.x, self.alpha - alpha_sample, kernel_fn=self.kernel.K)
         
@@ -140,13 +142,14 @@ class SamplingGPModel(Model):
     
 
     def compute_representer_weights(
-        self, train_ds: Dataset, test_ds: Dataset, train_config, key: PRNGKey, metrics, metrics_prefix='', compare_exact_vals=None):
+        self, train_ds: Dataset, test_ds: Dataset, train_config, key: PRNGKey, metrics: List[str], 
+        metrics_prefix: str = '', compare_exact_vals: Optional[List] = None):
         
         # @ K (alpha + target)
-        target_tuple = (train_ds.y, jnp.zeros_like(train_ds.y))
+        target_tuple = TargetTuple(train_ds.y, jnp.zeros_like(train_ds.y))
         grad_fn = get_stochastic_gradient_fn(
-            train_ds.x, target_tuple, self.kernel.K, self.kernel.Phi, 
-            train_config.batch_size, train_config.num_features, self.noise_scale)
+            train_ds.x, target_tuple, self.kernel.K, self.kernel.Phi, train_config.batch_size, 
+            train_config.num_features, self.noise_scale, recompute_features=train_config.recompute_features)
 
         # Define the gradient update function
         update_fn = get_update_fn(grad_fn, train_ds.N, train_config.polyak)
@@ -184,15 +187,15 @@ class SamplingGPModel(Model):
         # Depending on the three types of losses we can compute the gradient of the loss function accordingly
         target_tuple = None
         if loss_type == 1:
-            target_tuple = (prior_fn_sample_train + prior_noise_sample, jnp.zeros_like(train_ds.y))
+            target_tuple = TargetTuple(prior_fn_sample_train + prior_noise_sample, jnp.zeros_like(train_ds.y))
         elif loss_type == 2:
-            target_tuple = (prior_fn_sample_train, prior_noise_sample)
+            target_tuple = TargetTuple(prior_fn_sample_train, prior_noise_sample)
         elif loss_type == 3:
-            target_tuple = (jnp.zeros_like(train_ds.y), prior_fn_sample_train + prior_noise_sample)
+            target_tuple = TargetTuple(jnp.zeros_like(train_ds.y), prior_fn_sample_train + prior_noise_sample)
         
         grad_fn = get_stochastic_gradient_fn(
-            train_ds.x, target_tuple, self.kernel.K, self.kernel.Phi, 
-            train_config.batch_size, train_config.num_features, self.noise_scale)
+            train_ds.x, target_tuple, self.kernel.K, self.kernel.Phi, train_config.batch_size, 
+            train_config.num_features, self.noise_scale, recompute_features=train_config.recompute_features)
         
         # Define the gradient update function
         update_fn = get_update_fn(grad_fn, train_ds.N, train_config.polyak)
