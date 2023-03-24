@@ -2,7 +2,7 @@ import jax
 import jax.numpy as jnp
 import jax.random as jr
 from chex import Array, PRNGKey
-from train_utils import TargetTuple
+from utils import TargetTuple
 from typing import Callable, Optional
 
 def error(params, targets, K):
