@@ -93,7 +93,7 @@ class ExactGPModel(Model):
         key,
         train_ds: Dataset,
         test_ds: Dataset,
-        num_features,
+        num_features_sample,
         use_rff_features: bool = False,
         zero_mean: bool = False,
     ):
@@ -111,7 +111,7 @@ class ExactGPModel(Model):
         prior_fn_sample, L = draw_prior_function_sample(
             feature_key,
             prior_fn_key,
-            num_features,
+            num_features_sample,
             x,
             self.kernel.Phi,
             K_full,
@@ -178,14 +178,16 @@ class SamplingGPModel(Model):
     ):
 
         # @ K (alpha + target)
-        target_tuple = TargetTuple(train_ds.y, jnp.zeros_like(train_ds.y))
+        target_tuple = TargetTuple(
+            train_ds.y.squeeze(), jnp.zeros_like(train_ds.y).squeeze()
+        )
         grad_fn = get_stochastic_gradient_fn(
             train_ds.x,
             target_tuple,
             self.kernel.K,
             self.kernel.Phi,
             train_config.batch_size,
-            train_config.num_features,
+            train_config.num_features_optim,
             self.noise_scale,
             recompute_features=train_config.recompute_features,
         )
@@ -232,11 +234,12 @@ class SamplingGPModel(Model):
         N, T = train_ds.N, test_ds.N
 
         prior_fn_key, prior_noise_key, feature_key = jr.split(key, 3)
+
         K_full = self.kernel.K(x, x) if use_chol else None
         prior_fn_sample, L = draw_prior_function_sample(
             feature_key,
             prior_fn_key,
-            train_config.num_features,
+            train_config.num_features_sample,
             x,
             self.kernel.Phi,
             K_full,
@@ -270,7 +273,7 @@ class SamplingGPModel(Model):
             self.kernel.K,
             self.kernel.Phi,
             train_config.batch_size,
-            train_config.num_features,
+            train_config.num_features_optim,
             self.noise_scale,
             recompute_features=train_config.recompute_features,
         )

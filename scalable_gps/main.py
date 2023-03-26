@@ -66,7 +66,7 @@ def main(config):
                 sampling_key,
                 train_ds,
                 test_ds,
-                config.train_config.num_features,
+                config.train_config.num_features_sample,
                 use_rff_features=False,
             )
             print(f"test_rmse_exact = {test_rmse_exact}")

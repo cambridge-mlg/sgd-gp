@@ -21,6 +21,10 @@ def grad_var_fn(
     return grad_var
 
 
+def hilbert_space_RMSE(x: Array, x_hat: Array, K: Array):
+    return ((x - x_hat).T @ K @ (x - x_hat)) ** 0.5
+
+
 def RMSE(
     x: Array, x_hat: Array, mu: Optional[Array] = None, sigma: Optional[Array] = None
 ):

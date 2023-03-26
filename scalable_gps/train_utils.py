@@ -10,7 +10,7 @@ from .linear_model import (
     error_grad_sample,
     regularizer_grad_sample,
 )
-from .metrics import RMSE, grad_var_fn
+from .metrics import RMSE, grad_var_fn, hilbert_space_RMSE
 from functools import partial
 
 
@@ -96,6 +96,12 @@ def get_eval_fn(
                 )
             elif metric == "alpha_diff":
                 return RMSE(alpha_exact, params)
+
+            elif metric == "hilbert_err":
+                return hilbert_space_RMSE(
+                    alpha_exact, params, K=kernel_fn(train_ds.x, train_ds.x)
+                )
+
             # TODO: add kernel weighed alpha diff
 
             elif metric == "test_rmse_diff":
@@ -115,7 +121,7 @@ def get_eval_fn(
 
         return metrics_update_dict
 
-    return _fn
+    return jax.jit(_fn)
 
 
 def get_sampling_eval_fn(
@@ -176,11 +182,12 @@ def get_sampling_eval_fn(
         for metric in metrics:
             metrics_update_dict[f"{metrics_prefix}/{metric}"] = _get_metric(metric)
 
-        wandb.log(metrics_update_dict)
+        # TODO: also call this from outside
+        # wandb.log(metrics_update_dict)
 
         return metrics_update_dict
 
-    return _fn
+    return jax.jit(_fn)
 
 
 def train(key, config, update_fn, eval_fn, params, params_polyak):

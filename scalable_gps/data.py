@@ -45,7 +45,7 @@ def get_concentrating_toy_sin_dataset(
     signal = f(x)
     y = signal + jr.normal(k2, shape=signal.shape) * noise_scale
 
-    x_test = jnp.linspace(-3.1, 3.1, n_test).reshape(-1, 1)
+    x_test = jnp.linspace(-5.1, 5.1, n_test).reshape(-1, 1)
     y_test = f(x_test)
 
     train_ds = Dataset(x, y, n, 1)
