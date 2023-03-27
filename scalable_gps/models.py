@@ -93,7 +93,7 @@ class ExactGPModel(Model):
         key,
         train_ds: Dataset,
         test_ds: Dataset,
-        num_features_sample,
+        n_features,
         use_rff_features: bool = False,
         zero_mean: bool = False,
     ):
@@ -111,7 +111,7 @@ class ExactGPModel(Model):
         prior_fn_sample, L = draw_prior_function_sample(
             feature_key,
             prior_fn_key,
-            num_features_sample,
+            n_features,
             x,
             self.kernel.Phi,
             K_full,
@@ -170,7 +170,7 @@ class SamplingGPModel(Model):
         self,
         train_ds: Dataset,
         test_ds: Dataset,
-        train_config,
+        config,
         key: chex.PRNGKey,
         metrics: List[str],
         metrics_prefix: str = "",
@@ -186,14 +186,14 @@ class SamplingGPModel(Model):
             target_tuple,
             self.kernel.K,
             self.kernel.Phi,
-            train_config.batch_size,
-            train_config.num_features_optim,
+            config.batch_size,
+            config.n_features,
             self.noise_scale,
-            recompute_features=train_config.recompute_features,
+            recompute_features=config.recompute_features,
         )
 
         # Define the gradient update function
-        update_fn = get_update_fn(grad_fn, train_ds.N, train_config.polyak)
+        update_fn = get_update_fn(grad_fn, train_ds.N, config.polyak)
 
         eval_fn = get_eval_fn(
             metrics,
@@ -212,7 +212,7 @@ class SamplingGPModel(Model):
         self._init_params(train_ds)
 
         self.alpha_polyak, aux = train(
-            key, train_config, update_fn, eval_fn, self.alpha, self.alpha_polyak
+            key, config, update_fn, eval_fn, self.alpha, self.alpha_polyak
         )
 
         return self.alpha_polyak, aux
@@ -221,7 +221,7 @@ class SamplingGPModel(Model):
         self,
         train_ds: Dataset,
         test_ds,
-        train_config,
+        config,
         loss_type,
         key,
         metrics,
@@ -239,7 +239,7 @@ class SamplingGPModel(Model):
         prior_fn_sample, L = draw_prior_function_sample(
             feature_key,
             prior_fn_key,
-            train_config.num_features_sample,
+            config.n_features,
             x,
             self.kernel.Phi,
             K_full,
@@ -272,14 +272,14 @@ class SamplingGPModel(Model):
             target_tuple,
             self.kernel.K,
             self.kernel.Phi,
-            train_config.batch_size,
-            train_config.num_features_optim,
+            config.batch_size,
+            config.n_features,
             self.noise_scale,
-            recompute_features=train_config.recompute_features,
+            recompute_features=config.recompute_features,
         )
 
         # Define the gradient update function
-        update_fn = get_update_fn(grad_fn, train_ds.N, train_config.polyak)
+        update_fn = get_update_fn(grad_fn, train_ds.N, config.polyak)
 
         # TODO: Implement eval fn that calculates test RMSE with the sample?
         eval_fn = get_sampling_eval_fn(
@@ -302,7 +302,7 @@ class SamplingGPModel(Model):
         alpha_polyak = jnp.zeros((train_ds.N,))
 
         alpha_polyak, aux = train(
-            key, train_config, update_fn, eval_fn, alpha, alpha_polyak
+            key, config, update_fn, eval_fn, alpha, alpha_polyak
         )
 
         return alpha_polyak, aux

@@ -54,12 +54,23 @@ def get_config():
     config.train_config.batch_size = 4
     config.train_config.eval_every = 100
     # RFF Configs
-    config.train_config.num_features_optim = 100
-    config.train_config.num_features_sample = 2000
+    config.train_config.n_features = 100
     config.train_config.recompute_features = False
 
     config.optimiser = "sgd"
-    config.sampling_loss_objective = 1
+    
+     # Sampling configs
+    config.sampling_config = ml_collections.ConfigDict()
+    config.sampling_config.learning_rate = 1e-2
+    config.sampling_config.momentum = 0.9
+    config.sampling_config.polyak = 1e-3
+    config.sampling_config.iterations = 50000
+    config.sampling_config.batch_size = 4
+    config.sampling_config.eval_every = 100
+    config.sampling_config.n_features = 2000
+    config.sampling_config.recompute_features = False
+    config.sampling_config.loss_objective = 2
+    config.sampling_config.use_cholesky_prior_sample = True
 
     # Wandb Configs
     config.wandb = ml_collections.ConfigDict()

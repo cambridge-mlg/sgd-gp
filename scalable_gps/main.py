@@ -83,7 +83,7 @@ def main(config):
 
         metrics = ["loss", "grad_var", "test_rmse"]
         if config.compute_exact_soln:
-            metrics.extend(["alpha_sample_diff", "y_pred_diff", "test_rmse_diff"])
+            metrics.extend(["alpha_diff", "y_pred_diff", "test_rmse_diff"])
 
         model.compute_representer_weights(
             train_ds,
@@ -105,11 +105,11 @@ def main(config):
             )
 
         # Compute a posterior sample
-        loss_objective = config.sampling_loss_objective
+        loss_objective = config.sampling_config.loss_objective
         post_sample = model.compute_posterior_sample(
             train_ds,
             test_ds,
-            config.train_config,
+            config.sampling_config,
             loss_objective,
             sampling_key,
             sampling_metrics,
@@ -117,7 +117,7 @@ def main(config):
             if config.compute_exact_soln
             else None,
             metrics_prefix=f"sampling_{loss_objective}",
-            use_chol=True,
+            use_chol=config.sampling_config.use_cholesky_prior_sample,
         )
 
         return post_sample
