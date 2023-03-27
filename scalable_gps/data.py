@@ -7,10 +7,11 @@ from chex import Array
 from uci_datasets import Dataset as uci_dataset
 from uci_datasets import all_datasets
 
-from utils import apply_z_score
+from .utils import apply_z_score
+import chex
 
-PRNGKey = Any
 KwArgs = Any
+
 
 @dataclass
 class Dataset:
@@ -25,20 +26,18 @@ class Dataset:
     sigma_y: Optional[Array] = None
 
 
-
-def get_toy_sin_dataset(
-    key: int, 
-    n: int, 
-    noise_scale: float, 
-    n_test: int, 
-    n_periods: int = 25, 
+def get_concentrating_toy_sin_dataset(
+    key: chex.PRNGKey,
+    n: int,
+    noise_scale: float,
+    n_test: int,
+    x_std: float = 1.0,
     normalise: bool = False,
-    **kwargs: KwArgs
-    ) -> Tuple[Dataset, Dataset]:
-    key = jr.PRNGKey(key) # type: ignore
-    k1, k2, key = jr.split(key, 3) # type: ignore
+    **kwargs: KwArgs,
+) -> Tuple[Dataset, Dataset]:
+    k1, k2, key = jr.split(key, 3)
 
-    x = jnp.linspace( -n / n_periods, n / n_periods, num = n).reshape(-1, 1)
+    x = jr.normal(k1, shape=(n, 1)) * x_std
 
     def f(x):
         return jnp.sin(2 * x) + jnp.cos(5 * x)
@@ -46,7 +45,38 @@ def get_toy_sin_dataset(
     signal = f(x)
     y = signal + jr.normal(k2, shape=signal.shape) * noise_scale
 
-    x_test = jnp.linspace(-3.1, 3.1, 500).reshape(-1, 1)
+    x_test = jnp.linspace(-5.1, 5.1, n_test).reshape(-1, 1)
+    y_test = f(x_test)
+
+    train_ds = Dataset(x, y, n, 1)
+    test_ds = Dataset(x_test, y_test, n_test, 1)
+
+    if normalise:
+        train_ds, test_ds = _normalise_dataset(train_ds, test_ds)
+
+    return train_ds, test_ds
+
+
+def get_expanding_toy_sin_dataset(
+    key: chex.PRNGKey,
+    n: int,
+    noise_scale: float,
+    n_test: int,
+    n_periods: int = 25,
+    normalise: bool = False,
+    **kwargs: KwArgs,
+) -> Tuple[Dataset, Dataset]:
+    k1, k2, key = jr.split(key, 3)
+
+    x = jnp.linspace(-n / n_periods, n / n_periods, num=n).reshape(-1, 1)
+
+    def f(x):
+        return jnp.sin(2 * x) + jnp.cos(5 * x)
+
+    signal = f(x)
+    y = signal + jr.normal(k2, shape=signal.shape) * noise_scale
+
+    x_test = jnp.linspace(-3.1, 3.1, n_test).reshape(-1, 1)
     y_test = f(x_test)
 
     train_ds = Dataset(x, y, n, 1)
@@ -59,7 +89,8 @@ def get_toy_sin_dataset(
 
 
 def get_uci_dataset(
-    dataset_name: str, normalise: bool = False, split: int = 0, **kwargs: KwArgs) -> Tuple[Dataset, Dataset]:
+    dataset_name: str, normalise: bool = False, split: int = 0, **kwargs: KwArgs
+) -> Tuple[Dataset, Dataset]:
 
     dataset = uci_dataset(dataset_name)
     x_train, y_train, x_test, y_test = dataset.get_split(split)
@@ -71,25 +102,26 @@ def get_uci_dataset(
 
     if normalise:
         train_ds, test_ds = _normalise_dataset(train_ds, test_ds)
-    
+
     return train_ds, test_ds
 
 
-def _normalise_dataset(
-    train_ds: Dataset, test_ds: Dataset) -> Tuple[Dataset, Dataset]:
+def _normalise_dataset(train_ds: Dataset, test_ds: Dataset) -> Tuple[Dataset, Dataset]:
 
     train_ds.x, train_ds.mu_x, train_ds.sigma_x = apply_z_score(train_ds.x)
     train_ds.y, train_ds.mu_y, train_ds.sigma_y = apply_z_score(train_ds.y.squeeze())
     test_ds.x = apply_z_score(test_ds.x, mu=train_ds.mu_x, sigma=train_ds.sigma_x)
-    test_ds.y = apply_z_score(test_ds.y.squeeze(), mu=train_ds.mu_y, sigma=train_ds.sigma_y)
+    test_ds.y = apply_z_score(
+        test_ds.y.squeeze(), mu=train_ds.mu_y, sigma=train_ds.sigma_y
+    )
 
     return train_ds, test_ds
 
 
 def get_dataset(dataset_name, **kwargs):
-    if dataset_name == 'toy_sin':
-        return get_toy_sin_dataset(**kwargs)
+    if dataset_name == "toy_sin":
+        return get_expanding_toy_sin_dataset(**kwargs)
     elif dataset_name in all_datasets.keys():
         return get_uci_dataset(dataset_name, **kwargs)
     else:
-        raise ValueError(f'Unknown dataset {dataset_name}')
+        raise ValueError(f"Unknown dataset {dataset_name}")

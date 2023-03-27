@@ -54,9 +54,8 @@ def get_config():
     config.train_config.batch_size = 4
     config.train_config.eval_every = 100
     # RFF Configs
-    config.train_config.num_features_optim = 100
-    config.train_config.num_features_sample = 2000
-    config.train_config.recompute_features = False
+    config.train_config.num_features = 100
+    config.train_config.recompute_features = True
 
     config.optimiser = "sgd"
     config.sampling_loss_objective = 1
