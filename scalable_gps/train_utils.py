@@ -1,17 +1,15 @@
+from functools import partial
+
 import jax
-import jax.numpy as jnp
 import jax.random as jr
 import optax
-from tqdm import tqdm
-
-import wandb
-from .linalg_utils import KvP
-from .linear_model import (
+from linalg_utils import KvP
+from linear_model import (
     error_grad_sample,
     regularizer_grad_sample,
 )
-from .metrics import RMSE, grad_var_fn, hilbert_space_RMSE
-from functools import partial
+from metrics import RMSE, grad_var_fn, hilbert_space_RMSE
+from tqdm import tqdm
 
 
 # TODO: if for error_fn pmap and reg_fn pmap
@@ -75,6 +73,7 @@ def get_eval_fn(
     # TODO: this should be a named tuple
     compare_exact_vals=None,
 ):
+    @jax.jit
     def _fn(params):
 
         # Calculate all quantities of interest here, and each metric_fn gets passed all quantities.
@@ -115,13 +114,9 @@ def get_eval_fn(
         for metric in metrics:
             metrics_update_dict[f"{metrics_prefix}/{metric}"] = _get_metric(metric)
 
-        # TODO: this should not be called from here since it will break this
-        # function if not called from inside main.py.
-        # wandb.log(metrics_update_dict)
-
         return metrics_update_dict
 
-    return jax.jit(_fn)
+    return _fn
 
 
 def get_sampling_eval_fn(
@@ -138,6 +133,7 @@ def get_sampling_eval_fn(
     metrics_prefix="",
     compare_exact_vals=None,
 ):
+    @jax.jit
     def _fn(params):
 
         # Calculate all quantities of interest here.
@@ -147,7 +143,10 @@ def get_sampling_eval_fn(
         )
 
         if compare_exact_vals is not None:
-            _, _, _, alpha_sample_exact, y_pred_sample_exact = compare_exact_vals
+            params_map_exact, _, _, alpha_sample_exact, _ = compare_exact_vals
+        
+            y_pred_sample_exact = prior_fn_sample_test + KvP(
+                test_ds.x, train_ds.x, params_map_exact - alpha_sample_exact, kernel_fn=kernel_fn)
 
         # Define all metric function calls here for now, refactor later.
         def _get_metric(metric):
@@ -182,12 +181,9 @@ def get_sampling_eval_fn(
         for metric in metrics:
             metrics_update_dict[f"{metrics_prefix}/{metric}"] = _get_metric(metric)
 
-        # TODO: also call this from outside
-        # wandb.log(metrics_update_dict)
-
         return metrics_update_dict
 
-    return jax.jit(_fn)
+    return _fn
 
 
 def train(key, config, update_fn, eval_fn, params, params_polyak):
@@ -207,6 +203,8 @@ def train(key, config, update_fn, eval_fn, params, params_polyak):
         )
 
         if i % config.eval_every == 0 and eval_fn is not None:
-            aux.append(eval_fn(params_polyak))
+            eval_metrics = eval_fn(params_polyak)
+            # wandb.log(eval_metrics)
+            aux.append(eval_metrics)
 
     return params_polyak, aux

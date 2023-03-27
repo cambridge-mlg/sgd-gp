@@ -4,12 +4,12 @@ import jax
 import jax.random as jr
 import ml_collections.config_flags
 from absl import app, flags
-
-import wandb
-from .data import get_dataset
+from data import get_dataset
 from kernels import RBFKernel
 from models import ExactGPModel, SamplingGPModel
-from .utils import flatten_nested_dict, update_config_dict, setup_training
+from utils import flatten_nested_dict, setup_training, update_config_dict
+
+import wandb
 
 ml_collections.config_flags.DEFINE_config_file(
     "config",
@@ -41,7 +41,7 @@ def main(config):
         print(f"train_ds.x.shape: {train_ds.x.shape}")
         print(f"train_ds.y.shape: {train_ds.y.shape}")
 
-        kernel = RBFKernel(config.kernel_config, config.feature_config)
+        kernel = RBFKernel(config.kernel_config)
 
         save_dir = Path(config.save_dir).resolve()
         save_dir.mkdir(parents=True, exist_ok=True)
@@ -56,9 +56,8 @@ def main(config):
             exact_model.compute_representer_weights(train_ds)
 
             test_rmse_exact, y_pred_exact = exact_model.calculate_test_rmse(
-                train_ds, test_ds
-            )
-
+                train_ds, test_ds)
+            
             (
                 alpha_sample_exact,
                 y_pred_sample_exact,
@@ -66,8 +65,8 @@ def main(config):
                 sampling_key,
                 train_ds,
                 test_ds,
-                config.train_config.num_features_sample,
-                use_rff_features=False,
+                config.train_config.num_features,
+                use_rff_features=True,
             )
             print(f"test_rmse_exact = {test_rmse_exact}")
             wandb.log({"test_rmse_exact": test_rmse_exact})
@@ -78,6 +77,7 @@ def main(config):
                 alpha_sample_exact,
                 y_pred_sample_exact,
             ]
+
         # Compute stochastic optimised solution
         model = SamplingGPModel(config.dataset_config.noise_scale, kernel)
 
@@ -106,7 +106,7 @@ def main(config):
 
         # Compute a posterior sample
         loss_objective = config.sampling_config.loss_objective
-        post_sample = model.compute_posterior_sample(
+        post_sample, info = model.compute_posterior_sample(
             train_ds,
             test_ds,
             config.sampling_config,
@@ -120,6 +120,7 @@ def main(config):
             use_chol=config.sampling_config.use_cholesky_prior_sample,
         )
 
+        print(info)
         return post_sample
 
 

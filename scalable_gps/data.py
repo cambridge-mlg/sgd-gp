@@ -6,9 +6,7 @@ import jax.random as jr
 from chex import Array
 from uci_datasets import Dataset as uci_dataset
 from uci_datasets import all_datasets
-
-from .utils import apply_z_score
-import chex
+from utils import apply_z_score
 
 KwArgs = Any
 
@@ -27,7 +25,7 @@ class Dataset:
 
 
 def get_concentrating_toy_sin_dataset(
-    key: chex.PRNGKey,
+    seed: int,
     n: int,
     noise_scale: float,
     n_test: int,
@@ -35,6 +33,7 @@ def get_concentrating_toy_sin_dataset(
     normalise: bool = False,
     **kwargs: KwArgs,
 ) -> Tuple[Dataset, Dataset]:
+    key = jr.PRNGKey(seed)  # Required because configdict can't pass jr.PRNGKey as seed
     k1, k2, key = jr.split(key, 3)
 
     x = jr.normal(k1, shape=(n, 1)) * x_std
@@ -58,7 +57,7 @@ def get_concentrating_toy_sin_dataset(
 
 
 def get_expanding_toy_sin_dataset(
-    key: chex.PRNGKey,
+    seed: int,
     n: int,
     noise_scale: float,
     n_test: int,
@@ -66,6 +65,7 @@ def get_expanding_toy_sin_dataset(
     normalise: bool = False,
     **kwargs: KwArgs,
 ) -> Tuple[Dataset, Dataset]:
+    key = jr.PRNGKey(seed)  # Required because configdict can't pass jr.PRNGKey as seed
     k1, k2, key = jr.split(key, 3)
 
     x = jnp.linspace(-n / n_periods, n / n_periods, num=n).reshape(-1, 1)

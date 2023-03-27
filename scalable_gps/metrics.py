@@ -1,11 +1,11 @@
-import jax
-import jax.random as jr
-import jax.numpy as jnp
-from chex import Array, PRNGKey
-from typing import Optional
-from .utils import revert_z_score
-from typing import Callable
+from typing import Callable, Optional
+
 import chex
+import jax
+import jax.numpy as jnp
+import jax.random as jr
+from chex import Array
+from utils import revert_z_score
 
 
 def grad_var_fn(

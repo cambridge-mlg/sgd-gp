@@ -1,6 +1,5 @@
 import ml_collections
 from uci_datasets import all_datasets
-import jax.random as jr
 
 
 def get_dataset_config(name):
@@ -10,7 +9,7 @@ def get_dataset_config(name):
         config.noise_scale = 1.0
         config.n_test = 500
         config.n_per_period = 100
-        config.key = 42
+        config.seed = 42
     elif name in all_datasets.keys():
         pass
 
@@ -41,9 +40,6 @@ def get_config():
     config.kernel_config.signal_scale = 1.0
     config.kernel_config.length_scale = 1.0
 
-    # Copy kernel configs to feature configs
-    config.feature_config = config.kernel_config.copy_and_resolve_references()
-
     config.train_config = ml_collections.ConfigDict()
 
     # Full-batch training configs that get passed
@@ -56,6 +52,20 @@ def get_config():
     # RFF Configs
     config.train_config.num_features = 100
     config.train_config.recompute_features = True
+    
+    config.sampling_config = config.train_config.copy_and_resolve_references()
+    # Full-batch training configs that get passed
+    config.sampling_config.learning_rate = 1e-2
+    config.sampling_config.momentum = 0.9
+    config.sampling_config.polyak = 1e-3
+    config.sampling_config.iterations = 50000
+    config.sampling_config.batch_size = 4
+    config.sampling_config.eval_every = 100
+    # RFF Configs
+    config.sampling_config.num_features = 5000
+    config.sampling_config.recompute_features = True
+    config.sampling_config.loss_objective = 2
+    config.sampling_config.use_cholesky_prior_sample = True
 
     config.optimiser = "sgd"
     config.sampling_loss_objective = 1

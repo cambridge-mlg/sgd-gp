@@ -1,10 +1,10 @@
-import jax
+from typing import Callable, Optional
+
+import chex
 import jax.numpy as jnp
 import jax.random as jr
-from chex import Array, PRNGKey
-from .utils import TargetTuple
-from typing import Callable, Optional
-import chex
+from chex import Array
+from utils import TargetTuple
 
 
 def error(params, targets, K):

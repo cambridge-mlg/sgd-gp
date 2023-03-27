@@ -1,27 +1,26 @@
+from typing import List, Optional
+
+import chex
 import jax.numpy as jnp
 import jax.random as jr
-
-from .data import Dataset
-from .linalg_utils import KvP, solve_K_inv_v
-from .linear_model import (
+from chex import Array
+from data import Dataset
+from kernels import Kernel
+from linalg_utils import KvP, solve_K_inv_v
+from linear_model import (
     draw_prior_function_sample,
     draw_prior_noise_sample,
     loss_fn,
 )
-from .train_utils import (
+from metrics import RMSE
+from train_utils import (
     get_eval_fn,
     get_sampling_eval_fn,
     get_stochastic_gradient_fn,
     get_update_fn,
     train,
 )
-from .metrics import RMSE
-from chex import Array
-from .kernels import Kernel
-from collections import namedtuple
-from typing import List, Tuple, Optional
-from .utils import TargetTuple
-import chex
+from utils import TargetTuple
 
 
 class Model:
@@ -93,7 +92,7 @@ class ExactGPModel(Model):
         key,
         train_ds: Dataset,
         test_ds: Dataset,
-        n_features,
+        num_features,
         use_rff_features: bool = False,
         zero_mean: bool = False,
     ):
@@ -111,7 +110,7 @@ class ExactGPModel(Model):
         prior_fn_sample, L = draw_prior_function_sample(
             feature_key,
             prior_fn_key,
-            n_features,
+            num_features,
             x,
             self.kernel.Phi,
             K_full,
@@ -128,12 +127,14 @@ class ExactGPModel(Model):
         prior_noise_sample = draw_prior_noise_sample(
             prior_noise_key, N, noise_scale=self.noise_scale
         )
-
+        
         alpha_sample = solve_K_inv_v(
             K_train,
             prior_fn_sample_train + prior_noise_sample,
             noise_scale=self.noise_scale,
         )
+        
+        print(alpha_sample)
 
         if not zero_mean:
             alpha_sample = self.alpha - alpha_sample
@@ -187,7 +188,7 @@ class SamplingGPModel(Model):
             self.kernel.K,
             self.kernel.Phi,
             config.batch_size,
-            config.n_features,
+            config.num_features,
             self.noise_scale,
             recompute_features=config.recompute_features,
         )
@@ -239,7 +240,7 @@ class SamplingGPModel(Model):
         prior_fn_sample, L = draw_prior_function_sample(
             feature_key,
             prior_fn_key,
-            config.n_features,
+            config.num_features,
             x,
             self.kernel.Phi,
             K_full,
@@ -273,7 +274,7 @@ class SamplingGPModel(Model):
             self.kernel.K,
             self.kernel.Phi,
             config.batch_size,
-            config.n_features,
+            config.num_features,
             self.noise_scale,
             recompute_features=config.recompute_features,
         )
@@ -282,6 +283,7 @@ class SamplingGPModel(Model):
         update_fn = get_update_fn(grad_fn, train_ds.N, config.polyak)
 
         # TODO: Implement eval fn that calculates test RMSE with the sample?
+        print(metrics)
         eval_fn = get_sampling_eval_fn(
             metrics,
             train_ds,
