@@ -258,7 +258,7 @@ class SamplingGPModel(Model):
         target_tuple = None
         if loss_type == 1:
             target_tuple = TargetTuple(
-                prior_fn_sample_train + prior_noise_sample, jnp.zeros_like(train_ds.y)
+                prior_fn_sample_train + prior_noise_sample, jnp.zeros_like(train_ds.y).squeeze()
             )
         elif loss_type == 2:
             target_tuple = TargetTuple(prior_fn_sample_train, prior_noise_sample)
