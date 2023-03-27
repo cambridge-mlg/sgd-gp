@@ -264,7 +264,7 @@ class SamplingGPModel(Model):
             target_tuple = TargetTuple(prior_fn_sample_train, prior_noise_sample)
         elif loss_type == 3:
             target_tuple = TargetTuple(
-                jnp.zeros_like(train_ds.y), prior_fn_sample_train + prior_noise_sample
+                jnp.zeros_like(train_ds.y).squeeze(), prior_fn_sample_train + prior_noise_sample
             )
 
         grad_fn = get_stochastic_gradient_fn(
