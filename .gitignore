@@ -137,3 +137,5 @@ typings
 .vscode
 .ruff_cache
 wandb
+results/
+*.code-workspace
