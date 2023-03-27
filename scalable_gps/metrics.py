@@ -22,7 +22,7 @@ def grad_var_fn(
 
 
 def hilbert_space_RMSE(x: Array, x_hat: Array, K: Array):
-    return ((x - x_hat).T @ K @ (x - x_hat)) ** 0.5
+    return jnp.sqrt(jnp.mean((x - x_hat) * (K @ (x - x_hat))))
 
 
 def RMSE(
