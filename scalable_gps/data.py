@@ -120,7 +120,7 @@ def _normalise_dataset(train_ds: Dataset, test_ds: Dataset) -> Tuple[Dataset, Da
 
 def get_dataset(dataset_name, **kwargs):
     if dataset_name == "toy_sin":
-        return get_toy_sin_dataset(**kwargs)
+        return get_expanding_toy_sin_dataset(**kwargs)
     elif dataset_name in all_datasets.keys():
         return get_uci_dataset(dataset_name, **kwargs)
     else:
