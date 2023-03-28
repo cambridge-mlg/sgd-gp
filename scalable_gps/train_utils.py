@@ -3,6 +3,7 @@ from typing import Callable, List, Optional
 
 import chex
 import jax
+import jax.numpy as jnp
 import jax.random as jr
 import ml_collections
 import optax
@@ -147,7 +148,9 @@ def get_sampling_eval_fn(
 
         if compare_exact_vals is not None:
             params_map_exact, _, _, alpha_sample_exact, _ = compare_exact_vals
-        
+            # (n_samples, ...)
+            # TODO: figure this out later
+            alpha_sample_exact = jnp.mean(alpha_sample_exact, axis=0)
             y_pred_sample_exact = prior_fn_sample_test + KvP(
                 test_ds.x, train_ds.x, params_map_exact - alpha_sample_exact, kernel_fn=kernel_fn)
 

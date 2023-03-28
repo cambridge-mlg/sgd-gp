@@ -1,6 +1,7 @@
 from typing import List, Optional
 
 import chex
+import jax
 import jax.numpy as jnp
 import jax.random as jr
 import ml_collections
@@ -71,9 +72,6 @@ class ExactGPModel(Model):
         return self.alpha
 
     def predictive_mean(self, train_ds: Dataset, test_ds: Dataset):
-
-        # Compute alpha if None
-        self.set_alpha(train_ds)
         # Compute the representer weights by solving alpha = (K + sigma^2 I)^{-1} y
 
         y_pred = KvP(test_ds.x, train_ds.x, self.alpha, kernel_fn=self.kernel.K)
@@ -87,7 +85,7 @@ class ExactGPModel(Model):
         K_train_test = self.kernel.K(train_ds.x, test_ds.x)  # N_train, N_test
         
         K_inv_K_train_test = solve_K_inv_v(self.K, K_train_test, noise_scale=self.noise_scale)
-        
+    
         variance = K_test - K_train_test.T @ K_inv_K_train_test
         
         if return_marginal_variance:
@@ -125,7 +123,7 @@ class ExactGPModel(Model):
         chol_eps: float = 1e-6,
     ):
         x_full = jnp.vstack((train_ds.x, test_ds.x))
-        N = train_ds.N
+        N_full, N = x_full.shape[0], train_ds.N
         M = n_features
 
         prior_fn_key, feature_key = jr.split(key, 2)
@@ -136,8 +134,8 @@ class ExactGPModel(Model):
             K_train = L[:N] @ L[:N].T
         else:
             K_full = self.kernel.K(x_full, x_full)
-            L = jnp.linalg.cholesky(K_full + chol_eps * jnp.identity(N))
-            eps = jr.normal(prior_fn_key, (N,))
+            L = jnp.linalg.cholesky(K_full + chol_eps * jnp.identity(N_full))
+            eps = jr.normal(prior_fn_key, (N_full,))
             K_train = K_full[:N, :N]
         
         prior_fn_sample = L @ eps
@@ -179,27 +177,56 @@ class ExactGPModel(Model):
         )
 
         return alpha_sample
+    
+    
+    def compute_zero_mean_samples(
+        self,
+        key: chex.PRNGKey,
+        n_samples: int,
+        train_ds: Dataset,
+        test_ds: Dataset,
+        n_features: int = 0,
+        use_rff: bool = True,
+    ):
+        @jax.jit
+        def _compute_fn(single_key):
+            prior_key, sample_opt_key = jr.split(single_key)
+            prior_fn_sample_train, prior_fn_sample_test, K_train = self.compute_prior_fn_sample(
+                    prior_key, train_ds, test_ds, n_features, use_rff=use_rff)
+
+            alpha_sample = self.compute_representer_weights_sample(
+                sample_opt_key,
+                train_ds,
+                prior_fn_sample_train,
+                K_train)
+            
+            zero_mean_posterior_sample = self.compute_zero_mean_posterior_fn_sample(
+                train_ds, test_ds, alpha_sample, prior_fn_sample_test)
+        
+            return zero_mean_posterior_sample, alpha_sample
+        
+        keys = jr.split(key, n_samples)
+        
+        return jax.vmap(_compute_fn)(keys)  # (n_samples, n_test), (n_samples, n_train)
 
 
-class SamplingGPModel(ExactGPModel):
+class SGDGPModel(ExactGPModel):
     def __init__(self, noise_scale: float, kernel: Kernel, **kwargs):
         super().__init__(noise_scale=noise_scale, kernel=kernel, **kwargs)
 
         # Initialize alpha and alpha_polyak
         self.alpha = None
-        self.alpha_polyak = None
 
         self.omega = None
         self.phi = None
 
     def _init_params(self, train_ds):
-        self.alpha = jnp.zeros((train_ds.N,))
-        self.alpha_polyak = jnp.zeros((train_ds.N,))
-    
-    def _init_params_sample(self, train_ds):
+        # TODO: consider different init for sampling.
         alpha = jnp.zeros((train_ds.N,))
-        alpha_polyak = jnp.zeros((train_ds.N,))
+        alpha_polyak = jnp.zeros((train_ds.N,))   
+        
         return alpha, alpha_polyak
+
 
     def compute_representer_weights(
         self,
@@ -246,14 +273,14 @@ class SamplingGPModel(ExactGPModel):
         )
 
         # Initialise alpha and alpha_polyak
-        self._init_params(train_ds)
+        init_alpha, init_alpha_polyak = self._init_params(train_ds)
 
         # Solve optimisation problem to obtain representer_weights
-        self.alpha_polyak, aux = train(
-            key, config, update_fn, eval_fn, self.alpha, self.alpha_polyak
+        self.alpha, aux = train(
+            key, config, update_fn, eval_fn, init_alpha, init_alpha_polyak
         )
 
-        return self.alpha_polyak, aux
+        return self.alpha, aux
 
     def compute_representer_weights_sample(
         self,
@@ -284,6 +311,8 @@ class SamplingGPModel(ExactGPModel):
             target_tuple = TargetTuple(
                 jnp.zeros_like(train_ds.y).squeeze(), prior_fn_sample_train + prior_noise_sample
             )
+        else:
+            raise ValueError("loss_type must be 1, 2 or 3")
 
         grad_fn = get_stochastic_gradient_fn(
             x=train_ds.x,
@@ -291,7 +320,7 @@ class SamplingGPModel(ExactGPModel):
             kernel_fn=self.kernel.K,
             feature_fn=self.kernel.Phi,
             batch_size=config.batch_size,
-            num_features=config.num_features,
+            num_features=config.num_features_optim,
             noise_scale=self.noise_scale,
             recompute_features=config.recompute_features,
         )
@@ -316,12 +345,55 @@ class SamplingGPModel(ExactGPModel):
             metrics_prefix,
             compare_exact_vals,
         )
+        eval_fn = None
 
         # Initialise alpha and alpha_polyak for sample
-        alpha, alpha_polyak = self._init_params_sample(train_ds)
+        init_alpha, init_alpha_polyak = self._init_params(train_ds)
 
         alpha_polyak, aux = train(
-            key, config, update_fn, eval_fn, alpha, alpha_polyak
+            key, config, update_fn, eval_fn, init_alpha, init_alpha_polyak
         )
 
         return alpha_polyak, aux
+    
+    def compute_zero_mean_samples(
+        self,
+        key: chex.PRNGKey,
+        n_samples: int,
+        train_ds: Dataset,
+        test_ds: Dataset,
+        config: ml_collections.ConfigDict,
+        sampling_metrics: List[str],
+        use_rff: bool = True,
+        compare_exact_vals: Optional[ExactValsTuple] = None,
+    ):
+        def _compute_fn(single_key):
+            prior_key, sample_opt_key = jr.split(single_key)
+            # Compute a prior sample
+            prior_fn_sample_train, prior_fn_sample_test, _ = self.compute_prior_fn_sample(
+                    prior_key, train_ds, test_ds, config.num_features_prior_sample, use_rff=use_rff)
+
+            # Compute a posterior sample
+            loss_objective = config.loss_objective
+            alpha_sample, info = self.compute_representer_weights_sample(
+                sample_opt_key,
+                train_ds,
+                test_ds,
+                prior_fn_sample_train,
+                prior_fn_sample_test,
+                config,
+                loss_objective,
+                sampling_metrics,
+                metrics_prefix=f"sampling_{loss_objective}",
+                compare_exact_vals=compare_exact_vals,
+            )
+            zero_mean_posterior_sample = self.compute_zero_mean_posterior_fn_sample(
+                train_ds, test_ds, alpha_sample, prior_fn_sample_test)
+
+            return zero_mean_posterior_sample, alpha_sample
+        
+        keys = jr.split(key, n_samples)
+        
+        return jax.vmap(_compute_fn)(keys)  # (n_samples, n_test), (n_samples, n_train)
+
+
