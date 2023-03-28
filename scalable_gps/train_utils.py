@@ -96,13 +96,10 @@ def get_eval_fn(
             elif metric == "alpha_diff":
                 return RMSE(alpha_exact, params)
 
-            elif metric == "hilbert_err":
+            elif metric == "alpha_rkhs_diff":
                 return hilbert_space_RMSE(
                     alpha_exact, params, K=kernel_fn(train_ds.x, train_ds.x)
                 )
-
-            # TODO: add kernel weighed alpha diff
-
             elif metric == "test_rmse_diff":
                 return RMSE(_get_metric("test_rmse"), test_rmse_exact)
             elif metric == "y_pred_diff":
