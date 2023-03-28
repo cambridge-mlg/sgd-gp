@@ -26,8 +26,9 @@ def error_grad_sample(params, key, B, x, target, kernel_fn):
 
 
 def regularizer(params, target, K, noise_scale):
-    target = target.squeeze()
-    return 0.5 * (noise_scale * params - target / noise_scale).T @ K @ (noise_scale * params - target / noise_scale)
+    params = noise_scale * params
+    target = target.squeeze() / noise_scale
+    return 0.5 * (params - target).T @ K @ (params - target)
 
 
 def regularizer_grad_sample(
