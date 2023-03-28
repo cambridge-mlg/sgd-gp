@@ -7,6 +7,10 @@ import jax.random as jr
 from chex import Array
 
 
+# TODO: Implement independent lengthscale for Matern 32.
+
+
+
 class Kernel:
     def __init__(self, kernel_config=None):
         self.kernel_config = kernel_config or {}

@@ -62,7 +62,7 @@ def get_config():
     config.sampling_config.batch_size = 4
     config.sampling_config.eval_every = 100
     # RFF Configs
-    config.sampling_config.num_features = 5000
+    config.sampling_config.num_features = 1000
     config.sampling_config.recompute_features = True
     config.sampling_config.loss_objective = 2
     config.sampling_config.use_cholesky_prior_sample = True

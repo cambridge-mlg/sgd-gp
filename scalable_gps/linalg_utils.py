@@ -7,12 +7,11 @@ from chex import Array
 
 Kernel_fn = Callable[[Array, Array], Array]
 
-@jax.jit
+@partial(jax.jit, backend='cpu')
 def solve_K_inv_v(K: Array, v: Array, noise_scale: float = 1.0):
     """Solves (K + noise_scale^2 I) x = v for x."""
-    # TODO: use jax.scipy.linalg.solve with sym_pos=True
-    # TODO: jit to cpu
-    return jnp.linalg.solve(K + (noise_scale**2) * jnp.identity(v.shape[0]), v)
+    return jax.scipy.linalg.solve(K + (noise_scale**2) * jnp.identity(v.shape[0]), v, assume_a='sym')
+
 
 @partial(jax.jit, static_argnums=(3, 4))
 def KvP(x1: Array, x2: Array, v: Array, kernel_fn: Kernel_fn, **kernel_kwargs):
