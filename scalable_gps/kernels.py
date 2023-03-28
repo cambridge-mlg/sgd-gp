@@ -6,7 +6,9 @@ import jax.numpy as jnp
 import jax.random as jr
 from chex import Array
 
+
 # TODO: Implement independent lengthscale for Matern 32.
+
 
 
 class Kernel:
@@ -25,11 +27,11 @@ class Kernel:
     def K(self, x: Array, y: Array):
         raise NotImplementedError("Subclasses should implement this method.")
     
-    def omega_fn(self, key: chex.PRNGKey, num_input_dims: int, num_features: int):
+    def omega_fn(self, key: chex.PRNGKey, n_input_dims: int, n_features: int):
         raise NotImplementedError("Subclasses should implement this method.")
     
-    def phi_fn(self, key: chex.PRNGKey, num_features: int):
-        return jr.uniform(key, shape=(1, num_features), minval=-jnp.pi, maxval=jnp.pi)
+    def phi_fn(self, key: chex.PRNGKey, n_features: int):
+        return jr.uniform(key, shape=(1, n_features), minval=-jnp.pi, maxval=jnp.pi)
     
     def _sq_dist(self, x: Array, y: Array):
         return jnp.sum((x[:, None] - y[None, :]) ** 2, axis=-1)
@@ -70,11 +72,11 @@ class RBFKernel(Kernel):
 
         return (s**2) * jnp.exp(-0.5 * self._sq_dist(x, y) / (l**2))
 
-    def omega_fn(self, key: chex.PRNGKey, num_input_dims: int, num_features: int):
-        return jr.normal(key, shape=(num_input_dims, num_features))
+    def omega_fn(self, key: chex.PRNGKey, n_input_dims: int, n_features: int):
+        return jr.normal(key, shape=(n_input_dims, n_features))
 
 
-class Matern32Kernel(Kernel):
+class MaternKernel(Kernel):
     @partial(jax.jit, static_argnums=(0,))
     def K(self, x: Array, y: Array):
 
@@ -85,12 +87,44 @@ class Matern32Kernel(Kernel):
         s = self.kernel_config["signal_scale"]
         l = self.kernel_config["length_scale"]
 
-        scaled_dist = jnp.sqrt(3.) * jnp.sqrt(self._sq_dist(x, y)) / l
 
-        normaliser = 1 + scaled_dist
-        exponential_term = jnp.exp(-scaled_dist)
+        sq_dist = self._sq_dist(x, y) / (l**2)
+        dist = jnp.sqrt(sq_dist)
+
+        normaliser = self._normaliser(dist, sq_dist)
+        exponential_term = jnp.exp(-jnp.sqrt(self._df()) * dist)
         return (s**2) * normaliser * exponential_term
+    
+    def omega_fn(self, key: chex.PRNGKey, n_input_dims: int, n_features: int):
+        return jr.t(key, df=self._df(), shape=(n_input_dims, n_features))
+
+    def _df(self):
+        raise NotImplementedError("Subclasses should implement this method.")
+
+    def _normaliser(self, dist: Array, sq_dist: Array):
+        raise NotImplementedError("Subclasses should implement this method.")
 
 
-    def omega_fn(self, key: chex.PRNGKey, num_input_dims: int, num_features: int):
-        return jr.t(key, df=3., shape=(num_input_dims, num_features))
+class Matern12Kernel(MaternKernel):
+    def _df(self):
+        return 1.0
+    
+    def _normaliser(self, dist: Array, sq_dist: Array):
+        return 1.0
+
+
+class Matern32Kernel(MaternKernel):
+    def _df(self):
+        return 3.0
+    
+    def _normaliser(self, dist: Array, sq_dist: Array):
+        return jnp.sqrt(3.0) * dist + 1.0
+    
+
+class Matern52Kernel(MaternKernel):
+    def _df(self):
+        return 5.0
+    
+    def _normaliser(self, dist: Array, sq_dist: Array):
+        return jnp.sqrt(5.0) * dist + (5.0 / 3.0) * sq_dist + 1.0 
+   
