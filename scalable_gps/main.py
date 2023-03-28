@@ -107,11 +107,11 @@ def main(config):
         # Compute a posterior sample
         loss_objective = config.sampling_config.loss_objective
         post_sample, info = model.compute_posterior_sample(
+            sampling_key,
             train_ds,
             test_ds,
             config.sampling_config,
             loss_objective,
-            sampling_key,
             sampling_metrics,
             compare_exact_vals=compare_exact_vals
             if config.compute_exact_soln

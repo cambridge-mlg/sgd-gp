@@ -220,11 +220,11 @@ class SamplingGPModel(Model):
 
     def compute_posterior_sample(
         self,
+        key,
         train_ds: Dataset,
         test_ds,
         config,
         loss_type,
-        key,
         metrics,
         metrics_prefix="",
         compare_exact_vals=None,
@@ -282,8 +282,6 @@ class SamplingGPModel(Model):
         # Define the gradient update function
         update_fn = get_update_fn(grad_fn, train_ds.N, config.polyak)
 
-        # TODO: Implement eval fn that calculates test RMSE with the sample?
-        print(metrics)
         eval_fn = get_sampling_eval_fn(
             metrics,
             train_ds,

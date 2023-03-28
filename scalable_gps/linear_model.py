@@ -1,6 +1,8 @@
+from functools import partial
 from typing import Callable, Optional
 
 import chex
+import jax
 import jax.numpy as jnp
 import jax.random as jr
 from chex import Array
@@ -24,9 +26,8 @@ def error_grad_sample(params, key, B, x, target, kernel_fn):
 
 
 def regularizer(params, target, K, noise_scale):
-    params = (noise_scale**2) * params
     target = target.squeeze()
-    return 0.5 * (params - target).T @ K @ (params - target)
+    return 0.5 * (noise_scale * params - target / noise_scale).T @ K @ (noise_scale * params - target / noise_scale)
 
 
 def regularizer_grad_sample(
@@ -45,11 +46,9 @@ def loss_fn(params: Array, target_tuple: TargetTuple, K: Array, noise_scale):
     )
 
 
+@partial(jax.jit, backend='cpu')
 def exact_solution(targets, K, noise_scale):
-    # TODO: Add jax.scipy.linalg.solve with pos_sym=True
-    return jnp.linalg.solve(
-        K + (noise_scale**2) * jnp.identity(targets.shape[0]), targets
-    )
+    return jax.scipy.linalg.solve(K + (noise_scale**2) * jnp.identity(targets.shape[0]), targets, assume_a='pos')
 
 
 def predict(params, x_pred, x_train, kernel_fn, **kernel_kwargs):

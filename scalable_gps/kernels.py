@@ -6,9 +6,7 @@ import jax.numpy as jnp
 import jax.random as jr
 from chex import Array
 
-# TODO: Implement Matern 3/2 and Laplace
-# TODO: Implement RFF for Matern 3/2 - https://github.com/secondmind-labs/GPflux/blob/3833993ccf2e6e166dd02a1bdb7c9778d3385318/gpflux/layers/basis_functions/fourier_features/random.py#L71
-# TODO: https://github.com/secondmind-labs/GPflux/blob/c8174ee3764a303349f78eb6b13eecb2b40fc9a7/gpflux/layers/basis_functions/fourier_features/random/base.py#L100
+# TODO: Implement independent lengthscale for Matern 32.
 
 
 class Kernel:
