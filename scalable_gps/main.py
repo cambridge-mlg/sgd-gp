@@ -7,7 +7,7 @@ from absl import app, flags
 from data import get_dataset
 from kernels import RBFKernel
 from models import ExactGPModel, SamplingGPModel
-from utils import flatten_nested_dict, setup_training, update_config_dict
+from utils import ExactValsTuple, flatten_nested_dict, setup_training, update_config_dict
 
 import wandb
 
@@ -58,25 +58,27 @@ def main(config):
             test_rmse_exact, y_pred_exact = exact_model.calculate_test_rmse(
                 train_ds, test_ds)
             
-            (
-                alpha_sample_exact,
-                y_pred_sample_exact,
-            ) = exact_model.compute_posterior_sample(
+            prior_fn_sample_train, prior_fn_sample_test, K_train = exact_model.compute_prior_fn_sample(
+                sampling_key, train_ds, test_ds, config.train_config.num_features, use_rff=False)
+            
+            alpha_sample_exact = exact_model.compute_representer_weights_sample(
                 sampling_key,
                 train_ds,
-                test_ds,
-                config.train_config.num_features,
-                use_rff_features=True,
-            )
+                prior_fn_sample_train,
+                K_train)
+            
+            y_pred_sample_exact = exact_model.compute_zero_mean_posterior_fn_sample(
+                train_ds, test_ds, alpha_sample_exact, prior_fn_sample_test)
+            
             print(f"test_rmse_exact = {test_rmse_exact}")
             wandb.log({"test_rmse_exact": test_rmse_exact})
-            compare_exact_vals = [
-                exact_model.alpha,
-                y_pred_exact,
-                test_rmse_exact,
-                alpha_sample_exact,
-                y_pred_sample_exact,
-            ]
+            compare_exact_vals = ExactValsTuple(
+                alpha=exact_model.alpha,
+                y_pred=y_pred_exact,
+                test_rmse=test_rmse_exact,
+                alpha_sample=alpha_sample_exact,
+                y_pred_sample=y_pred_sample_exact,
+            )
 
         # Compute stochastic optimised solution
         model = SamplingGPModel(config.dataset_config.noise_scale, kernel)
@@ -86,15 +88,13 @@ def main(config):
             metrics.extend(["alpha_diff", "y_pred_diff", "test_rmse_diff"])
 
         model.compute_representer_weights(
+            optim_key,
             train_ds,
             test_ds,
             config.train_config,
-            optim_key,
-            compare_exact_vals=compare_exact_vals
-            if config.compute_exact_soln
-            else None,
             metrics=metrics,
             metrics_prefix="train",
+            compare_exact_vals=compare_exact_vals if config.compute_exact_soln else None,
         )
 
         # TODO: vmap and pmap sampling to obtain multiple samples in parallel
@@ -104,24 +104,28 @@ def main(config):
                 ["alpha_sample_diff", "y_pred_diff", "loss_diff", "test_rmse_diff"]
             )
 
+        # Compute a prior sample
+        prior_fn_sample_train, prior_fn_sample_test, K_train = model.compute_prior_fn_sample(
+                sampling_key, train_ds, test_ds, config.sampling_config.num_features, use_rff=True)
+
         # Compute a posterior sample
         loss_objective = config.sampling_config.loss_objective
-        post_sample, info = model.compute_posterior_sample(
+        alpha_sample, info = model.compute_representer_weights_sample(
             sampling_key,
             train_ds,
             test_ds,
+            prior_fn_sample_train,
+            prior_fn_sample_test,
             config.sampling_config,
             loss_objective,
             sampling_metrics,
-            compare_exact_vals=compare_exact_vals
-            if config.compute_exact_soln
-            else None,
             metrics_prefix=f"sampling_{loss_objective}",
-            use_chol=config.sampling_config.use_cholesky_prior_sample,
+            compare_exact_vals=compare_exact_vals if config.compute_exact_soln else None,
         )
+        y_pred_sample = model.compute_zero_mean_posterior_fn_sample(
+                train_ds, test_ds, alpha_sample, prior_fn_sample_test)
 
-        print(info)
-        return post_sample
+        return y_pred_sample
 
 
 if __name__ == "__main__":

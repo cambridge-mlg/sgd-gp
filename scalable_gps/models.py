@@ -3,12 +3,12 @@ from typing import List, Optional
 import chex
 import jax.numpy as jnp
 import jax.random as jr
+import ml_collections
 from chex import Array
 from data import Dataset
 from kernels import Kernel
 from linalg_utils import KvP, solve_K_inv_v
 from linear_model import (
-    draw_prior_function_sample,
     draw_prior_noise_sample,
     loss_fn,
 )
@@ -20,7 +20,7 @@ from train_utils import (
     get_update_fn,
     train,
 )
-from utils import TargetTuple
+from utils import ExactValsTuple, TargetTuple
 
 
 class Model:
@@ -70,7 +70,7 @@ class ExactGPModel(Model):
 
         return self.alpha
 
-    def predict(self, train_ds: Dataset, test_ds: Dataset):
+    def predictive_mean(self, train_ds: Dataset, test_ds: Dataset):
 
         # Compute alpha if None
         self.set_alpha(train_ds)
@@ -78,83 +78,112 @@ class ExactGPModel(Model):
 
         y_pred = KvP(test_ds.x, train_ds.x, self.alpha, kernel_fn=self.kernel.K)
 
-        return y_pred
+        return y_pred  # (N_test, 1)
+
+    def predictive_variance(self, train_ds: Dataset, test_ds: Dataset, return_marginal_variance: bool = True):
+        """Compute the posterior variance of the test points."""
+        K_test = self.kernel.K(test_ds.x, test_ds.x)  # N_test, N_test
+        
+        K_train_test = self.kernel.K(train_ds.x, test_ds.x)  # N_train, N_test
+        
+        K_inv_K_train_test = solve_K_inv_v(self.K, K_train_test, noise_scale=self.noise_scale)
+        
+        variance = K_test - K_train_test.T @ K_inv_K_train_test
+        
+        if return_marginal_variance:
+            return jnp.diag(variance)  # (N_test, 1)
+        return variance  # (N_test, N_test)
+
+    def predictive_variance_samples(
+        self,
+        zero_mean_posterior_samples: Array,
+        return_marginal_variance: bool = True):
+        # posterior_samples = (N_samples, N_test)
+        
+        if return_marginal_variance:
+            variance = jnp.mean(zero_mean_posterior_samples ** 2, axis=0)  # (N_test, 1)
+        else:
+            n_samples = zero_mean_posterior_samples.shape[0]
+            variance = zero_mean_posterior_samples.T @ zero_mean_posterior_samples / n_samples
+    
+        return variance
 
     def calculate_test_rmse(self, train_ds: Dataset, test_ds: Dataset):
 
-        y_pred = self.predict(train_ds, test_ds)
+        y_pred = self.predictive_mean(train_ds, test_ds)
         test_rmse = RMSE(y_pred, test_ds.y, mu=train_ds.mu_y, sigma=train_ds.sigma_y)
 
         return test_rmse, y_pred
 
-    def compute_posterior_sample(
+    def compute_prior_fn_sample(
         self,
-        key,
+        key: chex.PRNGKey,
         train_ds: Dataset,
         test_ds: Dataset,
-        num_features,
-        use_rff_features: bool = False,
-        zero_mean: bool = False,
+        n_features: int,
+        use_rff: bool = False,
+        chol_eps: float = 1e-6,
     ):
-        x = jnp.vstack((train_ds.x, test_ds.x))
-        N, T = train_ds.N, test_ds.N
+        x_full = jnp.vstack((train_ds.x, test_ds.x))
+        N = train_ds.N
+        M = n_features
 
-        prior_fn_key, prior_noise_key, feature_key = jr.split(key, 3)
+        prior_fn_key, feature_key = jr.split(key, 2)
 
-        K_full, K_train = None, None
-
-        if not use_rff_features:
-            K_full = self.kernel.K(x, x)
-            K_train = K_full[:N, :N]
-
-        prior_fn_sample, L = draw_prior_function_sample(
-            feature_key,
-            prior_fn_key,
-            num_features,
-            x,
-            self.kernel.Phi,
-            K_full,
-            use_chol=not use_rff_features,
-        )
-
-        if use_rff_features:
+        if use_rff:
+            L = self.kernel.Phi(feature_key, M, x_full)
+            eps = jr.normal(prior_fn_key, (M,))
             K_train = L[:N] @ L[:N].T
+        else:
+            K_full = self.kernel.K(x_full, x_full)
+            L = jnp.linalg.cholesky(K_full + chol_eps * jnp.identity(N))
+            eps = jr.normal(prior_fn_key, (N,))
+            K_train = K_full[:N, :N]
+        
+        prior_fn_sample = L @ eps
 
         prior_fn_sample_train = prior_fn_sample[:N]
         prior_fn_sample_test = prior_fn_sample[N:]
 
+        return prior_fn_sample_train, prior_fn_sample_test, K_train
+    
+    def compute_zero_mean_posterior_fn_sample(
+        self,
+        train_ds: Dataset,
+        test_ds: Dataset,
+        alpha_sample: Array,
+        prior_fn_sample_test: Array
+    ):
+        zero_mean_posterior_fn_sample = prior_fn_sample_test - KvP(test_ds.x, train_ds.x, alpha_sample, kernel_fn=self.kernel.K)
+        return zero_mean_posterior_fn_sample    
+    
+    def compute_representer_weights_sample(
+        self,
+        key: chex.PRNGKey,
+        train_ds: Dataset,
+        prior_fn_sample_train: Array,
+        K_train: Array,
+    ):
+        """Computes $(K_{xx}+ \Sigma)^{-1}(f_0(x)+ \varepsilon_0)$"""
+        
+        N = train_ds.N
         # draw prior noise sample
         prior_noise_sample = draw_prior_noise_sample(
-            prior_noise_key, N, noise_scale=self.noise_scale
+            key, N, noise_scale=self.noise_scale
         )
-        
+
         alpha_sample = solve_K_inv_v(
             K_train,
             prior_fn_sample_train + prior_noise_sample,
             noise_scale=self.noise_scale,
         )
-        
-        print(alpha_sample)
 
-        if not zero_mean:
-            alpha_sample = self.alpha - alpha_sample
-        else:
-            alpha_sample = -alpha_sample
-
-        # Make prediction at x_test using one sample
-        y_pred_sample = prior_fn_sample_test + KvP(
-            test_ds.x, train_ds.x, alpha_sample, kernel_fn=self.kernel.K
-        )
-
-        return alpha_sample, y_pred_sample
+        return alpha_sample
 
 
-class SamplingGPModel(Model):
+class SamplingGPModel(ExactGPModel):
     def __init__(self, noise_scale: float, kernel: Kernel, **kwargs):
-        super().__init__()
-
-        self.noise_scale = noise_scale
-        self.kernel = kernel
+        super().__init__(noise_scale=noise_scale, kernel=kernel, **kwargs)
 
         # Initialize alpha and alpha_polyak
         self.alpha = None
@@ -166,35 +195,42 @@ class SamplingGPModel(Model):
     def _init_params(self, train_ds):
         self.alpha = jnp.zeros((train_ds.N,))
         self.alpha_polyak = jnp.zeros((train_ds.N,))
+    
+    def _init_params_sample(self, train_ds):
+        alpha = jnp.zeros((train_ds.N,))
+        alpha_polyak = jnp.zeros((train_ds.N,))
+        return alpha, alpha_polyak
 
     def compute_representer_weights(
         self,
+        key: chex.PRNGKey,
         train_ds: Dataset,
         test_ds: Dataset,
-        config,
-        key: chex.PRNGKey,
+        config: ml_collections.ConfigDict,
         metrics: List[str],
         metrics_prefix: str = "",
-        compare_exact_vals: Optional[List] = None,
+        compare_exact_vals: Optional[ExactValsTuple] = None,
     ):
-
         # @ K (alpha + target)
         target_tuple = TargetTuple(
             train_ds.y.squeeze(), jnp.zeros_like(train_ds.y).squeeze()
         )
         grad_fn = get_stochastic_gradient_fn(
-            train_ds.x,
-            target_tuple,
-            self.kernel.K,
-            self.kernel.Phi,
-            config.batch_size,
-            config.num_features,
-            self.noise_scale,
+            x=train_ds.x,
+            target_tuple=target_tuple,
+            kernel_fn=self.kernel.K,
+            feature_fn=self.kernel.Phi,
+            batch_size=config.batch_size,
+            num_features=config.num_features,
+            noise_scale=self.noise_scale,
             recompute_features=config.recompute_features,
         )
 
         # Define the gradient update function
-        update_fn = get_update_fn(grad_fn, train_ds.N, config.polyak)
+        update_fn = get_update_fn(
+            grad_fn=grad_fn, 
+            n_train=train_ds.N, 
+            polyak_step_size=config.polyak)
 
         eval_fn = get_eval_fn(
             metrics,
@@ -203,60 +239,41 @@ class SamplingGPModel(Model):
             loss_fn,
             grad_fn,
             target_tuple,
-            self.kernel.K,
-            self.noise_scale,
-            metrics_prefix,
-            compare_exact_vals,
+            kernel_fn=self.kernel.K,
+            noise_scale=self.noise_scale,
+            metrics_prefix=metrics_prefix,
+            compare_exact_vals=compare_exact_vals,
         )
 
         # Initialise alpha and alpha_polyak
         self._init_params(train_ds)
 
+        # Solve optimisation problem to obtain representer_weights
         self.alpha_polyak, aux = train(
             key, config, update_fn, eval_fn, self.alpha, self.alpha_polyak
         )
 
         return self.alpha_polyak, aux
 
-    def compute_posterior_sample(
+    def compute_representer_weights_sample(
         self,
-        key,
+        key: chex.PRNGKey,
         train_ds: Dataset,
-        test_ds,
-        config,
-        loss_type,
-        metrics,
-        metrics_prefix="",
-        compare_exact_vals=None,
-        use_chol: bool = False,
+        test_ds: Dataset,
+        prior_fn_sample_train: Array,
+        prior_fn_sample_test: Array,
+        config: ml_collections.ConfigDict,
+        loss_type: int,
+        metrics: List[str],
+        metrics_prefix: str = "",
+        compare_exact_vals: Optional[ExactValsTuple] = None,
     ):
-
-        x = jnp.vstack((train_ds.x, test_ds.x))
-        N, T = train_ds.N, test_ds.N
-
-        prior_fn_key, prior_noise_key, feature_key = jr.split(key, 3)
-
-        K_full = self.kernel.K(x, x) if use_chol else None
-        prior_fn_sample, L = draw_prior_function_sample(
-            feature_key,
-            prior_fn_key,
-            config.num_features,
-            x,
-            self.kernel.Phi,
-            K_full,
-            use_chol=use_chol,
-        )
-
-        prior_fn_sample_train = prior_fn_sample[:N]
-        prior_fn_sample_test = prior_fn_sample[N:]
-
         # draw prior noise sample
         prior_noise_sample = draw_prior_noise_sample(
-            prior_noise_key, train_ds.N, noise_scale=self.noise_scale
+            key, train_ds.N, noise_scale=self.noise_scale
         )
 
         # Depending on the three types of losses we can compute the gradient of the loss function accordingly
-        target_tuple = None
         if loss_type == 1:
             target_tuple = TargetTuple(
                 prior_fn_sample_train + prior_noise_sample, jnp.zeros_like(train_ds.y).squeeze()
@@ -269,18 +286,21 @@ class SamplingGPModel(Model):
             )
 
         grad_fn = get_stochastic_gradient_fn(
-            train_ds.x,
-            target_tuple,
-            self.kernel.K,
-            self.kernel.Phi,
-            config.batch_size,
-            config.num_features,
-            self.noise_scale,
+            x=train_ds.x,
+            target_tuple=target_tuple,
+            kernel_fn=self.kernel.K,
+            feature_fn=self.kernel.Phi,
+            batch_size=config.batch_size,
+            num_features=config.num_features,
+            noise_scale=self.noise_scale,
             recompute_features=config.recompute_features,
         )
 
         # Define the gradient update function
-        update_fn = get_update_fn(grad_fn, train_ds.N, config.polyak)
+        update_fn = get_update_fn(
+            grad_fn=grad_fn, 
+            n_train=train_ds.N, 
+            polyak_step_size=config.polyak)
 
         eval_fn = get_sampling_eval_fn(
             metrics,
@@ -298,8 +318,7 @@ class SamplingGPModel(Model):
         )
 
         # Initialise alpha and alpha_polyak for sample
-        alpha = jnp.zeros((train_ds.N,))  # TODO: Can init at MAP solution.
-        alpha_polyak = jnp.zeros((train_ds.N,))
+        alpha, alpha_polyak = self._init_params_sample(train_ds)
 
         alpha_polyak, aux = train(
             key, config, update_fn, eval_fn, alpha, alpha_polyak

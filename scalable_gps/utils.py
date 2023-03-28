@@ -1,15 +1,16 @@
+import os
+from collections import namedtuple
 from collections.abc import MutableMapping
 from typing import Optional
 
+import jax
 import jax.numpy as jnp
 import ml_collections
 from chex import Array
-import jax
-import os
-from collections import namedtuple
-
 
 TargetTuple = namedtuple('TargetTuple', ['error_target', 'regularizer_target'])
+
+ExactValsTuple = namedtuple('ExactValsTuple', ['alpha', 'y_pred', 'test_rmse', 'alpha_sample', 'y_pred_sample'])
 
 def apply_z_score(data: Array, mu: Optional[Array]=None, sigma: Optional[Array]=None):
     if (mu is not None) and (sigma is not None):

@@ -52,10 +52,6 @@ def exact_solution(targets, K, noise_scale):
     return jax.scipy.linalg.solve(K + (noise_scale**2) * jnp.identity(targets.shape[0]), targets, assume_a='pos')
 
 
-def predict(params, x_pred, x_train, kernel_fn, **kernel_kwargs):
-    return kernel_fn(x_pred, x_train, **kernel_kwargs) @ params
-
-
 def draw_prior_function_sample(
     feature_key: chex.PRNGKey,
     prior_function_key: chex.PRNGKey,

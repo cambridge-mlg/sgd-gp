@@ -1,8 +1,13 @@
 from functools import partial
+from typing import Callable, List, Optional
 
+import chex
 import jax
 import jax.random as jr
+import ml_collections
 import optax
+from chex import Array
+from data import Dataset
 from linalg_utils import KvP
 from linear_model import (
     error_grad_sample,
@@ -10,18 +15,19 @@ from linear_model import (
 )
 from metrics import RMSE, grad_var_fn, hilbert_space_RMSE
 from tqdm import tqdm
+from utils import ExactValsTuple, TargetTuple
 
 
 # TODO: if for error_fn pmap and reg_fn pmap
 def get_stochastic_gradient_fn(
-    x,
-    target_tuple,
-    kernel_fn,
-    feature_fn,
-    batch_size,
-    num_features,
-    noise_scale,
-    recompute_features=True,
+    x: Array,
+    target_tuple: TargetTuple,
+    kernel_fn: Callable,
+    feature_fn: Callable,
+    batch_size: int,
+    num_features: int,
+    noise_scale: float,
+    recompute_features: bool = True,
 ):
     @jax.jit
     def _fn(params, key):
@@ -44,7 +50,7 @@ def get_stochastic_gradient_fn(
     return _fn
 
 
-def get_update_fn(grad_fn, n_train, polyak_step_size):
+def get_update_fn(grad_fn: Callable, n_train: int, polyak_step_size: float):
     @partial(jax.jit, static_argnums=(3))
     def _fn(key, params, params_polyak, optimizer, opt_state):
         grad = grad_fn(params, key) / n_train
@@ -61,17 +67,17 @@ def get_update_fn(grad_fn, n_train, polyak_step_size):
 
 
 def get_eval_fn(
-    metrics,
-    train_ds,
-    test_ds,
-    loss_fn,
-    grad_fn,
-    target_tuple,
-    kernel_fn,
-    noise_scale,
-    metrics_prefix="",
+    metrics: List[str],
+    train_ds: Dataset,
+    test_ds: Dataset,
+    loss_fn: Callable,
+    grad_fn: Callable,
+    target_tuple: TargetTuple,
+    kernel_fn: Callable,
+    noise_scale: float,
+    metrics_prefix: str = "",
     # TODO: this should be a named tuple
-    compare_exact_vals=None,
+    compare_exact_vals: Optional[ExactValsTuple] = None,
 ):
     @jax.jit
     def _fn(params):
@@ -117,18 +123,18 @@ def get_eval_fn(
 
 
 def get_sampling_eval_fn(
-    metrics,
-    train_ds,
-    test_ds,
-    prior_fn_sample_test,
-    params_map,
-    loss_fn,
-    grad_fn,
-    target_tuple,
-    kernel_fn,
-    noise_scale,
-    metrics_prefix="",
-    compare_exact_vals=None,
+    metrics: List[str],
+    train_ds: Dataset,
+    test_ds: Dataset,
+    prior_fn_sample_test: Array,
+    params_map: Array,
+    loss_fn: Callable,
+    grad_fn: Callable,
+    target_tuple: TargetTuple,
+    kernel_fn: Callable,
+    noise_scale: float,
+    metrics_prefix: str = "",
+    compare_exact_vals: Optional[ExactValsTuple] = None,
 ):
     @jax.jit
     def _fn(params):
@@ -183,7 +189,13 @@ def get_sampling_eval_fn(
     return _fn
 
 
-def train(key, config, update_fn, eval_fn, params, params_polyak):
+def train(
+    key: chex.PRNGKey, 
+    config: ml_collections.ConfigDict, 
+    update_fn: Callable, 
+    eval_fn: Callable, 
+    params: Array, 
+    params_polyak: Array):
 
     aux = []
     optimizer = optax.sgd(

@@ -10,7 +10,7 @@ Kernel_fn = Callable[[Array, Array], Array]
 @partial(jax.jit, backend='cpu')
 def solve_K_inv_v(K: Array, v: Array, noise_scale: float = 1.0):
     """Solves (K + noise_scale^2 I) x = v for x."""
-    return jax.scipy.linalg.solve(K + (noise_scale**2) * jnp.identity(v.shape[0]), v, assume_a='sym')
+    return jax.scipy.linalg.solve(K + (noise_scale**2) * jnp.identity(v.shape[0]), v, assume_a='pos')
 
 
 @partial(jax.jit, static_argnums=(3, 4))
