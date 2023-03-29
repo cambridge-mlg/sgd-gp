@@ -7,8 +7,7 @@ from absl import app, flags
 from data import get_dataset
 from kernels import RBFKernel
 from models import ExactGPModel, SGDGPModel
-from utils import flatten_nested_dict, setup_training, update_config_dict
-from utils import ExactMetricsTuple, ExactSamplesTuple
+from utils import ExactMetricsTuple, flatten_nested_dict, setup_training, update_config_dict
 
 import wandb
 
@@ -51,16 +50,16 @@ def main(config):
         optim_key, sampling_key, key = jr.split(key, 3)
 
         # Compute exact solution
-        exact_model, compare_exact_vals = None, None
-        if config.compute_exact_soln is True:
+        exact_model, exact_metrics = None, None
+        if config.compute_exact_soln:
             exact_model = ExactGPModel(config.dataset_config.noise_scale, kernel)
             exact_model.compute_representer_weights(train_ds)
 
-            test_rmse_exact, y_pred_exact = exact_model.calculate_test_rmse(
-                train_ds, test_ds)
+            test_rmse_exact, y_pred_exact = exact_model.calculate_test_rmse(train_ds, test_ds)
             
             print(f"test_rmse_exact = {test_rmse_exact}")
             wandb.log({"test_rmse_exact": test_rmse_exact})
+            # Define exact metrics that we will use later to compare with stochastic solution
             exact_metrics = ExactMetricsTuple(
                 alpha=exact_model.alpha,
                 y_pred=y_pred_exact,
@@ -74,6 +73,7 @@ def main(config):
         if config.compute_exact_soln:
             metrics.extend(["alpha_diff", "y_pred_diff", "test_rmse_diff"])
 
+        # Compute the SGD MAP solution for representer weights.
         model.compute_representer_weights(
             optim_key,
             train_ds,
@@ -84,9 +84,10 @@ def main(config):
             exact_metrics=exact_metrics if config.compute_exact_soln else None,
         )
 
+        # Compute 10 samples with SGDGP, along with the corresponding representer weights.
         zero_mean_samples, alpha_samples = model.compute_zero_mean_samples(
             sampling_key, 
-            n_samples=10, # TODO: add this to config
+            n_samples=config.sampling_config.n_samples,
             train_ds=train_ds,
             test_ds=test_ds,
             config=config.sampling_config,
@@ -97,8 +98,6 @@ def main(config):
 
         print(f"zero_mean_samples.shape: {zero_mean_samples.shape}")
         print(f"alpha_samples.shape: {alpha_samples.shape}")
-
-        
 
         return zero_mean_samples, alpha_samples
 

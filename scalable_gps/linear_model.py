@@ -37,7 +37,7 @@ def regularizer_grad_sample(params: Array, features: Array, target: Array, noise
 def loss_fn(params: Array, idx: Array, x: Array, features:Array, target_tuple: TargetTuple, kernel_fn: Callable, noise_scale):
     err = error(params, idx, x, target_tuple.error_target, kernel_fn)
     reg = regularizer(params, features, target_tuple.regularizer_target, noise_scale)
-    chex.assert_rank([err, reg], [1, 1])
+    chex.assert_rank([err, reg], 0)
     return err + reg
 
 

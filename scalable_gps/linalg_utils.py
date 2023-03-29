@@ -7,7 +7,7 @@ from chex import Array
 
 Kernel_fn = Callable[[Array, Array], Array]
 
-@partial(jax.jit, backend='cpu')
+@partial(jax.jit, static_argnums=(2), device=jax.devices('cpu')[0])
 def solve_K_inv_v(K: Array, v: Array, noise_scale: float = 1.0):
     """Solves (K + noise_scale^2 I) x = v for x."""
     return jax.scipy.linalg.solve(K + (noise_scale**2) * jnp.identity(v.shape[0]), v, assume_a='pos')

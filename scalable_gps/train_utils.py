@@ -3,7 +3,6 @@ from typing import Callable, List, Optional
 
 import chex
 import jax
-import jax.numpy as jnp
 import jax.random as jr
 import ml_collections
 import optax
@@ -16,7 +15,9 @@ from linear_model import (
 )
 from metrics import RMSE, grad_var_fn, hilbert_space_RMSE
 from tqdm import tqdm
-from utils import TargetTuple, ExactMetricsTuple, ExactSamplesTuple
+from utils import ExactMetricsTuple, ExactSamplesTuple, TargetTuple
+
+import wandb
 
 
 # TODO: if for error_fn pmap and reg_fn pmap
@@ -28,13 +29,10 @@ def get_stochastic_gradient_fn(
 ):
     @jax.jit
     def _fn(params, idx, features):
-        error_grad = error_grad_sample(
-            params, idx, target_tuple.error_target, kernel_fn
-        )
+        error_grad = error_grad_sample(params, idx, x, target_tuple.error_target, kernel_fn)
         regularizer_grad = regularizer_grad_sample(
             params,
             features,
-            x,
             target_tuple.regularizer_target,
             noise_scale,
         )
@@ -44,7 +42,7 @@ def get_stochastic_gradient_fn(
 
 
 def get_update_fn(grad_fn: Callable, n_train: int, polyak_step_size: float):
-    @partial(jax.jit, static_argnums=(3))
+    @partial(jax.jit, static_argnums=(4))
     def _fn(params, params_polyak, idx, features, optimizer, opt_state):
         grad = grad_fn(params, idx, features) / n_train
 
@@ -132,11 +130,20 @@ def train(
 
     B, N = config.batch_size, params.shape[0]
     iterator = tqdm(range(config.iterations))
+    
+    @jax.jit
+    def _get_idx_and_features(idx_key, feature_key):
+        idx = jr.randint(idx_key, shape=(B,), minval=0, maxval=N)
+        features = feature_fn(key=feature_key, x=train_ds.x, recompute=True)
+
+        return idx, features
+
     for i in iterator:
         # perform update
-        key, idx_key, feature_key = jr.split(key)
-        idx = jr.randint(idx_key, shape=(B,), minval=0, maxval=N)
-        features = feature_fn(feature_key, train_ds.x)
+        key, idx_key, feature_key = jr.split(key, 3)
+        
+        # Calculate mini-batch specific idx and features here.
+        idx, features = _get_idx_and_features(idx_key, feature_key)
 
         params, params_polyak, opt_state = update_fn(
             params, params_polyak, idx, features, optimizer, opt_state
@@ -144,7 +151,7 @@ def train(
 
         if i % config.eval_every == 0 and eval_fn is not None:
             eval_metrics = eval_fn(params_polyak, idx, features)
-            # wandb.log(eval_metrics)
+            wandb.log(eval_metrics)
             aux.append(eval_metrics)
 
     return params_polyak, aux
