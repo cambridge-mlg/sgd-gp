@@ -5,10 +5,7 @@ import jax
 import jax.numpy as jnp
 import jax.random as jr
 from chex import Array
-
-
-# TODO: Implement independent lengthscale for Matern 32.
-
+from typing import Union
 
 
 class Kernel:
@@ -33,7 +30,12 @@ class Kernel:
     def phi_fn(self, key: chex.PRNGKey, n_features: int):
         return jr.uniform(key, shape=(1, n_features), minval=-jnp.pi, maxval=jnp.pi)
     
-    def _sq_dist(self, x: Array, y: Array):
+    def _sq_dist(self, x: Array, y: Array, l: Union[float, Array]):
+        if isinstance(l, Array):
+            D = x.shape[-1]
+            assert D == y.shape[-1] == l.shape[0]
+            l = l[None, :]
+        x, y = x / l, y / l
         return jnp.sum((x[:, None] - y[None, :]) ** 2, axis=-1)
     
     def Phi(
@@ -43,10 +45,17 @@ class Kernel:
             ["signal_scale", "length_scale"], self.kernel_config
         )
 
-        s = self.kernel_config["signal_scale"]
-        l = self.kernel_config["length_scale"]
         M = n_features
         D = x.shape[-1]
+
+        s = self.kernel_config["signal_scale"]
+        l = self.kernel_config["length_scale"]
+
+        if isinstance(l, Array):
+            assert D == l.shape[0]
+            l = l[:, None]
+        else:
+            assert isinstance(l, float)
 
         if recompute or self.omega is None or self.phi is None:
             # compute single random Fourier feature for RBF kernel
@@ -70,7 +79,7 @@ class RBFKernel(Kernel):
         s = self.kernel_config["signal_scale"]
         l = self.kernel_config["length_scale"]
 
-        return (s**2) * jnp.exp(-0.5 * self._sq_dist(x, y) / (l**2))
+        return (s**2) * jnp.exp(-0.5 * self._sq_dist(x, y, l))
 
     def omega_fn(self, key: chex.PRNGKey, n_input_dims: int, n_features: int):
         return jr.normal(key, shape=(n_input_dims, n_features))
@@ -87,8 +96,7 @@ class MaternKernel(Kernel):
         s = self.kernel_config["signal_scale"]
         l = self.kernel_config["length_scale"]
 
-
-        sq_dist = self._sq_dist(x, y) / (l**2)
+        sq_dist = self._sq_dist(x, y, l)
         dist = jnp.sqrt(sq_dist)
 
         normaliser = self._normaliser(dist, sq_dist)
