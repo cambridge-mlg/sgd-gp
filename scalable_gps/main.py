@@ -7,7 +7,8 @@ from absl import app, flags
 from data import get_dataset
 from kernels import RBFKernel
 from models import ExactGPModel, SGDGPModel
-from utils import ExactValsTuple, flatten_nested_dict, setup_training, update_config_dict
+from utils import flatten_nested_dict, setup_training, update_config_dict
+from utils import ExactMetricsTuple, ExactSamplesTuple
 
 import wandb
 
@@ -58,25 +59,12 @@ def main(config):
             test_rmse_exact, y_pred_exact = exact_model.calculate_test_rmse(
                 train_ds, test_ds)
             
-            zero_mean_posterior_samples, alpha_samples_exact = exact_model.compute_zero_mean_samples(
-                sampling_key, 
-                n_samples=10,
-                train_ds=train_ds,
-                test_ds=test_ds,
-                n_features=config.train_config.num_features,
-                use_rff=False
-            )
-            print(f"zero_mean_posterior_samples.shape: {zero_mean_posterior_samples.shape}")
-            print(f"alpha_samples_exact.shape: {alpha_samples_exact.shape}")
-            
             print(f"test_rmse_exact = {test_rmse_exact}")
             wandb.log({"test_rmse_exact": test_rmse_exact})
-            compare_exact_vals = ExactValsTuple(
+            exact_metrics = ExactMetricsTuple(
                 alpha=exact_model.alpha,
                 y_pred=y_pred_exact,
-                test_rmse=test_rmse_exact,
-                alpha_sample=alpha_samples_exact,
-                y_pred_sample=zero_mean_posterior_samples,
+                test_rmse=test_rmse_exact
             )
 
         # Compute stochastic optimised solution
@@ -93,25 +81,18 @@ def main(config):
             config.train_config,
             metrics=metrics,
             metrics_prefix="train",
-            compare_exact_vals=compare_exact_vals if config.compute_exact_soln else None,
+            exact_metrics=exact_metrics if config.compute_exact_soln else None,
         )
 
-        # TODO: vmap and pmap sampling to obtain multiple samples in parallel
-        sampling_metrics = ["loss", "grad_var", "test_rmse"]
-        if config.compute_exact_soln:
-            sampling_metrics.extend(
-                ["alpha_sample_diff", "y_pred_diff", "loss_diff", "test_rmse_diff"]
-            )
-        
         zero_mean_samples, alpha_samples = model.compute_zero_mean_samples(
             sampling_key, 
-            n_samples=10,
+            n_samples=10, # TODO: add this to config
             train_ds=train_ds,
             test_ds=test_ds,
             config=config.sampling_config,
-            sampling_metrics=sampling_metrics,
+            metrics=metrics,
             use_rff=False,
-            compare_exact_vals=compare_exact_vals if config.compute_exact_soln else None,
+            compare_exact=config.compute_exact_soln,
         )
 
         print(f"zero_mean_samples.shape: {zero_mean_samples.shape}")

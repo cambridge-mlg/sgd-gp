@@ -21,7 +21,7 @@ from train_utils import (
     get_update_fn,
     train,
 )
-from utils import ExactValsTuple, TargetTuple
+from utils import TargetTuple, ExactMetricsTuple, ExactSamplesTuple
 
 
 class Model:
@@ -116,34 +116,24 @@ class ExactGPModel(Model):
     def compute_prior_fn_sample(
         self,
         key: chex.PRNGKey,
-        train_ds: Dataset,
-        test_ds: Dataset,
-        n_features: int,
+        N: int,
+        L: Array,
         use_rff: bool = False,
-        chol_eps: float = 1e-6,
     ):
-        x_full = jnp.vstack((train_ds.x, test_ds.x))
-        N_full, N = x_full.shape[0], train_ds.N
-        M = n_features
-
-        prior_fn_key, feature_key = jr.split(key, 2)
-
+        
         if use_rff:
-            L = self.kernel.Phi(feature_key, M, x_full)
-            eps = jr.normal(prior_fn_key, (M,))
-            K_train = L[:N] @ L[:N].T
+            M = L.shape[-1]
+            eps = jr.normal(key, (M,))
         else:
-            K_full = self.kernel.K(x_full, x_full)
-            L = jnp.linalg.cholesky(K_full + chol_eps * jnp.identity(N_full))
-            eps = jr.normal(prior_fn_key, (N_full,))
-            K_train = K_full[:N, :N]
+            N_full = L.shape[0]
+            eps = jr.normal(key, (N_full,))
         
         prior_fn_sample = L @ eps
 
         prior_fn_sample_train = prior_fn_sample[:N]
         prior_fn_sample_test = prior_fn_sample[N:]
 
-        return prior_fn_sample_train, prior_fn_sample_test, K_train
+        return prior_fn_sample_train, prior_fn_sample_test
     
     def compute_zero_mean_posterior_fn_sample(
         self,
@@ -159,8 +149,7 @@ class ExactGPModel(Model):
         self,
         key: chex.PRNGKey,
         train_ds: Dataset,
-        prior_fn_sample_train: Array,
-        K_train: Array,
+        prior_fn_sample_train: Array
     ):
         """Computes $(K_{xx}+ \Sigma)^{-1}(f_0(x)+ \varepsilon_0)$"""
         
@@ -171,7 +160,7 @@ class ExactGPModel(Model):
         )
 
         alpha_sample = solve_K_inv_v(
-            K_train,
+            self.K,
             prior_fn_sample_train + prior_noise_sample,
             noise_scale=self.noise_scale,
         )
@@ -187,18 +176,38 @@ class ExactGPModel(Model):
         test_ds: Dataset,
         n_features: int = 0,
         use_rff: bool = True,
-    ):
+        chol_eps: float = 1e-5,
+        L: Optional[Array] = None,
+    ):  
+        if L is None:
+            # compute shared RFF
+            key, prior_sample_key = jr.split(key)
+
+
+            x_full = jnp.vstack((train_ds.x, test_ds.x))
+            N_full, N = x_full.shape[0], train_ds.N
+            M = n_features
+
+            if use_rff:
+                L = self.kernel.Phi(prior_sample_key, M, x_full)
+                if self.K is None:
+                    self.K = L[:N] @ L[:N].T
+            else:
+                K_full = self.kernel.K(x_full, x_full)
+                L = jnp.linalg.cholesky(K_full + chol_eps * jnp.identity(N_full))
+                if self.K is None:
+                    self.K = K_full[:N, :N]
+            
         @jax.jit
-        def _compute_fn(single_key):
+        def _compute_fn(single_key, L):
             prior_key, sample_opt_key = jr.split(single_key)
-            prior_fn_sample_train, prior_fn_sample_test, K_train = self.compute_prior_fn_sample(
-                    prior_key, train_ds, test_ds, n_features, use_rff=use_rff)
+            prior_fn_sample_train, prior_fn_sample_test = self.compute_prior_fn_sample(
+                    prior_key, N, L, use_rff=use_rff)
 
             alpha_sample = self.compute_representer_weights_sample(
                 sample_opt_key,
                 train_ds,
-                prior_fn_sample_train,
-                K_train)
+                prior_fn_sample_train)
             
             zero_mean_posterior_sample = self.compute_zero_mean_posterior_fn_sample(
                 train_ds, test_ds, alpha_sample, prior_fn_sample_test)
@@ -227,7 +236,6 @@ class SGDGPModel(ExactGPModel):
         
         return alpha, alpha_polyak
 
-
     def compute_representer_weights(
         self,
         key: chex.PRNGKey,
@@ -236,19 +244,18 @@ class SGDGPModel(ExactGPModel):
         config: ml_collections.ConfigDict,
         metrics: List[str],
         metrics_prefix: str = "",
-        compare_exact_vals: Optional[ExactValsTuple] = None,
+        exact_metrics: Optional[ExactMetricsTuple] = None,
     ):
         # @ K (alpha + target)
         target_tuple = TargetTuple(
-            train_ds.y.squeeze(), jnp.zeros_like(train_ds.y).squeeze()
+            train_ds.y, jnp.zeros_like(train_ds.y)
         )
         grad_fn = get_stochastic_gradient_fn(
             x=train_ds.x,
             target_tuple=target_tuple,
             kernel_fn=self.kernel.K,
             feature_fn=self.kernel.Phi,
-            batch_size=config.batch_size,
-            num_features=config.num_features,
+            n_features=config.n_features,
             noise_scale=self.noise_scale,
             recompute_features=config.recompute_features,
         )
@@ -267,9 +274,10 @@ class SGDGPModel(ExactGPModel):
             grad_fn,
             target_tuple,
             kernel_fn=self.kernel.K,
+            feature_fn=self.kernel.Phi,
             noise_scale=self.noise_scale,
             metrics_prefix=metrics_prefix,
-            compare_exact_vals=compare_exact_vals,
+            exact_metrics=exact_metrics
         )
 
         # Initialise alpha and alpha_polyak
@@ -293,24 +301,18 @@ class SGDGPModel(ExactGPModel):
         loss_type: int,
         metrics: List[str],
         metrics_prefix: str = "",
-        compare_exact_vals: Optional[ExactValsTuple] = None,
+        exact_samples: Optional[ExactSamplesTuple] = None
     ):
         # draw prior noise sample
-        prior_noise_sample = draw_prior_noise_sample(
-            key, train_ds.N, noise_scale=self.noise_scale
-        )
+        prior_noise_sample = draw_prior_noise_sample(key, train_ds.N, noise_scale=self.noise_scale)
 
         # Depending on the three types of losses we can compute the gradient of the loss function accordingly
         if loss_type == 1:
-            target_tuple = TargetTuple(
-                prior_fn_sample_train + prior_noise_sample, jnp.zeros_like(train_ds.y).squeeze()
-            )
+            target_tuple = TargetTuple(prior_fn_sample_train + prior_noise_sample, jnp.zeros_like(train_ds.y))
         elif loss_type == 2:
             target_tuple = TargetTuple(prior_fn_sample_train, prior_noise_sample)
         elif loss_type == 3:
-            target_tuple = TargetTuple(
-                jnp.zeros_like(train_ds.y).squeeze(), prior_fn_sample_train + prior_noise_sample
-            )
+            target_tuple = TargetTuple(jnp.zeros_like(train_ds.y), prior_fn_sample_train + prior_noise_sample)
         else:
             raise ValueError("loss_type must be 1, 2 or 3")
 
@@ -319,8 +321,7 @@ class SGDGPModel(ExactGPModel):
             target_tuple=target_tuple,
             kernel_fn=self.kernel.K,
             feature_fn=self.kernel.Phi,
-            batch_size=config.batch_size,
-            num_features=config.num_features_optim,
+            n_features=config.n_features_optim,
             noise_scale=self.noise_scale,
             recompute_features=config.recompute_features,
         )
@@ -331,7 +332,7 @@ class SGDGPModel(ExactGPModel):
             n_train=train_ds.N, 
             polyak_step_size=config.polyak)
 
-        eval_fn = get_sampling_eval_fn(
+        eval_fn = get_eval_fn(
             metrics,
             train_ds,
             test_ds,
@@ -343,7 +344,7 @@ class SGDGPModel(ExactGPModel):
             self.kernel.K,
             self.noise_scale,
             metrics_prefix,
-            compare_exact_vals,
+            exact_samples=exact_samples,
         )
         eval_fn = None
 
@@ -363,29 +364,70 @@ class SGDGPModel(ExactGPModel):
         train_ds: Dataset,
         test_ds: Dataset,
         config: ml_collections.ConfigDict,
-        sampling_metrics: List[str],
+        metrics: List[str],
         use_rff: bool = True,
-        compare_exact_vals: Optional[ExactValsTuple] = None,
+        chol_eps: float = 1e-5,
+        compare_exact: bool = False
     ):
-        def _compute_fn(single_key):
-            prior_key, sample_opt_key = jr.split(single_key)
-            # Compute a prior sample
-            prior_fn_sample_train, prior_fn_sample_test, _ = self.compute_prior_fn_sample(
-                    prior_key, train_ds, test_ds, config.num_features_prior_sample, use_rff=use_rff)
+        
+        # compute shared RFF
+        key, prior_sample_features_key = jr.split(key)
+
+        x_full = jnp.vstack((train_ds.x, test_ds.x))
+        N_full, N = x_full.shape[0], train_ds.N
+        M = config.n_features_prior_sample
+
+        if use_rff:
+            L = self.kernel.Phi(prior_sample_features_key, M, x_full)
+            K_train = L[:N] @ L[:N].T
+        else:
+            K_full = self.kernel.K(x_full, x_full)
+            L = jnp.linalg.cholesky(K_full + chol_eps * jnp.identity(N_full))
+            K_train = K_full[:N, :N]
+        
+        # compare to ExactGP
+        if compare_exact:
+            exact_gp = ExactGPModel(self.noise_scale, self.kernel)
+            exact_gp.K = K_train
+            exact_gp.compute_representer_weights(train_ds)
+
+        # call vmapped SGDGP, pass in vmapped exact samples
+
+        def _compute_fn(single_key, L):
+            vmap_idx = jax.lax.axis_index('sample')
+            prior_sample_key, sample_key = jr.split(single_key)
+
+            # draw a prior function sample
+            prior_fn_sample_train, prior_fn_sample_test = self.compute_prior_fn_sample(
+                    prior_sample_key, N, L, use_rff=use_rff)
+
+            if compare_exact:
+                exact_alpha_sample = exact_gp.compute_representer_weights_sample(sample_key, train_ds, prior_fn_sample_train)
+                y_pred_exact_sample = KvP(test_ds.x, train_ds.x, exact_gp.alpha - exact_alpha_sample, kernel_fn=exact_gp.kernel.K)
+                test_rmse_exact_sample = RMSE(test_ds.y, y_pred_exact_sample, mu=train_ds.mu_y, sigma=train_ds.sigma_y)
+                
+                exact_samples = ExactSamplesTuple(
+                    alpha=exact_alpha_sample,
+                    y_pred=y_pred_exact_sample,
+                    test_rmse=test_rmse_exact_sample,
+                    alpha_map=exact_gp.alpha,
+                )
+            else:
+                exact_samples = None
 
             # Compute a posterior sample
             loss_objective = config.loss_objective
             alpha_sample, info = self.compute_representer_weights_sample(
-                sample_opt_key,
+                sample_key,
                 train_ds,
                 test_ds,
                 prior_fn_sample_train,
                 prior_fn_sample_test,
                 config,
                 loss_objective,
-                sampling_metrics,
-                metrics_prefix=f"sampling_{loss_objective}",
-                compare_exact_vals=compare_exact_vals,
+                metrics,
+                metrics_prefix=f"sampling/{vmap_idx}",
+                exact_samples=exact_samples,
             )
             zero_mean_posterior_sample = self.compute_zero_mean_posterior_fn_sample(
                 train_ds, test_ds, alpha_sample, prior_fn_sample_test)
@@ -394,6 +436,6 @@ class SGDGPModel(ExactGPModel):
         
         keys = jr.split(key, n_samples)
         
-        return jax.vmap(_compute_fn)(keys)  # (n_samples, n_test), (n_samples, n_train)
+        return jax.vmap(_compute_fn, axis_name='sample')(keys)  # (n_samples, n_test), (n_samples, n_train)
 
 

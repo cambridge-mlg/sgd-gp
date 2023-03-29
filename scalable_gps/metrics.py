@@ -6,16 +6,28 @@ import jax.numpy as jnp
 import jax.random as jr
 from chex import Array
 from utils import revert_z_score
+from data import Dataset
 
 
 def grad_var_fn(
     params: Array,
     grad_fn: Callable,
+    batch_size: int,
+    train_ds: Dataset,
+    feature_fn: Callable, 
     num_evals: int = 100,
     key: chex.PRNGKey = jr.PRNGKey(12345),
 ):
+    B, N = batch_size, train_ds.N
+    def _compute_grad(single_key):
+        idx_key, feature_key = jr.split(single_key)
+        idx = jr.randint(idx_key, shape=(B,), minval=0, maxval=N)
+        features = feature_fn(feature_key, train_ds.x)
+        grad_val = grad_fn(params, idx, features)
+
+        return grad_val
     grad_var_key = jr.split(key, num_evals)
-    grad_samples = jax.vmap(grad_fn, (None, 0))(params, grad_var_key)
+    grad_samples = jax.vmap(_compute_grad)(grad_var_key)
     grad_var = jnp.var(grad_samples, axis=0).mean()
 
     return grad_var
