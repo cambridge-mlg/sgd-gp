@@ -13,17 +13,10 @@ from chex import Array
 from data import Dataset
 from kernels import Kernel
 from linalg_utils import KvP, solve_K_inv_v
-from linear_model import (
-    loss_fn,
-)
+from linear_model import loss_fn
 from metrics import RMSE
 from tqdm import tqdm
-from train_utils import (
-    get_eval_fn,
-    get_stochastic_gradient_fn,
-    get_update_fn,
-    train,
-)
+from train_utils import get_eval_fn, train
 from utils import ExactMetricsTuple, TargetTuple
 
 
@@ -202,10 +195,10 @@ class SGDGPModel(GPModel):
         exact_metrics: Optional[ExactMetricsTuple] = None,
     ):
         """Compute the representer weights alpha by solving alpha = (K + sigma^2 I)^{-1} y using SGD."""
-        target_tuple = TargetTuple(train_ds.y, jnp.zeros_like(train_ds.y))
+        target_tuple = TargetTuple(error_target=train_ds.y, regularizer_target=jnp.zeros_like(train_ds.y))
         
         # Define the gradient function
-        grad_fn = get_stochastic_gradient_fn(
+        grad_fn = optim_utils.get_stochastic_gradient_fn(
             x=train_ds.x,
             target_tuple=target_tuple,
             kernel_fn=self.kernel.kernel_fn,
@@ -213,14 +206,8 @@ class SGDGPModel(GPModel):
         )
 
         # Define the gradient update function
-        update_fn = get_update_fn(
-            grad_fn=grad_fn, 
-            n_train=train_ds.N, 
-            polyak_step_size=config.polyak)
-
-        feature_fn = partial(
-            self.kernel.feature_fn, 
-            n_features=config.n_features)
+        update_fn = optim_utils.get_update_fn(grad_fn, train_ds.N, config.polyak)
+        feature_fn = self.get_feature_fn(train_ds, config.n_features, config.recompute_features)
         
         eval_fn = get_eval_fn(
             metrics,
@@ -229,9 +216,9 @@ class SGDGPModel(GPModel):
             loss_fn,
             grad_fn,
             target_tuple,
-            kernel_fn=self.kernel.kernel_fn,
-            feature_fn=feature_fn,
-            noise_scale=self.noise_scale,
+            self.kernel.kernel_fn,
+            feature_fn,
+            self.noise_scale,
             metrics_prefix=metrics_prefix,
             exact_metrics=exact_metrics
         )
@@ -263,7 +250,7 @@ class SGDGPModel(GPModel):
         metrics_prefix="",
         compare_exact=False):
         
-        prior_covariance_key, prior_samples_key, samples_optim_key = jr.split(key, 3)
+        prior_covariance_key, prior_samples_key, optim_key = jr.split(key, 3)
     
         L, K_train = L, K_train = sampling_utils.compute_prior_covariance_factor(
                 prior_covariance_key, 
@@ -285,7 +272,7 @@ class SGDGPModel(GPModel):
         grad_fn = optim_utils.get_stochastic_gradient_fn(train_ds.x, self.kernel.kernel_fn, self.noise_scale)
         update_fn = optim_utils.get_update_fn(grad_fn, optimizer, config.polyak, vmap=True)
         feature_fn = self.get_feature_fn(train_ds, config.n_features_optim, config.recompute_features)
-        idx_fn = optim_utils.get_idx_fn(config.batch_size, config.n_train)
+        idx_fn = optim_utils.get_uniform_idx_fn(config.batch_size, config.n_train)
         # get_eval_fn(
         #     metrics,
         #     train_ds,
@@ -328,8 +315,8 @@ class SGDGPModel(GPModel):
         opt_states = optimizer.init(alphas)
         
         for i in tqdm(range(config.iterations)):
-            idx_key, step_key, feature_key = jr.split(samples_optim_key, 3)
-            features = jax.jit(feature_fn)(key=feature_key)
+            optim_key, idx_key, feature_key = jr.split(optim_key, 3)
+            features = feature_fn(feature_key)
             idx = idx_fn(jr.split(idx_key, n_samples))
             
             alphas, alphas_polyak, opt_states = update_fn(alphas, alphas_polyak, idx, features, opt_states, target_tuples)

@@ -1,17 +1,29 @@
 import os
-from collections import namedtuple
 from collections.abc import MutableMapping
-from typing import Optional
+from typing import Optional, NamedTuple
 
 import jax
 import jax.numpy as jnp
 import ml_collections
 from chex import Array
 
-TargetTuple = namedtuple('TargetTuple', ['error_target', 'regularizer_target'])
 
-ExactMetricsTuple = namedtuple('ExactMetricsTuple', ['alpha', 'y_pred', 'test_rmse'])
-ExactSamplesTuple = namedtuple('ExactSamplesTuple', ['alpha', 'y_pred', 'test_rmse', 'alpha_map'])
+class TargetTuple(NamedTuple):
+    error_target: Array
+    regularizer_target: Array
+
+
+class ExactMetricsTuple(NamedTuple):
+    alpha: Array
+    y_pred: Array
+    test_rmse: float
+
+
+class ExactSamplesTuple(NamedTuple):
+    alpha: Array
+    y_pred: Array
+    test_rmse: float
+    alpha_map: Array
 
 
 def apply_z_score(data: Array, mu: Optional[Array]=None, sigma: Optional[Array]=None):

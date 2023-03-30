@@ -29,6 +29,7 @@ def get_stochastic_gradient_fn(
 
     return _fn
 
+
 def get_update_fn(grad_fn: Callable, optimizer, polyak_step_size: float, vmap: bool = False):
 
     def _fn(params, params_polyak, idx, features, opt_state, target_tuple):
@@ -53,11 +54,11 @@ def get_target_tuples_fn(loss_objective: int):
     def _fn(f0_sample_train, eps0_sample):
         n_train = f0_sample_train.shape[0]
         if loss_objective == 1:
-            target_tuple = TargetTuple(f0_sample_train + eps0_sample, jnp.zeros((n_train,)))
+            target_tuple = TargetTuple(error_target=f0_sample_train + eps0_sample, regularizer_target=jnp.zeros((n_train,)))
         elif loss_objective == 2:
-            target_tuple = TargetTuple(f0_sample_train, eps0_sample)
+            target_tuple = TargetTuple(error_target=f0_sample_train, regularizer_target=eps0_sample)
         elif loss_objective == 3:
-            target_tuple = TargetTuple(jnp.zeros((n_train,)), f0_sample_train + eps0_sample)
+            target_tuple = TargetTuple(error_target=jnp.zeros((n_train,)), regularizer_target=f0_sample_train + eps0_sample)
         else:
             raise ValueError("loss_type must be 1, 2 or 3")
         
@@ -66,11 +67,21 @@ def get_target_tuples_fn(loss_objective: int):
     return jax.jit(jax.vmap(_fn))
 
 
-def get_idx_fn(batch_size: int, n_train: int):
+def get_uniform_idx_fn(batch_size: int, n_train: int):
     
     def _fn(key):
         idx = jr.randint(key, shape=(batch_size,), minval=0, maxval=n_train)
         
         return idx
-    
+    # TODO: do we want to vmap here? using the same mini-batches could possibly allow shared memory access to data?
     return jax.jit(jax.vmap(_fn))
+
+
+def get_iterative_idx_fn(batch_size: int, n_train: int):
+    
+    def _fn(iter):
+        idx = (jnp.arange(batch_size) + iter * batch_size) % n_train
+        
+        return idx
+    # TODO: how to share same data for vmapped optimizers?
+    return jax.jit(_fn)

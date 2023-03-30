@@ -8,7 +8,7 @@ from chex import Array
 from data import Dataset
 from linalg_utils import KvP
 from metrics import RMSE, grad_var_fn, hilbert_space_RMSE
-from utils import ExactMetricsTuple, ExactSamplesTuple
+from utils import TargetTuple, ExactMetricsTuple, ExactSamplesTuple
 
 # TODO: if for error_fn pmap and reg_fn pmap
 
@@ -19,6 +19,7 @@ def get_eval_fn(
     test_ds: Dataset,
     loss_fn: Callable,
     grad_fn: Callable,
+    target_tuple: TargetTuple,
     kernel_fn: Callable,
     feature_fn: Callable,
     noise_scale: float,
@@ -28,7 +29,7 @@ def get_eval_fn(
 ):
     @jax.jit
     def _fn(params, idx, features):
-        B, N = idx.shape[0], train_ds.N
+        B = idx.shape[0]
         # Calculate all quantities of interest here, and each metric_fn gets passed all quantities.
         
         if exact_metrics is not None:
