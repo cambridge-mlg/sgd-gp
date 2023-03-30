@@ -66,7 +66,3 @@ def draw_prior_function_sample(
         eps = jr.normal(prior_function_key, (M,))
 
     return L @ eps, L
-
-
-def draw_prior_noise_sample(prior_noise_key, N, noise_scale):
-    return noise_scale * jr.normal(prior_noise_key, (N,))

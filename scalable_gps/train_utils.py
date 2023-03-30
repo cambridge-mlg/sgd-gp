@@ -1,60 +1,16 @@
-from functools import partial
 from typing import Callable, List, Optional
 
 import chex
 import jax
-import jax.random as jr
 import ml_collections
 import optax
 from chex import Array
 from data import Dataset
 from linalg_utils import KvP
-from linear_model import (
-    error_grad_sample,
-    regularizer_grad_sample,
-)
 from metrics import RMSE, grad_var_fn, hilbert_space_RMSE
-from tqdm import tqdm
-from utils import ExactMetricsTuple, ExactSamplesTuple, TargetTuple
-
-import wandb
-
+from utils import ExactMetricsTuple, ExactSamplesTuple
 
 # TODO: if for error_fn pmap and reg_fn pmap
-def get_stochastic_gradient_fn(
-    x: Array,
-    target_tuple: TargetTuple,
-    kernel_fn: Callable,
-    noise_scale: float
-):
-    @jax.jit
-    def _fn(params, idx, features):
-        error_grad = error_grad_sample(params, idx, x, target_tuple.error_target, kernel_fn)
-        regularizer_grad = regularizer_grad_sample(
-            params,
-            features,
-            target_tuple.regularizer_target,
-            noise_scale,
-        )
-        return error_grad + regularizer_grad
-
-    return _fn
-
-
-def get_update_fn(grad_fn: Callable, n_train: int, polyak_step_size: float):
-    @partial(jax.jit, static_argnums=(4))
-    def _fn(params, params_polyak, idx, features, optimizer, opt_state):
-        grad = grad_fn(params, idx, features) / n_train
-
-        updates, opt_state = optimizer.update(grad, opt_state)
-        new_params = optax.apply_updates(params, updates)
-        new_params_polyak = optax.incremental_update(
-            new_params, params_polyak, step_size=polyak_step_size
-        )
-
-        return new_params, new_params_polyak, opt_state
-
-    return _fn
 
 
 def get_eval_fn(
@@ -63,7 +19,6 @@ def get_eval_fn(
     test_ds: Dataset,
     loss_fn: Callable,
     grad_fn: Callable,
-    target_tuple: TargetTuple,
     kernel_fn: Callable,
     feature_fn: Callable,
     noise_scale: float,
@@ -112,6 +67,75 @@ def get_eval_fn(
     return _fn
 
 
+# def train(
+#     key: chex.PRNGKey, 
+#     config: ml_collections.ConfigDict, 
+#     update_fn: Callable, 
+#     eval_fn: Callable,
+#     feature_fn: Callable, 
+#     train_ds: Dataset,
+#     params: Array, 
+#     params_polyak: Array):
+
+#     aux = []
+#     optimizer = optax.sgd(
+#         learning_rate=config.learning_rate, momentum=config.momentum, nesterov=True
+#     )
+#     opt_state = optimizer.init(params)
+
+#     B, N = config.batch_size, params.shape[0]
+#     iterator = tqdm(range(config.iterations))
+    
+#     @jax.jit
+#     def _get_idx_and_features(idx_key, feature_key):
+#         idx = jr.randint(idx_key, shape=(B,), minval=0, maxval=N)
+#         features = feature_fn(key=feature_key, x=train_ds.x, recompute=True)
+
+#         return idx, features
+
+#     for i in iterator:
+#         # perform update
+#         key, idx_key, feature_key = jr.split(key, 3)
+        
+#         # Calculate mini-batch specific idx and features here.
+#         idx, features = _get_idx_and_features(idx_key, feature_key)
+
+#         params, params_polyak, opt_state = update_fn(
+#             params, params_polyak, idx, features, optimizer, opt_state
+#         )
+
+#         # if i % config.eval_every == 0 and eval_fn is not None:
+#         #     eval_metrics = eval_fn(params_polyak, idx, features)
+#         #     wandb.log(eval_metrics)
+#         #     aux.append(eval_metrics)
+
+#     return params_polyak, aux
+
+import jax.random as jr
+
+
+def get_train_loop_body(config, update_fn, feature_fn, train_ds, optimizer):
+    
+    def _train_loop_body(i, loop_vars):
+        key, params, params_polyak, opt_state = loop_vars
+        # key = progress_bar((i + 1, total_steps, total_steps // 10), key)
+        idx_key, feature_key = jr.split(jr.fold_in(key, i), 2)
+        # idx_key, feature_key = jr.split(key, 2)
+        idx = jr.randint(idx_key, shape=(config.batch_size,), minval=0, maxval=train_ds.N)
+        features = feature_fn(key=feature_key, x=train_ds.x, recompute=True)
+        
+        params, params_polyak, opt_state = update_fn(
+            params, params_polyak, idx, features, optimizer, opt_state
+        )
+
+        # eval_fn(params_polyak, idx, features)
+        # wandb.log(eval_metrics)
+
+        return (key, params, params_polyak, opt_state)
+
+    return jax.jit(_train_loop_body)
+
+
 def train(
     key: chex.PRNGKey, 
     config: ml_collections.ConfigDict, 
@@ -127,31 +151,41 @@ def train(
         learning_rate=config.learning_rate, momentum=config.momentum, nesterov=True
     )
     opt_state = optimizer.init(params)
-
-    B, N = config.batch_size, params.shape[0]
-    iterator = tqdm(range(config.iterations))
     
-    @jax.jit
-    def _get_idx_and_features(idx_key, feature_key):
-        idx = jr.randint(idx_key, shape=(B,), minval=0, maxval=N)
-        features = feature_fn(key=feature_key, x=train_ds.x, recompute=True)
+    n_eval_iterations = config.iterations // config.eval_every
+    n_iterations_per_eval = config.iterations // n_eval_iterations
+    
+    print(f'Running {n_eval_iterations} eval iterations with {n_iterations_per_eval} iterations per eval.')
+    
+    body_fun = get_train_loop_body(config, update_fn, feature_fn, train_ds, optimizer)
+    loop_vars = (key, params, params_polyak, opt_state)
+    
+    loop_vars = jax.lax.fori_loop(0, config.iterations, body_fun, loop_vars)
 
-        return idx, features
-
-    for i in iterator:
-        # perform update
-        key, idx_key, feature_key = jr.split(key, 3)
-        
-        # Calculate mini-batch specific idx and features here.
-        idx, features = _get_idx_and_features(idx_key, feature_key)
-
-        params, params_polyak, opt_state = update_fn(
-            params, params_polyak, idx, features, optimizer, opt_state
-        )
-
-        if i % config.eval_every == 0 and eval_fn is not None:
-            eval_metrics = eval_fn(params_polyak, idx, features)
-            wandb.log(eval_metrics)
-            aux.append(eval_metrics)
-
+    _, _, params_polyak, _ = loop_vars
     return params_polyak, aux
+
+
+from jax.experimental import host_callback
+
+
+def _print_consumer(arg, transform):
+    iter_num, num_samples = arg
+    print(f"Iteration {iter_num:,} / {num_samples:,}")
+
+@jax.jit
+def progress_bar(arg, result):
+    """
+    Print progress of a scan/loop only if the iteration number is a multiple of the print_rate
+
+    Usage: `carry = progress_bar((iter_num + 1, num_samples, print_rate), carry)`
+    Pass in `iter_num + 1` so that counting starts at 1 and ends at `num_samples`
+
+    """
+    iter_num, num_samples, print_rate = arg
+    result = jax.lax.cond(
+        iter_num % print_rate==0,
+        lambda _: host_callback.id_tap(_print_consumer, (iter_num, num_samples), result=result),
+        lambda _: result,
+        operand=None)
+    return result
