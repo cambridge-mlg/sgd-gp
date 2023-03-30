@@ -3,13 +3,13 @@ from pathlib import Path
 import jax
 import jax.random as jr
 import ml_collections.config_flags
+import wandb
 from absl import app, flags
 from data import get_dataset
+from eval_utils import RMSE
 from kernels import RBFKernel
 from models import ExactGPModel, SGDGPModel
 from utils import ExactMetricsTuple, flatten_nested_dict, setup_training, update_config_dict
-
-import wandb
 
 ml_collections.config_flags.DEFINE_config_file(
     "config",
@@ -54,9 +54,9 @@ def main(config):
         if config.compute_exact_soln:
             exact_model = ExactGPModel(config.dataset_config.noise_scale, kernel)
             exact_model.compute_representer_weights(train_ds)
+            y_pred_exact = exact_model.predictive_mean(train_ds, test_ds)
+            test_rmse_exact = RMSE(test_ds.y, y_pred_exact, mu=train_ds.mu_y, sigma=train_ds.sigma_y)
 
-            test_rmse_exact, y_pred_exact = exact_model.calculate_test_rmse(train_ds, test_ds)
-            
             print(f"test_rmse_exact = {test_rmse_exact}")
             wandb.log({"test_rmse_exact": test_rmse_exact})
             # Define exact metrics that we will use later to compare with stochastic solution
@@ -69,9 +69,9 @@ def main(config):
         # Compute stochastic optimised solution
         model = SGDGPModel(config.dataset_config.noise_scale, kernel)
 
-        metrics = ["loss", "grad_var", "test_rmse"]
+        metrics_list = ["loss", "grad_var", "test_rmse"]
         if config.compute_exact_soln:
-            metrics.extend(["alpha_diff", "y_pred_diff", "test_rmse_diff"])
+            metrics_list.extend(["alpha_diff", "y_pred_diff", "test_rmse_diff"])
 
         # Compute the SGD MAP solution for representer weights.
         model.compute_representer_weights(
@@ -79,33 +79,24 @@ def main(config):
             train_ds,
             test_ds,
             config.train_config,
-            metrics=metrics,
+            metrics_list=metrics_list,
             metrics_prefix="train",
             exact_metrics=exact_metrics if config.compute_exact_soln else None,
         )
-
-        # Compute 10 samples with SGDGP, along with the corresponding representer weights.
-        # zero_mean_samples, alpha_samples = model.compute_zero_mean_samples(
-        #     sampling_key, 
-        #     n_samples=config.sampling_config.n_samples,
-        #     train_ds=train_ds,
-        #     test_ds=test_ds,
-        #     config=config.sampling_config,
-        #     metrics=metrics,
-        #     use_rff=False,
-        #     compare_exact=config.compute_exact_soln,
-        # )
         
-        zero_mean_samples, alpha_samples = model.vmapped_compute_samples(
-            sampling_key, 
+        zero_mean_samples, alpha_samples = model.compute_posterior_samples(
+            sampling_key,
+            n_samples=config.sampling_config.n_samples,
             train_ds=train_ds,
             test_ds=test_ds,
             config=config.sampling_config,
             use_rff=False,
+            n_features=config.sampling_config.n_features_optim,
+            zero_mean=True,
+            metrics_list=metrics_list,
+            metrics_prefix="sampling",
+            compare_exact=True
         )
-
-        print(f"zero_mean_samples.shape: {zero_mean_samples.shape}")
-        print(f"alpha_samples.shape: {alpha_samples.shape}")
 
         return zero_mean_samples, alpha_samples
 

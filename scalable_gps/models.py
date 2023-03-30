@@ -1,7 +1,7 @@
-from functools import partial
-from typing import List, Optional, Tuple
+from typing import List, Optional
 
 import chex
+import eval_utils
 import jax
 import jax.numpy as jnp
 import jax.random as jr
@@ -9,15 +9,13 @@ import ml_collections
 import optax
 import optim_utils
 import sampling_utils
+import wandb
 from chex import Array
 from data import Dataset
 from kernels import Kernel
 from linalg_utils import KvP, solve_K_inv_v
-from linear_model import loss_fn
-from metrics import RMSE
 from tqdm import tqdm
-from train_utils import get_eval_fn, train
-from utils import ExactMetricsTuple, TargetTuple
+from utils import ExactMetricsTuple, ExactSamplesTuple, TargetTuple
 
 
 class GPModel:
@@ -33,7 +31,7 @@ class GPModel:
     def predictive_mean(self, train_ds: Dataset, test_ds: Dataset) -> Array:
         if self.alpha is None:
             raise ValueError("alpha is None. Please call compute_representer_weights() first.")
-        y_pred = KvP(test_ds.x, train_ds.x, self.alpha, kernel_fn=self.kernel.kernel_fn).squeeze() # TODO: Can we remove the squeeze?
+        y_pred = KvP(test_ds.x, train_ds.x, self.alpha, kernel_fn=self.kernel.kernel_fn)
 
         return y_pred  # (N_test, 1)
 
@@ -49,14 +47,8 @@ class GPModel:
     
         return variance
 
-    def calculate_test_rmse(self, train_ds: Dataset, test_ds: Dataset) -> Tuple[Array, Array]:
-        y_pred = self.predictive_mean(train_ds, test_ds)
-        test_rmse = RMSE(y_pred, test_ds.y, mu=train_ds.mu_y, sigma=train_ds.sigma_y)
-
-        return test_rmse, y_pred
-    
-    # vmap factory function for sampling from the prior.
     def get_prior_samples_fn(self, n_train, L, use_rff: bool=False):
+        """Vmap factory function for sampling from the prior."""
         # fn(keys) -> prior_samples
         def _fn(key):
             prior_sample_key, sample_key = jr.split(key)
@@ -69,8 +61,8 @@ class GPModel:
 
         return jax.jit(jax.vmap(_fn))
 
-    # Vmap factory function for computing the zero mean posterior from sample.
     def get_posterior_samples_fn(self, train_ds, test_ds, zero_mean: bool = True):
+        """Vmap factory function for computing the zero mean posterior from sample."""
 
         def _fn(alpha_sample, f0_sample_test):
             zero_mean_posterior_sample = sampling_utils.compute_posterior_fn_sample(
@@ -87,7 +79,7 @@ class GPModel:
         return jax.jit(jax.vmap(_fn))
 
     def get_feature_fn(self, train_ds: Dataset, n_features: int, recompute: bool):
-        
+        """Factory function that wraps feature_fn so that it is jittable."""
         def _fn(key):
             return self.kernel.feature_fn(
                 key, 
@@ -96,6 +88,7 @@ class GPModel:
                 x=train_ds.x)
         
         return jax.jit(_fn)
+
 
 class ExactGPModel(GPModel):
 
@@ -125,9 +118,9 @@ class ExactGPModel(GPModel):
         if return_marginal_variance:
             return jnp.diag(variance)  # (N_test, 1)
         return variance  # (N_test, N_test)
-    
+
     def get_alpha_samples_fn(self):
-        
+        """Vmap factory function that returns a function that computes alpha samples from f0 and eps0 samples."""
         def _fn(f0_sample_train, eps0_sample):
             alpha_sample = solve_K_inv_v(
                 self.K,
@@ -149,7 +142,7 @@ class ExactGPModel(GPModel):
         chol_eps: float = 1e-5,
         L: Optional[Array] = None, 
         zero_mean: bool = True):
-
+        """Computes n_samples posterior samples, and returns posterior_samples along with alpha_samples."""
         prior_covariance_key, prior_samples_key, samples_optim_key = jr.split(key, 3)
     
         if L is None:
@@ -162,7 +155,7 @@ class ExactGPModel(GPModel):
                 use_rff=use_rff, 
                 n_features=n_features, 
                 chol_eps=chol_eps)
-            self.K = K_train if self.K is None else self.K  # TODO: Do we need to do this?
+            self.K = K_train if self.K is None else self.K  # TODO: Should we reset self.K to Phi Phi.T if use_rff is True?
 
         # Get vmapped functions for sampling from the prior and computing the posterior.
         compute_prior_samples_fn = self.get_prior_samples_fn(train_ds.N, L, use_rff)
@@ -177,6 +170,9 @@ class ExactGPModel(GPModel):
         
         posterior_samples = compute_posterior_samples_fn(alpha_samples, f0_samples_test)  # (n_samples, n_test)
 
+        chex.assert_shape(posterior_samples, (n_samples, test_ds.N))
+        chex.assert_shape(alpha_samples, (n_samples, train_ds.N))
+
         return posterior_samples, alpha_samples
 
 
@@ -190,32 +186,26 @@ class SGDGPModel(GPModel):
         train_ds: Dataset,
         test_ds: Dataset,
         config: ml_collections.ConfigDict,
-        metrics: List[str],
+        metrics_list: List[str],
         metrics_prefix: str = "",
         exact_metrics: Optional[ExactMetricsTuple] = None,
     ):
         """Compute the representer weights alpha by solving alpha = (K + sigma^2 I)^{-1} y using SGD."""
         target_tuple = TargetTuple(error_target=train_ds.y, regularizer_target=jnp.zeros_like(train_ds.y))
         
-        # Define the gradient function
-        grad_fn = optim_utils.get_stochastic_gradient_fn(
-            x=train_ds.x,
-            target_tuple=target_tuple,
-            kernel_fn=self.kernel.kernel_fn,
-            noise_scale=self.noise_scale,
-        )
+        optimizer = optax.sgd(learning_rate=config.learning_rate, momentum=config.momentum, nesterov=True)
 
-        # Define the gradient update function
-        update_fn = optim_utils.get_update_fn(grad_fn, train_ds.N, config.polyak)
-        feature_fn = self.get_feature_fn(train_ds, config.n_features, config.recompute_features)
+        # Define the gradient function
+        grad_fn = optim_utils.get_stochastic_gradient_fn(train_ds.x, self.kernel.kernel_fn, self.noise_scale)
+        update_fn = optim_utils.get_update_fn(grad_fn, optimizer, config.polyak, vmap=False)
+        feature_fn = self.get_feature_fn(train_ds, config.n_features_optim, config.recompute_features)
+        idx_fn = optim_utils.get_uniform_idx_fn(config.batch_size, train_ds.N, vmap=False)
         
-        eval_fn = get_eval_fn(
-            metrics,
+        eval_fn = eval_utils.get_eval_fn(
+            metrics_list,
             train_ds,
             test_ds,
-            loss_fn,
             grad_fn,
-            target_tuple,
             self.kernel.kernel_fn,
             feature_fn,
             self.noise_scale,
@@ -224,12 +214,22 @@ class SGDGPModel(GPModel):
         )
 
         # Initialise alpha and alpha_polyak
-        init_alpha, init_alpha_polyak = self._init_params(train_ds)
+        alpha, alpha_polyak = jnp.zeros((train_ds.N,)), jnp.zeros((train_ds.N,))
 
-        # Solve optimisation problem to obtain representer_weights
-        self.alpha, aux = train(
-            key, config, update_fn, eval_fn, feature_fn, train_ds, init_alpha, init_alpha_polyak
-        )
+        opt_state = optimizer.init(alpha)
+
+        aux = []
+        for i in tqdm(range(config.iterations)):
+            key, idx_key, feature_key = jr.split(key, 3)
+            features = feature_fn(feature_key)
+            idx = idx_fn(idx_key)
+
+            alpha, alpha_polyak, opt_state = update_fn(alpha, alpha_polyak, idx, features, opt_state, target_tuple)
+
+            if i % config.eval_every == 0:
+                eval_metrics = eval_fn(alpha_polyak, idx, features, target_tuple)
+                wandb.log(eval_metrics)
+                aux.append(eval_metrics)
 
         return self.alpha, aux
 
@@ -244,9 +244,8 @@ class SGDGPModel(GPModel):
         use_rff: bool = True,
         n_features: int = 0,
         chol_eps: float = 1e-5,
-        L: Optional[Array] = None, 
         zero_mean: bool = True,
-        metrics=[],
+        metrics_list=[],
         metrics_prefix="",
         compare_exact=False):
         
@@ -272,19 +271,7 @@ class SGDGPModel(GPModel):
         grad_fn = optim_utils.get_stochastic_gradient_fn(train_ds.x, self.kernel.kernel_fn, self.noise_scale)
         update_fn = optim_utils.get_update_fn(grad_fn, optimizer, config.polyak, vmap=True)
         feature_fn = self.get_feature_fn(train_ds, config.n_features_optim, config.recompute_features)
-        idx_fn = optim_utils.get_uniform_idx_fn(config.batch_size, config.n_train)
-        # get_eval_fn(
-        #     metrics,
-        #     train_ds,
-        #     test_ds,
-        #     loss_fn,
-        #     grad_fn,
-        #     kernel_fn=self.kernel.kernel_fn,
-        #     feature_fn=feature_fn,
-        #     noise_scale=self.noise_scale,
-        #     metrics_prefix=metrics_prefix,
-        #     exact_samples=exact_samples,
-        # )
+        idx_fn = optim_utils.get_uniform_idx_fn(config.batch_size, train_ds.N, vmap=True)
 
         # Call the vmapped functions
         f0_samples_train, f0_samples_test, eps0_samples = compute_prior_samples_fn(
@@ -297,30 +284,48 @@ class SGDGPModel(GPModel):
             exact_gp.compute_representer_weights(train_ds)
             
             compute_exact_alpha_samples_fn = exact_gp.get_alpha_samples_fn()
-            compute_exact_posterior_samples_fn = exact_gp.get_posterior_samples_fn(train_ds, test_ds, zero_mean)
+            compute_exact_posterior_samples_fn = exact_gp.get_posterior_samples_fn(train_ds, test_ds, zero_mean=False)
             
             alpha_samples_exact = compute_exact_alpha_samples_fn(f0_samples_train, eps0_samples)
-            compute_exact_posterior_samples_fn(alpha_samples_exact, f0_samples_test)
-            
-            # exact_samples = ExactSamplesTuple(
-            #     alpha_samples=alpha_samples_exact,
-            #     posterior_samples=posterior_samples_exact,
-            #     test_rmse=test_rmse_exact_sample,
-            #     alpha_map=exact_gp.alpha,
-            # )
+            posterior_samples_exact = compute_exact_posterior_samples_fn(alpha_samples_exact, f0_samples_test)
+
+            # TODO: This is a hack to get the exact alpha samples into the eval_fn as ExactSamplesTuple.
+            exact_samples = jax.vmap(
+                lambda x, y, z: ExactSamplesTuple(
+                    alpha_sample=x, posterior_sample=y, f0_sample_test=z, alpha_map=exact_gp.alpha))(
+                    alpha_samples_exact, posterior_samples_exact, f0_samples_test)
         
+        eval_fn = eval_utils.get_eval_fn(
+            metrics_list,
+            train_ds,
+            test_ds,
+            grad_fn,
+            kernel_fn=self.kernel.kernel_fn,
+            feature_fn=feature_fn,
+            noise_scale=self.noise_scale,
+            metrics_prefix=metrics_prefix,
+            exact_samples=exact_samples if compare_exact else None,
+            vmap=True
+        )
+
         target_tuples = compute_target_tuples_fn(f0_samples_train, eps0_samples) # (n_samples, TargetTuples)
 
         alphas, alphas_polyak = jnp.zeros((n_samples, train_ds.N)), jnp.zeros((n_samples, train_ds.N))
         opt_states = optimizer.init(alphas)
         
+        aux = []
         for i in tqdm(range(config.iterations)):
             optim_key, idx_key, feature_key = jr.split(optim_key, 3)
             features = feature_fn(feature_key)
             idx = idx_fn(jr.split(idx_key, n_samples))
             
             alphas, alphas_polyak, opt_states = update_fn(alphas, alphas_polyak, idx, features, opt_states, target_tuples)
-        
+
+            if i % config.eval_every == 0:
+                vmapped_eval_metrics = eval_fn(alphas_polyak, idx, features, target_tuples)
+                wandb.log(vmapped_eval_metrics)
+                aux.append(vmapped_eval_metrics)
+
         print(f'alphas_polyak: {alphas_polyak.shape}')
         
         posterior_samples = compute_posterior_samples_fn(alphas_polyak, f0_samples_test)  # (n_samples, n_test)

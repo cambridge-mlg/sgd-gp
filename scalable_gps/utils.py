@@ -1,6 +1,6 @@
 import os
 from collections.abc import MutableMapping
-from typing import Optional, NamedTuple
+from typing import NamedTuple, Optional
 
 import jax
 import jax.numpy as jnp
@@ -16,14 +16,14 @@ class TargetTuple(NamedTuple):
 class ExactMetricsTuple(NamedTuple):
     alpha: Array
     y_pred: Array
-    test_rmse: float
+    test_rmse: Array
 
 
 class ExactSamplesTuple(NamedTuple):
-    alpha: Array
-    y_pred: Array
-    test_rmse: float
+    alpha_sample: Array
+    posterior_sample: Array
     alpha_map: Array
+    f0_sample_test: Array
 
 
 def apply_z_score(data: Array, mu: Optional[Array]=None, sigma: Optional[Array]=None):

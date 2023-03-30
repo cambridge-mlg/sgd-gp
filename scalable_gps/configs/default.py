@@ -48,9 +48,9 @@ def get_config():
     config.train_config.polyak = 1e-3
     config.train_config.iterations = 50000
     config.train_config.batch_size = 4
-    config.train_config.eval_every = 10000
+    config.train_config.eval_every = 100
     # RFF Configs
-    config.train_config.n_features = 100
+    config.train_config.n_features_optim = 100
     config.train_config.recompute_features = True
     
     config.sampling_config = config.train_config.copy_and_resolve_references()
@@ -61,13 +61,13 @@ def get_config():
     config.sampling_config.polyak = 1e-3
     config.sampling_config.iterations = 50000
     config.sampling_config.batch_size = 4
-    config.sampling_config.eval_every = 10000
+    config.sampling_config.eval_every = 100
     # RFF Configs
     config.sampling_config.n_features_prior_sample = 2000
     config.sampling_config.n_features_optim = 100
     config.sampling_config.recompute_features = True
     config.sampling_config.loss_objective = 2
-    config.sampling_config.use_cholesky_prior_sample = True
+    config.sampling_config.use_cholesky_prior_sample = False
 
     config.optimiser = "sgd"
     config.sampling_loss_objective = 1

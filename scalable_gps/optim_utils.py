@@ -2,9 +2,9 @@ from typing import Callable
 
 import jax
 import jax.numpy as jnp
+import jax.random as jr
 import optax
 from chex import Array
-from jax.random import jr
 from linear_model import (
     error_grad_sample,
     regularizer_grad_sample,
@@ -27,7 +27,7 @@ def get_stochastic_gradient_fn(
         )
         return error_grad + regularizer_grad
 
-    return _fn
+    return jax.jit(_fn)
 
 
 def get_update_fn(grad_fn: Callable, optimizer, polyak_step_size: float, vmap: bool = False):
@@ -67,14 +67,16 @@ def get_target_tuples_fn(loss_objective: int):
     return jax.jit(jax.vmap(_fn))
 
 
-def get_uniform_idx_fn(batch_size: int, n_train: int):
+def get_uniform_idx_fn(batch_size: int, n_train: int, vmap: bool = True):
     
     def _fn(key):
         idx = jr.randint(key, shape=(batch_size,), minval=0, maxval=n_train)
         
         return idx
     # TODO: do we want to vmap here? using the same mini-batches could possibly allow shared memory access to data?
-    return jax.jit(jax.vmap(_fn))
+    if vmap:
+        return jax.jit(jax.vmap(_fn))
+    return jax.jit(_fn)
 
 
 def get_iterative_idx_fn(batch_size: int, n_train: int):
