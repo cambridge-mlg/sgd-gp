@@ -85,15 +85,23 @@ def main(config):
         )
 
         # Compute 10 samples with SGDGP, along with the corresponding representer weights.
-        zero_mean_samples, alpha_samples = model.compute_zero_mean_samples(
+        # zero_mean_samples, alpha_samples = model.compute_zero_mean_samples(
+        #     sampling_key, 
+        #     n_samples=config.sampling_config.n_samples,
+        #     train_ds=train_ds,
+        #     test_ds=test_ds,
+        #     config=config.sampling_config,
+        #     metrics=metrics,
+        #     use_rff=False,
+        #     compare_exact=config.compute_exact_soln,
+        # )
+        
+        zero_mean_samples, alpha_samples = model.vmapped_compute_samples(
             sampling_key, 
-            n_samples=config.sampling_config.n_samples,
             train_ds=train_ds,
             test_ds=test_ds,
             config=config.sampling_config,
-            metrics=metrics,
             use_rff=False,
-            compare_exact=config.compute_exact_soln,
         )
 
         print(f"zero_mean_samples.shape: {zero_mean_samples.shape}")
