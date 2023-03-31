@@ -20,7 +20,7 @@ class Kernel:
                     f"Required hyperparameter '{hparam}' must be present in config dict"
                 )
 
-    def K(self, x: Array, y: Array):
+    def kernel_fn(self, x: Array, y: Array):
         raise NotImplementedError("Subclasses should implement this method.")
     
     def omega_fn(self, key: chex.PRNGKey, n_input_dims: int, n_features: int):
@@ -35,9 +35,9 @@ class Kernel:
             
         x, y = x / length_scale, y / length_scale
         return jnp.sum((x[:, None] - y[None, :]) ** 2, axis=-1)
-    
-    def Phi(self, key: chex.PRNGKey, n_features: int, x: Array, recompute: bool = False):
 
+    def feature_fn(self, key: chex.PRNGKey, n_features: int, x: Array, recompute: bool = False):
+    
         self.check_required_hparams_in_config(["signal_scale", "length_scale"], self.kernel_config)
 
         M = n_features
@@ -60,7 +60,7 @@ class Kernel:
 
 class RBFKernel(Kernel):
     @partial(jax.jit, static_argnums=(0,))
-    def K(self, x: Array, y: Array):
+    def kernel_fn(self, x: Array, y: Array):
 
         self.check_required_hparams_in_config(["signal_scale", "length_scale"], self.kernel_config)
 
@@ -75,7 +75,7 @@ class RBFKernel(Kernel):
 
 class MaternKernel(Kernel):
     @partial(jax.jit, static_argnums=(0,))
-    def K(self, x: Array, y: Array):
+    def kernel_fn(self, x: Array, y: Array):
 
         self.check_required_hparams_in_config(
             ["signal_scale", "length_scale"], self.kernel_config

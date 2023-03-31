@@ -9,51 +9,41 @@ from chex import Array
 from utils import TargetTuple
 
 
-def error(params, targets, K):
-    # TODO: Make this not always take in instantiated kernel, but RFF features etc.
-    return 0.5 * jnp.sum((targets - K @ params) ** 2)
-
-
-# TODO: pmap over B.
-# TODO: pass idx directly, can be different sizes depending on pmap and vmap.
-def error_grad_sample(params, key, B, x, target, kernel_fn):
-
-    N = x.shape[0]
-    idx = jr.randint(key, shape=(B,), minval=0, maxval=N)
+def error(params: Array, idx: Array, x: Array, target: Array, kernel_fn: Callable):
     K = kernel_fn(x[idx], x)
-    datapoint_grads = -K.T @ (target.squeeze()[idx] - K @ params) * (N / B)
-    return datapoint_grads
+    B, N = idx.shape[0], x.shape[0]
+    return 0.5 * (N / B) * jnp.sum((target[idx] - K @ params) ** 2)
 
-
-def regularizer(params, target, K, noise_scale):
+def regularizer(params: Array, features: Array, target: Array, noise_scale: float):
     params = noise_scale * params
-    target = target.squeeze() / noise_scale
-    return 0.5 * (params - target).T @ K @ (params - target)
+    target = target / noise_scale
+    L = features
+    R = L.T @ (params - target)
+    return 0.5 * jnp.dot(R, R)
 
+# TODO: pmap over idx / B
+def error_grad_sample(params: Array, idx: Array, x: Array, target: Array, kernel_fn: Callable):
+    K = kernel_fn(x[idx], x)
+    B, N = K.shape
+    return -K.T @ (target[idx] - K @ params) * (N / B)
 
-def regularizer_grad_sample(
-    params, key, M, x, target, feature_fn, noise_scale, recompute_features=True
-):
-    R = feature_fn(key, M, x, recompute=recompute_features)
+def regularizer_grad_sample(params: Array, features: Array, target: Array, noise_scale: float):
+    L = features
     params = (noise_scale**2) * params
-    return R @ (R.T @ (params - target.squeeze()))
+    return L @ (L.T @ (params - target))
 
 
-def loss_fn(params: Array, target_tuple: TargetTuple, K: Array, noise_scale):
-    # TODO: MAke the loss function not always take in instantiated kernel, but RFF features etc.
-    return (
-        error(params, target_tuple.error_target, K).squeeze()
-        + regularizer(params, target_tuple.regularizer_target, K, noise_scale).squeeze()
-    )
+def loss_fn(params: Array, idx: Array, x: Array, features:Array, target_tuple: TargetTuple, kernel_fn: Callable, noise_scale):
+    err = error(params, idx, x, target_tuple.error_target, kernel_fn)
+    reg = regularizer(params, features, target_tuple.regularizer_target, noise_scale)
+    chex.assert_rank([err, reg], 0)
+    
+    return err + reg, err, reg
 
 
 @partial(jax.jit, backend='cpu')
 def exact_solution(targets, K, noise_scale):
     return jax.scipy.linalg.solve(K + (noise_scale**2) * jnp.identity(targets.shape[0]), targets, assume_a='pos')
-
-
-def predict(params, x_pred, x_train, kernel_fn, **kernel_kwargs):
-    return kernel_fn(x_pred, x_train, **kernel_kwargs) @ params
 
 
 def draw_prior_function_sample(
@@ -76,7 +66,3 @@ def draw_prior_function_sample(
         eps = jr.normal(prior_function_key, (M,))
 
     return L @ eps, L
-
-
-def draw_prior_noise_sample(prior_noise_key, N, noise_scale):
-    return noise_scale * jr.normal(prior_noise_key, (N,))
