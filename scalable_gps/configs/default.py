@@ -50,10 +50,11 @@ def get_config():
     config.train_config.batch_size = 4
     config.train_config.eval_every = 100
     # RFF Configs
-    config.train_config.num_features = 100
+    config.train_config.n_features_optim = 100
     config.train_config.recompute_features = True
     
     config.sampling_config = config.train_config.copy_and_resolve_references()
+    config.sampling_config.n_samples = 10
     # Full-batch training configs that get passed
     config.sampling_config.learning_rate = 1e-2
     config.sampling_config.momentum = 0.9
@@ -62,13 +63,11 @@ def get_config():
     config.sampling_config.batch_size = 4
     config.sampling_config.eval_every = 100
     # RFF Configs
-    config.sampling_config.num_features = 1000
+    config.sampling_config.n_features_prior_sample = 2000
+    config.sampling_config.n_features_optim = 100
     config.sampling_config.recompute_features = True
     config.sampling_config.loss_objective = 2
-    config.sampling_config.use_cholesky_prior_sample = True
-
-    config.optimiser = "sgd"
-    config.sampling_loss_objective = 1
+    config.sampling_config.use_cholesky_prior_sample = False
 
     # Wandb Configs
     config.wandb = ml_collections.ConfigDict()

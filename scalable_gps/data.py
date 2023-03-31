@@ -7,6 +7,7 @@ from chex import Array
 from uci_datasets import Dataset as uci_dataset
 from uci_datasets import all_datasets
 from utils import apply_z_score
+import chex
 
 KwArgs = Any
 
@@ -30,8 +31,7 @@ def get_concentrating_toy_sin_dataset(
     noise_scale: float,
     n_test: int,
     x_std: float = 1.0,
-    normalise: bool = False,
-    **kwargs: KwArgs,
+    **kwargs: KwArgs
 ) -> Tuple[Dataset, Dataset]:
     key = jr.PRNGKey(seed)  # Required because configdict can't pass jr.PRNGKey as seed
     k1, k2, key = jr.split(key, 3)
@@ -39,19 +39,16 @@ def get_concentrating_toy_sin_dataset(
     x = jr.normal(k1, shape=(n, 1)) * x_std
 
     def f(x):
-        return jnp.sin(2 * x) + jnp.cos(5 * x)
+        return jnp.squeeze(jnp.sin(2 * x) + jnp.cos(5 * x))
 
     signal = f(x)
     y = signal + jr.normal(k2, shape=signal.shape) * noise_scale
 
-    x_test = jnp.linspace(-5.1, 5.1, n_test).reshape(-1, 1)
+    x_test = jnp.linspace(-10.1, 10.1, n_test).reshape(-1, 1)
     y_test = f(x_test)
 
     train_ds = Dataset(x, y, n, 1)
     test_ds = Dataset(x_test, y_test, n_test, 1)
-
-    if normalise:
-        train_ds, test_ds = _normalise_dataset(train_ds, test_ds)
 
     return train_ds, test_ds
 
@@ -62,34 +59,29 @@ def get_expanding_toy_sin_dataset(
     noise_scale: float,
     n_test: int,
     n_periods: int = 25,
-    normalise: bool = False,
-    **kwargs: KwArgs,
+    **kwargs: KwArgs
 ) -> Tuple[Dataset, Dataset]:
-    key = jr.PRNGKey(seed)  # Required because configdict can't pass jr.PRNGKey as seed
-    k1, k2, key = jr.split(key, 3)
 
     x = jnp.linspace(-n / n_periods, n / n_periods, num=n).reshape(-1, 1)
 
     def f(x):
-        return jnp.sin(2 * x) + jnp.cos(5 * x)
+        return jnp.squeeze(jnp.sin(2 * x) + jnp.cos(5 * x))
 
     signal = f(x)
-    y = signal + jr.normal(k2, shape=signal.shape) * noise_scale
+    key = jr.PRNGKey(seed)
+    y = signal + jr.normal(key, shape=signal.shape) * noise_scale
 
-    x_test = jnp.linspace(-3.1, 3.1, n_test).reshape(-1, 1)
+    x_test = jnp.linspace(-5.1, 5.1, n_test).reshape(-1, 1)
     y_test = f(x_test)
 
     train_ds = Dataset(x, y, n, 1)
     test_ds = Dataset(x_test, y_test, n_test, 1)
 
-    if normalise:
-        train_ds, test_ds = _normalise_dataset(train_ds, test_ds)
-
     return train_ds, test_ds
 
 
 def get_uci_dataset(
-    dataset_name: str, normalise: bool = False, split: int = 0, **kwargs: KwArgs
+    dataset_name: str, split: int = 0, **kwargs: KwArgs
 ) -> Tuple[Dataset, Dataset]:
 
     dataset = uci_dataset(dataset_name)
@@ -97,11 +89,8 @@ def get_uci_dataset(
     N, D = x_train.shape
     N_test, _ = x_test.shape
 
-    train_ds = Dataset(jnp.array(x_train), jnp.array(y_train).squeeze(), N, D)
-    test_ds = Dataset(jnp.array(x_test), jnp.array(y_test).squeeze(), N_test, D)
-
-    if normalise:
-        train_ds, test_ds = _normalise_dataset(train_ds, test_ds)
+    train_ds = Dataset(jnp.array(x_train), jnp.array(y_train), N, D)
+    test_ds = Dataset(jnp.array(x_test), jnp.array(y_test), N_test, D)
 
     return train_ds, test_ds
 
@@ -109,10 +98,10 @@ def get_uci_dataset(
 def _normalise_dataset(train_ds: Dataset, test_ds: Dataset) -> Tuple[Dataset, Dataset]:
 
     train_ds.x, train_ds.mu_x, train_ds.sigma_x = apply_z_score(train_ds.x)
-    train_ds.y, train_ds.mu_y, train_ds.sigma_y = apply_z_score(train_ds.y.squeeze())
+    train_ds.y, train_ds.mu_y, train_ds.sigma_y = apply_z_score(train_ds.y)
     test_ds.x = apply_z_score(test_ds.x, mu=train_ds.mu_x, sigma=train_ds.sigma_x)
     test_ds.y = apply_z_score(
-        test_ds.y.squeeze(), mu=train_ds.mu_y, sigma=train_ds.sigma_y
+        test_ds.y, mu=train_ds.mu_y, sigma=train_ds.sigma_y
     )
 
     return train_ds, test_ds
@@ -120,8 +109,17 @@ def _normalise_dataset(train_ds: Dataset, test_ds: Dataset) -> Tuple[Dataset, Da
 
 def get_dataset(dataset_name, **kwargs):
     if dataset_name == "toy_sin":
-        return get_expanding_toy_sin_dataset(**kwargs)
+        train_ds, test_ds =  get_expanding_toy_sin_dataset(**kwargs)
     elif dataset_name in all_datasets.keys():
-        return get_uci_dataset(dataset_name, **kwargs)
+        train_ds, test_ds = get_uci_dataset(dataset_name, **kwargs)
     else:
         raise ValueError(f"Unknown dataset {dataset_name}")
+    
+    train_ds.y = train_ds.y.squeeze()
+    test_ds.y = test_ds.y.squeeze()
+    chex.assert_rank([train_ds.y, test_ds.y], [1, 1])
+
+    if kwargs.get('normalise', False):
+        train_ds, test_ds = _normalise_dataset(train_ds, test_ds)
+
+    return train_ds, test_ds
