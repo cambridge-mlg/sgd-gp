@@ -15,7 +15,7 @@ from data import Dataset
 from kernels import Kernel
 from linalg_utils import KvP, solve_K_inv_v
 from tqdm import tqdm
-from utils import ExactMetricsTuple, ExactSamplesTuple, TargetTuple
+from utils import ExactMetricsTuple, TargetTuple
 
 
 class GPModel:
@@ -285,15 +285,13 @@ class SGDGPModel(GPModel):
             
             compute_exact_alpha_samples_fn = exact_gp.get_alpha_samples_fn()
             compute_exact_posterior_samples_fn = exact_gp.get_posterior_samples_fn(train_ds, test_ds, zero_mean=False)
-            
+            compute_exact_samples_tuple_fn = eval_utils.get_exact_sample_tuples_fn(exact_gp.alpha)
+
             alpha_samples_exact = compute_exact_alpha_samples_fn(f0_samples_train, eps0_samples)
             posterior_samples_exact = compute_exact_posterior_samples_fn(alpha_samples_exact, f0_samples_test)
 
-            # TODO: This is a hack to get the exact alpha samples into the eval_fn as ExactSamplesTuple.
-            exact_samples = jax.vmap(
-                lambda x, y, z: ExactSamplesTuple(
-                    alpha_sample=x, posterior_sample=y, f0_sample_test=z, alpha_map=exact_gp.alpha))(
-                    alpha_samples_exact, posterior_samples_exact, f0_samples_test)
+            exact_samples_tuple = compute_exact_samples_tuple_fn(
+                alpha_samples_exact, posterior_samples_exact, f0_samples_test)
         
         eval_fn = eval_utils.get_eval_fn(
             metrics_list,
@@ -304,7 +302,7 @@ class SGDGPModel(GPModel):
             feature_fn=feature_fn,
             noise_scale=self.noise_scale,
             metrics_prefix=metrics_prefix,
-            exact_samples=exact_samples if compare_exact else None,
+            exact_samples=exact_samples_tuple if compare_exact else None,
             vmap=True
         )
 

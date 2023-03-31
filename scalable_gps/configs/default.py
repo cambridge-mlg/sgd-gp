@@ -69,9 +69,6 @@ def get_config():
     config.sampling_config.loss_objective = 2
     config.sampling_config.use_cholesky_prior_sample = False
 
-    config.optimiser = "sgd"
-    config.sampling_loss_objective = 1
-
     # Wandb Configs
     config.wandb = ml_collections.ConfigDict()
     config.wandb.log = False

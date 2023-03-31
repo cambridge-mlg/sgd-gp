@@ -100,11 +100,12 @@ def get_eval_fn(
             elif metric == "alpha_rkhs_diff":
                 return hilbert_space_RMSE(alpha_exact, params, K=kernel_fn(train_ds.x, train_ds.x))
             elif metric == "test_rmse_diff":
+                # TODO: for sampling this is technically wrong as we always use exact_gp.alpha_map as mean.
                 return RMSE(_get_metric("test_rmse"), test_rmse_exact)
             elif metric == "y_pred_diff":
                 # TODO: right now we measure the difference between zero_mean posterior_samples, as alpha_map used for
                 # both y_pred_test and y_pred_exact is alpha_map of ExactGP, and gets cancelled out.
-                return RMSE(y_pred_test, y_pred_exact)
+                return RMSE(y_pred_test, y_pred_exact, mu=train_ds.mu_y, sigma=train_ds.sigma_y)
 
         metrics_update_dict = {}
 
@@ -117,3 +118,15 @@ def get_eval_fn(
     if vmap:
         return jax.jit(jax.vmap(_fn, in_axes=(0, 0, None, 0), axis_name='sample'))
     return jax.jit(_fn)
+
+
+def get_exact_sample_tuples_fn(alpha_map):
+    
+    def _fn(alpha_sample, posterior_sample, f0_sample_test):
+        return ExactSamplesTuple(
+            alpha_sample=alpha_sample, 
+            posterior_sample=posterior_sample, 
+            f0_sample_test=f0_sample_test,
+            alpha_map=alpha_map)
+    
+    return jax.vmap(_fn)
