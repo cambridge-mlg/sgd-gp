@@ -5,7 +5,6 @@ import jax
 import jax.numpy as jnp
 import jax.random as jr
 from chex import Array
-from typing import Union
 
 
 class Kernel:
@@ -30,14 +29,14 @@ class Kernel:
     def phi_fn(self, key: chex.PRNGKey, n_features: int):
         return jr.uniform(key, shape=(1, n_features), minval=-jnp.pi, maxval=jnp.pi)
     
-    def _sq_dist(self, x: Array, y: Array, length_scale: Union[float, Array]):
-        # TODO: does this if/else break jitting?
-        if isinstance(length_scale, Array):
+    def _sq_dist(self, x: Array, y: Array, length_scale: Array):
+        if jnp.isscalar(length_scale):
+            chex.assert_scalar(length_scale)
+        else:
             D = x.shape[-1]
             chex.assert_shape(length_scale, (D,))
             length_scale = length_scale[None, :]
-        else:
-            chex.assert_scalar(length_scale)
+            
         x, y = x / length_scale, y / length_scale
         return jnp.sum((x[:, None] - y[None, :]) ** 2, axis=-1)
     
@@ -51,12 +50,12 @@ class Kernel:
         signal_scale = self.kernel_config["signal_scale"]
         length_scale = self.kernel_config["length_scale"]
 
-        # TODO: does this if/else break jitting?
-        if isinstance(length_scale, Array):
-            chex.assert_shape(length_scale, (D,))
-            length_scale = length_scale[:, None]
-        else:
+        if jnp.isscalar(length_scale):
             chex.assert_scalar(length_scale)
+        else:
+            D = x.shape[-1]
+            chex.assert_shape(length_scale, (D,))
+            length_scale = length_scale[None, :]
 
         if recompute or self.omega is None or self.phi is None:
             # compute single random Fourier feature for RBF kernel
