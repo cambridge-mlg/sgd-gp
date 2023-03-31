@@ -11,15 +11,8 @@ from utils import TargetTuple
 
 def error(params: Array, idx: Array, x: Array, target: Array, kernel_fn: Callable):
     K = kernel_fn(x[idx], x)
-    return 0.5 * jnp.sum((target[idx] - K @ params) ** 2)
-
-
-# TODO: pmap over idx / B
-def error_grad_sample(params: Array, idx: Array, x: Array, target: Array, kernel_fn: Callable):
-    K = kernel_fn(x[idx], x)
-    B, N = K.shape
-    return -K.T @ (target[idx] - K @ params) * (N / B)
-
+    B, N = idx.shape[0], x.shape[0]
+    return 0.5 * (N / B) * jnp.sum((target[idx] - K @ params) ** 2)
 
 def regularizer(params: Array, features: Array, target: Array, noise_scale: float):
     params = noise_scale * params
@@ -27,6 +20,12 @@ def regularizer(params: Array, features: Array, target: Array, noise_scale: floa
     L = features
     R = L.T @ (params - target)
     return 0.5 * jnp.dot(R, R)
+
+# TODO: pmap over idx / B
+def error_grad_sample(params: Array, idx: Array, x: Array, target: Array, kernel_fn: Callable):
+    K = kernel_fn(x[idx], x)
+    B, N = K.shape
+    return -K.T @ (target[idx] - K @ params) * (N / B)
 
 def regularizer_grad_sample(params: Array, features: Array, target: Array, noise_scale: float):
     L = features
@@ -38,7 +37,8 @@ def loss_fn(params: Array, idx: Array, x: Array, features:Array, target_tuple: T
     err = error(params, idx, x, target_tuple.error_target, kernel_fn)
     reg = regularizer(params, features, target_tuple.regularizer_target, noise_scale)
     chex.assert_rank([err, reg], 0)
-    return err + reg
+    
+    return err + reg, err, reg
 
 
 @partial(jax.jit, backend='cpu')

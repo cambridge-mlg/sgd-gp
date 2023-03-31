@@ -74,6 +74,7 @@ def get_eval_fn(
         if exact_samples is not None and vmap:
             # Exact samples needs to be vmapped, so we can access vmap_idx
             vmap_idx = jax.lax.axis_index("sample")
+            
 
             alpha_exact = exact_samples.alpha_sample[vmap_idx]
             # y_pred_exact = (K(·)x(Kxx + Σ)^{−1} y) + f0(·) − K(·) (Kxx + Σ)^{−1} (f0(x) + ε0).
@@ -89,7 +90,11 @@ def get_eval_fn(
         # Define all metric function calls here for now, refactor later.
         def _get_metric(metric):
             if metric == "loss":
-                return loss_fn(params, idx, train_ds.x, features, target_tuple, kernel_fn, noise_scale)
+                return loss_fn(params, idx, train_ds.x, features, target_tuple, kernel_fn, noise_scale)[0]
+            elif metric == "err":
+                return loss_fn(params, idx, train_ds.x, features, target_tuple, kernel_fn, noise_scale)[1]
+            elif metric == "reg":
+                return loss_fn(params, idx, train_ds.x, features, target_tuple, kernel_fn, noise_scale)[2]
             # TODO (jandylin): Can you rewrite this to match our new grad_fn etc. API?
             # elif metric == "grad_var":
             #     return grad_var_fn(params, grad_fn, B, train_ds, feature_fn)
@@ -116,7 +121,7 @@ def get_eval_fn(
         return metrics_update_dict
 
     if vmap:
-        return jax.jit(jax.vmap(_fn, in_axes=(0, 0, None, 0), axis_name='sample'))
+        return jax.jit(jax.vmap(_fn, in_axes=(0, None, None, 0), axis_name='sample'))
     return jax.jit(_fn)
 
 

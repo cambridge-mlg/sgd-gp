@@ -146,7 +146,7 @@ class ExactGPModel(GPModel):
         prior_covariance_key, prior_samples_key, samples_optim_key = jr.split(key, 3)
     
         if L is None:
-            L, K_train = sampling_utils.compute_prior_covariance_factor(
+            L = sampling_utils.compute_prior_covariance_factor(
                 prior_covariance_key, 
                 train_ds, 
                 test_ds, 
@@ -155,7 +155,6 @@ class ExactGPModel(GPModel):
                 use_rff=use_rff, 
                 n_features=n_features, 
                 chol_eps=chol_eps)
-            self.K = K_train if self.K is None else self.K  # TODO: Should we reset self.K to Phi Phi.T if use_rff is True?
 
         # Get vmapped functions for sampling from the prior and computing the posterior.
         compute_prior_samples_fn = self.get_prior_samples_fn(train_ds.N, L, use_rff)
@@ -228,9 +227,11 @@ class SGDGPModel(GPModel):
 
             if i % config.eval_every == 0:
                 eval_metrics = eval_fn(alpha_polyak, idx, features, target_tuple)
-                wandb.log(eval_metrics)
+                if wandb.run is not None:
+                    wandb.log({**eval_metrics, **{'train_step': i}})
                 aux.append(eval_metrics)
 
+        self.alpha = alpha_polyak
         return self.alpha, aux
 
 
@@ -251,7 +252,7 @@ class SGDGPModel(GPModel):
         
         prior_covariance_key, prior_samples_key, optim_key = jr.split(key, 3)
     
-        L, K_train = L, K_train = sampling_utils.compute_prior_covariance_factor(
+        L = sampling_utils.compute_prior_covariance_factor(
                 prior_covariance_key, 
                 train_ds, 
                 test_ds, 
@@ -271,7 +272,7 @@ class SGDGPModel(GPModel):
         grad_fn = optim_utils.get_stochastic_gradient_fn(train_ds.x, self.kernel.kernel_fn, self.noise_scale)
         update_fn = optim_utils.get_update_fn(grad_fn, optimizer, config.polyak, vmap=True)
         feature_fn = self.get_feature_fn(train_ds, config.n_features_optim, config.recompute_features)
-        idx_fn = optim_utils.get_uniform_idx_fn(config.batch_size, train_ds.N, vmap=True)
+        idx_fn = optim_utils.get_uniform_idx_fn(config.batch_size, train_ds.N, vmap=False)
 
         # Call the vmapped functions
         f0_samples_train, f0_samples_test, eps0_samples = compute_prior_samples_fn(
@@ -280,7 +281,7 @@ class SGDGPModel(GPModel):
         
         if compare_exact:
             exact_gp = ExactGPModel(self.noise_scale, self.kernel)
-            exact_gp.K = K_train
+            exact_gp.K = exact_gp.kernel.kernel_fn(train_ds.x, train_ds.x)
             exact_gp.compute_representer_weights(train_ds)
             
             compute_exact_alpha_samples_fn = exact_gp.get_alpha_samples_fn()
@@ -315,13 +316,13 @@ class SGDGPModel(GPModel):
         for i in tqdm(range(config.iterations)):
             optim_key, idx_key, feature_key = jr.split(optim_key, 3)
             features = feature_fn(feature_key)
-            idx = idx_fn(jr.split(idx_key, n_samples))
-            
+            # idx = idx_fn(jr.split(idx_key, n_samples))
+            idx = idx_fn(idx_key)
             alphas, alphas_polyak, opt_states = update_fn(alphas, alphas_polyak, idx, features, opt_states, target_tuples)
 
             if i % config.eval_every == 0:
                 vmapped_eval_metrics = eval_fn(alphas_polyak, idx, features, target_tuples)
-                wandb.log(vmapped_eval_metrics)
+                wandb.log({**_process_vmapped_metrics(vmapped_eval_metrics), **{'sample_step': i}})
                 aux.append(vmapped_eval_metrics)
 
         print(f'alphas_polyak: {alphas_polyak.shape}')
@@ -331,6 +332,11 @@ class SGDGPModel(GPModel):
         return posterior_samples, alphas_polyak
         
             
-            
-            
-            
+def _process_vmapped_metrics(vmapped_metrics):
+    mean_metrics, std_metrics = {}, {}
+    for k, v in vmapped_metrics.items():
+        vmapped_metrics[k] = wandb.Histogram(v)
+        mean_metrics[f'{k}_mean'] = jnp.mean(v)
+        std_metrics[f'{k}_std'] = jnp.std(v)
+        
+    return {**vmapped_metrics, **mean_metrics, **std_metrics}

@@ -49,13 +49,11 @@ def compute_prior_covariance_factor(
 
     if use_rff:
         L = feature_fn(key, n_features, x_full)
-        prior_covariance_matrix = L[:N] @ L[:N].T
     else:
         K_full = kernel_fn(x_full, x_full)
         L = jnp.linalg.cholesky(K_full + chol_eps * jnp.identity(N_full))
-        prior_covariance_matrix = K_full[:N, :N]
     
-    return L, prior_covariance_matrix
+    return L
 
 
 def compute_posterior_fn_sample(
@@ -67,7 +65,7 @@ def compute_posterior_fn_sample(
     kernel_fn: Callable,
     zero_mean: bool = True
 ) -> Array:
-    """Compute (~zero_mean) (K(·)x(Kxx + Σ)^{−1} y) + f0(·) − K(·) (Kxx + Σ)^{−1} (f0(x) + ε0)."""
+    """Compute (~zero_mean) (K(·)x(Kxx + Σ)^{−1} y) + f0(·) − K(·) @ alpha_sample."""
     if zero_mean:
         alpha = -alpha_sample
     else:

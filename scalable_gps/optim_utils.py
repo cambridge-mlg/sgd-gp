@@ -45,7 +45,7 @@ def get_update_fn(grad_fn: Callable, optimizer, polyak_step_size: float, vmap: b
         return new_params, new_params_polyak, opt_state
 
     if vmap:
-        return jax.jit(jax.vmap(_fn, in_axes=(0, 0, 0, None, 0, 0)))
+        return jax.jit(jax.vmap(_fn, in_axes=(0, 0, None, None, 0, 0)))
     return jax.jit(_fn)
 
 
