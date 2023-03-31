@@ -30,12 +30,8 @@ class Kernel:
         return jr.uniform(key, shape=(1, n_features), minval=-jnp.pi, maxval=jnp.pi)
     
     def _sq_dist(self, x: Array, y: Array, length_scale: Array):
-        if jnp.isscalar(length_scale):
-            chex.assert_scalar(length_scale)
-        else:
-            D = x.shape[-1]
-            chex.assert_shape(length_scale, (D,))
-            length_scale = length_scale[None, :]
+        D = x.shape[-1]
+        length_scale = jnp.reshape(length_scale, (1, D))
             
         x, y = x / length_scale, y / length_scale
         return jnp.sum((x[:, None] - y[None, :]) ** 2, axis=-1)
@@ -49,13 +45,7 @@ class Kernel:
 
         signal_scale = self.kernel_config["signal_scale"]
         length_scale = self.kernel_config["length_scale"]
-
-        if jnp.isscalar(length_scale):
-            chex.assert_scalar(length_scale)
-        else:
-            D = x.shape[-1]
-            chex.assert_shape(length_scale, (D,))
-            length_scale = length_scale[None, :]
+        length_scale = jnp.reshape(length_scale, (1, D))
 
         if recompute or self.omega is None or self.phi is None:
             # compute single random Fourier feature for RBF kernel
@@ -65,7 +55,7 @@ class Kernel:
         else:
             omega, phi = self.omega, self.phi
 
-        return signal_scale * jnp.sqrt(2.0 / M) * jnp.cos(x @ (omega / length_scale) + phi)
+        return signal_scale * jnp.sqrt(2.0 / M) * jnp.cos((x / length_scale) @ omega + phi)
 
 
 class RBFKernel(Kernel):
