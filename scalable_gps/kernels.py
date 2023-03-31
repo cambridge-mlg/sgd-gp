@@ -6,9 +6,6 @@ import jax.numpy as jnp
 import jax.random as jr
 from chex import Array
 
-# TODO: Implement independent lengthscale for Matern 32.
-
-
 
 class Kernel:
     def __init__(self, kernel_config=None):
@@ -32,20 +29,23 @@ class Kernel:
     def phi_fn(self, key: chex.PRNGKey, n_features: int):
         return jr.uniform(key, shape=(1, n_features), minval=-jnp.pi, maxval=jnp.pi)
     
-    def _sq_dist(self, x: Array, y: Array):
+    def _sq_dist(self, x: Array, y: Array, length_scale: Array):
+        D = x.shape[-1]
+        length_scale = jnp.reshape(length_scale, (1, D))
+            
+        x, y = x / length_scale, y / length_scale
         return jnp.sum((x[:, None] - y[None, :]) ** 2, axis=-1)
-    
-    def feature_fn(
-        self, key: chex.PRNGKey, n_features: int, x: Array, recompute: bool = False
-    ):
-        self.check_required_hparams_in_config(
-            ["signal_scale", "length_scale"], self.kernel_config
-        )
 
-        s = self.kernel_config["signal_scale"]
-        l = self.kernel_config["length_scale"]
+    def feature_fn(self, key: chex.PRNGKey, n_features: int, x: Array, recompute: bool = False):
+    
+        self.check_required_hparams_in_config(["signal_scale", "length_scale"], self.kernel_config)
+
         M = n_features
         D = x.shape[-1]
+
+        signal_scale = self.kernel_config["signal_scale"]
+        length_scale = self.kernel_config["length_scale"]
+        length_scale = jnp.reshape(length_scale, (1, D))
 
         if recompute or self.omega is None or self.phi is None:
             # compute single random Fourier feature for RBF kernel
@@ -55,21 +55,19 @@ class Kernel:
         else:
             omega, phi = self.omega, self.phi
 
-        return s * jnp.sqrt(2.0 / M) * jnp.cos(x @ (omega / l) + phi)
+        return signal_scale * jnp.sqrt(2.0 / M) * jnp.cos((x / length_scale) @ omega + phi)
 
 
 class RBFKernel(Kernel):
     @partial(jax.jit, static_argnums=(0,))
     def kernel_fn(self, x: Array, y: Array):
 
-        self.check_required_hparams_in_config(
-            ["signal_scale", "length_scale"], self.kernel_config
-        )
+        self.check_required_hparams_in_config(["signal_scale", "length_scale"], self.kernel_config)
 
-        s = self.kernel_config["signal_scale"]
-        l = self.kernel_config["length_scale"]
+        signal_scale = self.kernel_config["signal_scale"]
+        length_scale = self.kernel_config["length_scale"]
 
-        return (s**2) * jnp.exp(-0.5 * self._sq_dist(x, y) / (l**2))
+        return (signal_scale**2) * jnp.exp(-0.5 * self._sq_dist(x, y, length_scale))
 
     def omega_fn(self, key: chex.PRNGKey, n_input_dims: int, n_features: int):
         return jr.normal(key, shape=(n_input_dims, n_features))
@@ -83,16 +81,15 @@ class MaternKernel(Kernel):
             ["signal_scale", "length_scale"], self.kernel_config
         )
 
-        s = self.kernel_config["signal_scale"]
-        l = self.kernel_config["length_scale"]
+        signal_scale = self.kernel_config["signal_scale"]
+        length_scale = self.kernel_config["length_scale"]
 
-
-        sq_dist = self._sq_dist(x, y) / (l**2)
+        sq_dist = self._sq_dist(x, y, length_scale)
         dist = jnp.sqrt(sq_dist)
 
         normaliser = self._normaliser(dist, sq_dist)
         exponential_term = jnp.exp(-jnp.sqrt(self._df()) * dist)
-        return (s**2) * normaliser * exponential_term
+        return (signal_scale**2) * normaliser * exponential_term
     
     def omega_fn(self, key: chex.PRNGKey, n_input_dims: int, n_features: int):
         return jr.t(key, df=self._df(), shape=(n_input_dims, n_features))
