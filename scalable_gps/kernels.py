@@ -30,8 +30,8 @@ class Kernel:
         return jr.uniform(key, shape=(1, n_features), minval=-jnp.pi, maxval=jnp.pi)
     
     def _sq_dist(self, x: Array, y: Array, length_scale: Array):
-        D = x.shape[-1]
-        length_scale = jnp.reshape(length_scale, (1, D))
+        if not jnp.isscalar(length_scale):
+            length_scale = length_scale[None, :]
             
         x, y = x / length_scale, y / length_scale
         return jnp.sum((x[:, None] - y[None, :]) ** 2, axis=-1)
@@ -45,7 +45,9 @@ class Kernel:
 
         signal_scale = self.kernel_config["signal_scale"]
         length_scale = self.kernel_config["length_scale"]
-        length_scale = jnp.reshape(length_scale, (1, D))
+        
+        if not jnp.isscalar(length_scale):
+            length_scale = length_scale[None, :]
 
         if recompute or self.omega is None or self.phi is None:
             # compute single random Fourier feature for RBF kernel
