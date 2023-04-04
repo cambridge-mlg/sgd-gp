@@ -6,7 +6,8 @@ import jax
 import jax.numpy as jnp
 import jax.random as jr
 from chex import Array
-from utils import TargetTuple
+from linalg_utils import solve_K_inv_v
+from utils import HparamsTuple, TargetTuple
 
 
 def error(params: Array, idx: Array, x: Array, target: Array, kernel_fn: Callable):
@@ -39,6 +40,17 @@ def loss_fn(params: Array, idx: Array, x: Array, features:Array, target_tuple: T
     chex.assert_rank([err, reg], 0)
     
     return err + reg, err, reg
+
+
+def marginal_likelihood(x: Array, targets: Array, kernel_fn: Callable, hparams_tuple: HparamsTuple):
+    N = targets.shape[0]
+    K_train = kernel_fn(x, x, signal_scale=hparams_tuple.signal_scale, length_scale=hparams_tuple.length_scale) 
+    
+    data_fit = -0.5 * jnp.dot(targets, solve_K_inv_v(K_train, targets, hparams_tuple.noise_scale))
+    log_det = -.5 * jax.jit(jnp.linalg.slogdet, device=jax.devices('cpu')[0])(
+        K_train + (hparams_tuple.noise_scale**2) * jnp.identity(targets.shape[0]))[1]
+
+    return data_fit + log_det - (N / 2.) * jnp.log(2. * jnp.pi)
 
 
 @partial(jax.jit, backend='cpu')

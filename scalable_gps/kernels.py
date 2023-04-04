@@ -27,11 +27,12 @@ class Kernel:
         raise NotImplementedError("Subclasses should implement this method.")
     
     def phi_fn(self, key: chex.PRNGKey, n_features: int):
-        return jr.uniform(key, shape=(1, n_features), minval=-jnp.pi, maxval=jnp.pi)
+        return jr.uniform(key=key, shape=(1, n_features), minval=-jnp.pi, maxval=jnp.pi)
     
     def _sq_dist(self, x: Array, y: Array, length_scale: Array):
-        if not jnp.isscalar(length_scale):
-            length_scale = length_scale[None, :]
+        # TODO: Wrap this in a util fn since we call it twice.
+        # if not jnp.isscalar(length_scale):
+        #     length_scale = length_scale[None, :]
             
         x, y = x / length_scale, y / length_scale
         return jnp.sum((x[:, None] - y[None, :]) ** 2, axis=-1)
@@ -46,8 +47,9 @@ class Kernel:
         signal_scale = self.kernel_config["signal_scale"]
         length_scale = self.kernel_config["length_scale"]
         
-        if not jnp.isscalar(length_scale):
-            length_scale = length_scale[None, :]
+        # TODO: When gradient is called over lengthscale, it is no longer a scalar...
+        # if not jnp.isscalar(length_scale) or length_scale.shape[0] != 1:
+        #     length_scale = length_scale[None, :]
 
         if recompute or self.omega is None or self.phi is None:
             # compute single random Fourier feature for RBF kernel
@@ -62,12 +64,17 @@ class Kernel:
 
 class RBFKernel(Kernel):
     @partial(jax.jit, static_argnums=(0,))
-    def kernel_fn(self, x: Array, y: Array):
+    def kernel_fn(self, x: Array, y: Array, **kwargs):
+        
+        # TODO: Wrap this logic into a fn that either takes kwargs or self.kernel_config for hparams.
+        if "signal_scale" not in kwargs and "length_scale" not in kwargs:
+            self.check_required_hparams_in_config(["signal_scale", "length_scale"], self.kernel_config)
 
-        self.check_required_hparams_in_config(["signal_scale", "length_scale"], self.kernel_config)
-
-        signal_scale = self.kernel_config["signal_scale"]
-        length_scale = self.kernel_config["length_scale"]
+            signal_scale = self.kernel_config["signal_scale"]
+            length_scale = self.kernel_config["length_scale"]
+        else:
+            signal_scale = kwargs["signal_scale"]
+            length_scale = kwargs["length_scale"]
 
         return (signal_scale**2) * jnp.exp(-0.5 * self._sq_dist(x, y, length_scale))
 
