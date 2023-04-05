@@ -25,6 +25,34 @@ class Dataset:
     sigma_y: Optional[Array] = None
 
 
+def subsample(key: chex.PRNGKey, ds: Dataset, n_subsample: int = 10000):
+    # return full dataset if it is smaller than subsample size
+    if ds.N <= n_subsample:
+        return ds
+    
+    # choose random data point
+    i = jr.randint(key, (), minval=0, maxval=ds.N)
+
+    # compute Euclidean distances to each data point
+    # (could be replaced by any other distance measure if desired)
+    dist = jnp.sum((ds.x[i, None] - ds.x[None, :]) ** 2, axis=-1).squeeze()
+    idx = jnp.argsort(dist)[:n_subsample]
+
+    # create subsampled dataset
+    ds_subsample = Dataset(
+        x=ds.x[idx],
+        y=ds.y[idx],
+        N=n_subsample,
+        D=ds.D,
+        mu_x=ds.mu_x,
+        sigma_x=ds.sigma_x,
+        mu_y=ds.mu_y,
+        sigma_y=ds.sigma_y
+    )
+
+    return ds_subsample
+
+
 def get_concentrating_toy_sin_dataset(
     seed: int,
     n: int,
