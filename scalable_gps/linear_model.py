@@ -57,43 +57,15 @@ def marginal_likelihood(x: Array, targets: Array, kernel_fn: Callable, hparams_t
     K_train = kernel_fn(x, x, signal_scale=signal_scale, length_scale=length_scale)
     K = K_train + (noise_scale**2) * jnp.identity(N)
     K_cho_factor, lower = jax.scipy.linalg.cho_factor(K)
-    
-    # K_cho_factor = jax.scipy.linalg.cholesky(K)
-    # print(K_cho_factor)
 
     data_fit_term = -0.5 * jnp.dot(
         targets, jax.scipy.linalg.cho_solve((K_cho_factor, lower), targets))
     
-    # print(f'data_fit_term: {data_fit_term}')
     log_det_term = -jnp.log(jnp.diag(K_cho_factor)).sum()
     
-    # print(f'log_det_term: {log_det_term}')
     const_term = - (N / 2.) * jnp.log(2. * jnp.pi)
     
-    # print(f'const_term: {const_term}')
-
     return data_fit_term + log_det_term + const_term
-
-
-# def marginal_likelihood(x: Array, targets: Array, kernel_fn: Callable, hparams_tuple: HparamsTuple, 
-#                         transform: Optional[Callable] = None):
-#     N = targets.shape[0]
-    
-#     if transform:
-#         signal_scale = transform(hparams_tuple.signal_scale)
-#         length_scale = transform(hparams_tuple.length_scale)
-#         noise_scale = transform(hparams_tuple.noise_scale)
-#     else:
-#         signal_scale = hparams_tuple.signal_scale
-#         length_scale = hparams_tuple.length_scale
-#         noise_scale = hparams_tuple.noise_scale
-    
-#     K_train = kernel_fn(x, x, signal_scale=signal_scale, length_scale=length_scale)
-#     K = K_train + (noise_scale**2) * jnp.identity(N)
-#     data_fit = -.5 * jnp.dot(targets, jnp.linalg.solve(K, targets))
-#     log_det = -.5 * jnp.linalg.slogdet(K)[1]
-#     return data_fit + log_det - (N / 2.) * jnp.log(2. * jnp.pi)
-
 
 @partial(jax.jit, backend='cpu')
 def exact_solution(targets, K, noise_scale):

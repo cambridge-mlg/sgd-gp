@@ -4,11 +4,12 @@ from typing import Callable
 import jax
 import jax.numpy as jnp
 from chex import Array
+from utils import get_gpu_or_cpu_device
 
 Kernel_fn = Callable[[Array, Array], Array]
 
 # TODO: Check if GPU exists then use GPU
-@partial(jax.jit, device=jax.devices('cpu')[0])
+@partial(jax.jit, device=get_gpu_or_cpu_device())
 def solve_K_inv_v(K: Array, v: Array, noise_scale: float):
     """Solves (K + noise_scale^2 I) x = v for x."""
     return jax.scipy.linalg.solve(K + (noise_scale**2) * jnp.identity(v.shape[0]), v, assume_a='pos')

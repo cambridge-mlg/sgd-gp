@@ -31,6 +31,12 @@ class HparamsTuple(NamedTuple):
     signal_scale: float
     length_scale: Union[float, Array]
 
+def get_gpu_or_cpu_device():
+    if jax.default_backend() == "gpu":
+        return jax.devices('gpu')[0]
+    else:
+        return jax.devices('cpu')[0]
+
 def apply_z_score(data: Array, mu: Optional[Array]=None, sigma: Optional[Array]=None):
     if (mu is not None) and (sigma is not None):
         return (data - mu) / sigma

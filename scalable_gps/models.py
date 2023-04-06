@@ -17,7 +17,7 @@ from kernels import Kernel
 from linalg_utils import KvP, solve_K_inv_v
 from linear_model import marginal_likelihood
 from tqdm import tqdm
-from utils import ExactMetricsTuple, HparamsTuple, TargetTuple
+from utils import ExactMetricsTuple, HparamsTuple, TargetTuple, get_gpu_or_cpu_device
 
 
 class GPModel:
@@ -182,7 +182,7 @@ class ExactGPModel(GPModel):
 
             return -marginal_likelihood(train_ds.x, train_ds.y, kernel_fn, hparams_tuple=log_hparams, transform=transform)
         
-        return jax.jit(_fn, device=jax.devices('cpu')[0])
+        return jax.jit(_fn, device=get_gpu_or_cpu_device())
     
     def get_mll_update_fn(self, mll_loss_fn, optimizer):
         """Factory function that wraps mll_update_fn so that it is jittable."""
@@ -216,7 +216,8 @@ class ExactGPModel(GPModel):
                     signal_scale=transform(log_hparams.signal_scale),
                     noise_scale=transform(log_hparams.noise_scale),)
                 
-
+            # TODO: Cleanup eval if needed.
+            ############################### EVAL METRICS ##################################
             # Populate evaluation metrics etc.
             K = self.kernel.kernel_fn(
                 train_ds.x, train_ds.x, length_scale=hparams.length_scale, signal_scale=hparams.signal_scale)
@@ -230,16 +231,21 @@ class ExactGPModel(GPModel):
         
             test_rmse = RMSE(test_ds.y, y_pred_test, mu=train_ds.mu_y, sigma=train_ds.sigma_y)
             
+            normalised_test_rmse = RMSE(test_ds.y, y_pred_test)
+            
             iterator.set_description(f"Loss: {loss_val:.4f}")
             eval_metrics = {
                 "mll": -loss_val, 
                 "signal_scale": hparams.signal_scale, 
                 "length_scale": hparams.length_scale,
                 "noise_scale": hparams.noise_scale,
-                "test_rmse": test_rmse}
+                "test_rmse": test_rmse,
+                "normalised_test_rmse": normalised_test_rmse,}
 
             if wandb.run is not None:
                 wandb.log({**eval_metrics, **{'mll_train_step': i}})
+            #########################################################################
+
         print("Final hyperparameters: ", hparams)
         
         return hparams

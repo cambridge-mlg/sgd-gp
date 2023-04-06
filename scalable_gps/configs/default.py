@@ -17,8 +17,10 @@ def get_dataset_config(name):
     return config
 
 
-def get_config():
+def get_config(config_string):
     config = ml_collections.ConfigDict()
+
+    d_name = config_string.split(".")[0]
 
     # Saving configs
     config.save_dir = "results/toy_sin"
@@ -29,7 +31,7 @@ def get_config():
     config.use_tpu = True
 
     # Data Configs
-    config.dataset_name = "toy_sin"
+    config.dataset_name = d_name
 
     config.dataset_config = ml_collections.ConfigDict()
     config.dataset_config = get_dataset_config(config.dataset_name)
@@ -76,10 +78,10 @@ def get_config():
     config.sampling_config.use_cholesky_prior_sample = False
     
     config.mll_config = ml_collections.ConfigDict()
-    config.mll_config.learning_rate = 1e-1
-    config.mll_config.iterations = 100
+    config.mll_config.learning_rate = 0.1
+    config.mll_config.iterations = 300
     
-    config.mll_config.init_length_scale = length_scale_dim * [1.]
+    config.mll_config.init_length_scale = length_scale_dim * [0.]
 
     config.mll_config.init_signal_scale = 0.
     config.mll_config.init_noise_scale = 0.
