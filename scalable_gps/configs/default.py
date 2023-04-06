@@ -13,6 +13,7 @@ def get_dataset_config(name):
         config.input_dim = 1
     elif name in all_datasets.keys():
         config.input_dim = all_datasets[name][-1]
+        config.noise_scale = 1.0
 
     return config
 

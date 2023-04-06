@@ -37,7 +37,7 @@ class Kernel:
     
     def _get_hparams(self, hparam_names: List[str], kwargs: Optional[dict],):
         
-        if kwargs is None:
+        if kwargs is None or not kwargs:
             self.check_required_hparams_in_config(hparam_names, self.kernel_config)
             signal_scale = self.kernel_config["signal_scale"]
             length_scale = self.kernel_config["length_scale"]
