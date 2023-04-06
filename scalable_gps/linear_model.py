@@ -6,7 +6,6 @@ import jax
 import jax.numpy as jnp
 import jax.random as jr
 from chex import Array
-from linalg_utils import solve_K_inv_v
 from utils import HparamsTuple, TargetTuple
 
 
@@ -42,15 +41,58 @@ def loss_fn(params: Array, idx: Array, x: Array, features:Array, target_tuple: T
     return err + reg, err, reg
 
 
-def marginal_likelihood(x: Array, targets: Array, kernel_fn: Callable, hparams_tuple: HparamsTuple):
+def marginal_likelihood(x: Array, targets: Array, kernel_fn: Callable, hparams_tuple: HparamsTuple, 
+                        transform: Optional[Callable] = None):
     N = targets.shape[0]
-    K_train = kernel_fn(x, x, signal_scale=hparams_tuple.signal_scale, length_scale=hparams_tuple.length_scale) 
     
-    data_fit = -0.5 * jnp.dot(targets, solve_K_inv_v(K_train, targets, hparams_tuple.noise_scale))
-    log_det = -.5 * jax.jit(jnp.linalg.slogdet, device=jax.devices('cpu')[0])(
-        K_train + (hparams_tuple.noise_scale**2) * jnp.identity(targets.shape[0]))[1]
+    if transform:
+        signal_scale = transform(hparams_tuple.signal_scale)
+        length_scale = transform(hparams_tuple.length_scale)
+        noise_scale = transform(hparams_tuple.noise_scale)
+    else:
+        signal_scale = hparams_tuple.signal_scale
+        length_scale = hparams_tuple.length_scale
+        noise_scale = hparams_tuple.noise_scale
+    
+    K_train = kernel_fn(x, x, signal_scale=signal_scale, length_scale=length_scale)
+    K = K_train + (noise_scale**2) * jnp.identity(N)
+    K_cho_factor, lower = jax.scipy.linalg.cho_factor(K)
+    
+    # K_cho_factor = jax.scipy.linalg.cholesky(K)
+    # print(K_cho_factor)
 
-    return data_fit + log_det - (N / 2.) * jnp.log(2. * jnp.pi)
+    data_fit_term = -0.5 * jnp.dot(
+        targets, jax.scipy.linalg.cho_solve((K_cho_factor, lower), targets))
+    
+    # print(f'data_fit_term: {data_fit_term}')
+    log_det_term = -jnp.log(jnp.diag(K_cho_factor)).sum()
+    
+    # print(f'log_det_term: {log_det_term}')
+    const_term = - (N / 2.) * jnp.log(2. * jnp.pi)
+    
+    # print(f'const_term: {const_term}')
+
+    return data_fit_term + log_det_term + const_term
+
+
+# def marginal_likelihood(x: Array, targets: Array, kernel_fn: Callable, hparams_tuple: HparamsTuple, 
+#                         transform: Optional[Callable] = None):
+#     N = targets.shape[0]
+    
+#     if transform:
+#         signal_scale = transform(hparams_tuple.signal_scale)
+#         length_scale = transform(hparams_tuple.length_scale)
+#         noise_scale = transform(hparams_tuple.noise_scale)
+#     else:
+#         signal_scale = hparams_tuple.signal_scale
+#         length_scale = hparams_tuple.length_scale
+#         noise_scale = hparams_tuple.noise_scale
+    
+#     K_train = kernel_fn(x, x, signal_scale=signal_scale, length_scale=length_scale)
+#     K = K_train + (noise_scale**2) * jnp.identity(N)
+#     data_fit = -.5 * jnp.dot(targets, jnp.linalg.solve(K, targets))
+#     log_det = -.5 * jnp.linalg.slogdet(K)[1]
+#     return data_fit + log_det - (N / 2.) * jnp.log(2. * jnp.pi)
 
 
 @partial(jax.jit, backend='cpu')

@@ -1,4 +1,5 @@
 from functools import partial
+from typing import List, Optional
 
 import chex
 import jax
@@ -20,7 +21,7 @@ class Kernel:
                     f"Required hyperparameter '{hparam}' must be present in config dict"
                 )
 
-    def kernel_fn(self, x: Array, y: Array):
+    def kernel_fn(self, x: Array, y: Array, **kwargs):
         raise NotImplementedError("Subclasses should implement this method.")
     
     def omega_fn(self, key: chex.PRNGKey, n_input_dims: int, n_features: int):
@@ -30,26 +31,33 @@ class Kernel:
         return jr.uniform(key=key, shape=(1, n_features), minval=-jnp.pi, maxval=jnp.pi)
     
     def _sq_dist(self, x: Array, y: Array, length_scale: Array):
-        # TODO: Wrap this in a util fn since we call it twice.
-        # if not jnp.isscalar(length_scale):
-        #     length_scale = length_scale[None, :]
-            
         x, y = x / length_scale, y / length_scale
+        
         return jnp.sum((x[:, None] - y[None, :]) ** 2, axis=-1)
-
-    def feature_fn(self, key: chex.PRNGKey, n_features: int, x: Array, recompute: bool = False):
     
-        self.check_required_hparams_in_config(["signal_scale", "length_scale"], self.kernel_config)
+    def _get_hparams(self, hparam_names: List[str], kwargs: Optional[dict],):
+        
+        if kwargs is None:
+            self.check_required_hparams_in_config(hparam_names, self.kernel_config)
+            signal_scale = self.kernel_config["signal_scale"]
+            length_scale = self.kernel_config["length_scale"]
+
+        else:
+            self.check_required_hparams_in_config(hparam_names, self.kernel_config)
+            signal_scale = kwargs["signal_scale"]
+            length_scale = kwargs["length_scale"]
+            
+        length_scale = length_scale[None, :]
+        chex.assert_rank(length_scale, 2)
+
+        return signal_scale, length_scale
+
+    def feature_fn(self, key: chex.PRNGKey, n_features: int, x: Array, recompute: bool = False, **kwargs):
 
         M = n_features
         D = x.shape[-1]
 
-        signal_scale = self.kernel_config["signal_scale"]
-        length_scale = self.kernel_config["length_scale"]
-        
-        # TODO: When gradient is called over lengthscale, it is no longer a scalar...
-        # if not jnp.isscalar(length_scale) or length_scale.shape[0] != 1:
-        #     length_scale = length_scale[None, :]
+        signal_scale, length_scale = self._get_hparams(["signal_scale", "length_scale"], kwargs)
 
         if recompute or self.omega is None or self.phi is None:
             # compute single random Fourier feature for RBF kernel
@@ -65,16 +73,7 @@ class Kernel:
 class RBFKernel(Kernel):
     @partial(jax.jit, static_argnums=(0,))
     def kernel_fn(self, x: Array, y: Array, **kwargs):
-        
-        # TODO: Wrap this logic into a fn that either takes kwargs or self.kernel_config for hparams.
-        if "signal_scale" not in kwargs and "length_scale" not in kwargs:
-            self.check_required_hparams_in_config(["signal_scale", "length_scale"], self.kernel_config)
-
-            signal_scale = self.kernel_config["signal_scale"]
-            length_scale = self.kernel_config["length_scale"]
-        else:
-            signal_scale = kwargs["signal_scale"]
-            length_scale = kwargs["length_scale"]
+        signal_scale, length_scale = self._get_hparams(["signal_scale", "length_scale"], kwargs)
 
         return (signal_scale**2) * jnp.exp(-0.5 * self._sq_dist(x, y, length_scale))
 
@@ -84,17 +83,23 @@ class RBFKernel(Kernel):
 
 class MaternKernel(Kernel):
     @partial(jax.jit, static_argnums=(0,))
-    def kernel_fn(self, x: Array, y: Array):
-
-        self.check_required_hparams_in_config(
-            ["signal_scale", "length_scale"], self.kernel_config
-        )
-
-        signal_scale = self.kernel_config["signal_scale"]
-        length_scale = self.kernel_config["length_scale"]
+    def kernel_fn(self, x: Array, y: Array, **kwargs):
+        signal_scale, length_scale = self._get_hparams(["signal_scale", "length_scale"], kwargs)
 
         sq_dist = self._sq_dist(x, y, length_scale)
+        # breakpoint()
+        
+        # sq_dist = sq_dist.at(sq_dist < 1e-10).set(0.0)
+        # dist = jnp.sqrt(jnp.where(sq_dist < 1e-6, 0.0, sq_dist))
+        # dist = jnp.where(sq_dist < 1e-6, 0.0, jnp.sqrt(sq_dist))
+        sq_dist = jnp.clip(sq_dist, a_min=1e-10, a_max=None)
+        # dist[sq_dist < 1e-10] = 0.0
         dist = jnp.sqrt(sq_dist)
+        # dist = jnp.linalg.norm(x[:, None] / length_scale - y[None, :] / length_scale, ord=2, axis=-1)
+        # dist = jnp.exp(0.5 * jnp.log(sq_dist))
+        # Assert 0 distance at diagonal
+        # dist = dist.at[jnp.diag_indices(min(dist.shape))].set(0.)
+        # breakpoint()
 
         normaliser = self._normaliser(dist, sq_dist)
         exponential_term = jnp.exp(-jnp.sqrt(self._df()) * dist)
@@ -132,4 +137,3 @@ class Matern52Kernel(MaternKernel):
     
     def _normaliser(self, dist: Array, sq_dist: Array):
         return jnp.sqrt(5.0) * dist + (5.0 / 3.0) * sq_dist + 1.0 
-   
