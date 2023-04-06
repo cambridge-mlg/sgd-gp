@@ -87,19 +87,9 @@ class MaternKernel(Kernel):
         signal_scale, length_scale = self._get_hparams(["signal_scale", "length_scale"], kwargs)
 
         sq_dist = self._sq_dist(x, y, length_scale)
-        # breakpoint()
-        
-        # sq_dist = sq_dist.at(sq_dist < 1e-10).set(0.0)
-        # dist = jnp.sqrt(jnp.where(sq_dist < 1e-6, 0.0, sq_dist))
-        # dist = jnp.where(sq_dist < 1e-6, 0.0, jnp.sqrt(sq_dist))
         sq_dist = jnp.clip(sq_dist, a_min=1e-10, a_max=None)
-        # dist[sq_dist < 1e-10] = 0.0
+
         dist = jnp.sqrt(sq_dist)
-        # dist = jnp.linalg.norm(x[:, None] / length_scale - y[None, :] / length_scale, ord=2, axis=-1)
-        # dist = jnp.exp(0.5 * jnp.log(sq_dist))
-        # Assert 0 distance at diagonal
-        # dist = dist.at[jnp.diag_indices(min(dist.shape))].set(0.)
-        # breakpoint()
 
         normaliser = self._normaliser(dist, sq_dist)
         exponential_term = jnp.exp(-jnp.sqrt(self._df()) * dist)
