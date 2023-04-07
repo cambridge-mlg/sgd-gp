@@ -97,5 +97,6 @@ def get_config(config_string):
     config.wandb.project = "scalable-gps"
     config.wandb.entity = "shreyaspadhy"
     config.wandb.code_dir = "/home/shreyaspadhy_gmail_com/scalable-gaussian-processes"
-
+    config.wandb.name = ""
+    
     return config

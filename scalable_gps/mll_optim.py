@@ -26,6 +26,7 @@ def main(config):
     wandb_kwargs = {
         "project": config.wandb.project,
         "entity": config.wandb.entity,
+        "name": config.wandb.name if config.wandb.name else None,
         "config": flatten_nested_dict(config.to_dict()),
         "mode": "online" if config.wandb.log else "disabled",
         "settings": wandb.Settings(code_dir=config.wandb.code_dir),
@@ -64,7 +65,7 @@ def main(config):
 
         # Use wandb artifacts to save model hparams for a given dataset split and subsample_idx.
         hparams_artifact = wandb.Artifact(
-            f"hparams_{config.dataset_name}_{config.mll_config.subsample_seed}_{config.dataset_config.split}", type="hparams",
+            f"hparams_{config.dataset_name}_{config.dataset_config.split}_{config.mll_config.subsample_seed}", type="hparams",
             description=f"Model hparams for {config.dataset_name} dataset with subsample seed {config.mll_config.subsample_seed} on split {config.dataset_config.split}.",
             metadata={**{"dataset_name": config.dataset_name, "split": config.dataset_config.split}, **config.mll_config},)
         
@@ -74,6 +75,13 @@ def main(config):
         wandb.log_artifact(hparams_artifact)
 
 if __name__ == "__main__":
+    import os
+    import sys
+
+    if sys.argv:
+        sys.argv[0]
+        os.environ["WANDB_API_KEY"] = sys.argv[0]
+        
     # Adds jax flags to the program.
     jax.config.config_with_absl()
 

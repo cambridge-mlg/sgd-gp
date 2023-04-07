@@ -15,7 +15,7 @@ def solve_K_inv_v(K: Array, v: Array, noise_scale: float):
     return jax.scipy.linalg.solve(K + (noise_scale**2) * jnp.identity(v.shape[0]), v, assume_a='pos')
 
 
-@partial(jax.jit, static_argnums=(3, 4))
+@partial(jax.jit, static_argnums=(3,))
 def KvP(x1: Array, x2: Array, v: Array, kernel_fn: Kernel_fn, **kernel_kwargs):
     """Calculates K(x_pred, x_train) @ v, with the kernel matrix between x_pred and x_train."""
     # TODO: Minibatch over x_pred potentially, to prevent memory blow up.
