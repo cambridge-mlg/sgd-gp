@@ -62,7 +62,7 @@ def main(config):
         print(f"test_rmse_exact = {test_rmse_exact}")
         wandb.log({"test_rmse": test_rmse_exact,
                    "normalised_test_rmse": normalised_test_rmse,
-                   "mll": mll})
+                   "mll": mll / train_ds.N})
 
 if __name__ == "__main__":
     # Adds jax flags to the program.

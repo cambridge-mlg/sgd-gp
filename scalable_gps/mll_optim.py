@@ -1,4 +1,6 @@
 
+import pickle
+
 import jax
 import jax.numpy as jnp
 import jax.random as jr
@@ -41,11 +43,11 @@ def main(config):
         print(f"train_ds.y.shape: {train_ds.y.shape}")
         
         train_subsample_key, test_subsample_key = jr.split(jr.PRNGKey(config.mll_config.subsample_seed))
-        train_ds = subsample(train_subsample_key, train_ds, config.mll_config.n_subsample)
+        subsampled_train_ds = subsample(train_subsample_key, train_ds, config.mll_config.n_subsample)
         test_ds = subsample(test_subsample_key, test_ds, config.mll_config.n_subsample)
 
-        print(f"subsampled train_ds.x.shape: {train_ds.x.shape}")
-        print(f"subsampled train_ds.y.shape: {train_ds.y.shape}")
+        print(f"subsampled train_ds.x.shape: {subsampled_train_ds.x.shape}")
+        print(f"subsampled train_ds.y.shape: {subsampled_train_ds.y.shape}")
 
         hparams = HparamsTuple(
             length_scale=jnp.array(config.mll_config.init_length_scale),
@@ -58,8 +60,18 @@ def main(config):
         exact_model = ExactGPModel(hparams.noise_scale, kernel)
 
         hparams = exact_model.compute_mll_optim(
-            hparams, train_ds, config.mll_config, test_ds, transform=jax.nn.softplus)
+            hparams, subsampled_train_ds, config.mll_config, test_ds, train_ds, transform=jax.nn.softplus, perform_eval=True,)
 
+        # Use wandb artifacts to save model hparams for a given dataset split and subsample_idx.
+        hparams_artifact = wandb.Artifact(
+            f"hparams_{config.dataset_name}_{config.mll_config.subsample_seed}_{config.dataset_config.split}", type="hparams",
+            description=f"Model hparams for {config.dataset_name} dataset with subsample seed {config.mll_config.subsample_seed} on split {config.dataset_config.split}.",
+            metadata={**{"dataset_name": config.dataset_name, "split": config.dataset_config.split}, **config.mll_config},)
+        
+        with hparams_artifact.new_file("hparams.pkl", "wb") as f:
+            pickle.dump(hparams, f)
+            
+        wandb.log_artifact(hparams_artifact)
 
 if __name__ == "__main__":
     # Adds jax flags to the program.

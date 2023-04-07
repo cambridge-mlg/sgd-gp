@@ -37,7 +37,7 @@ def get_config(config_string):
     config.dataset_config = ml_collections.ConfigDict()
     config.dataset_config = get_dataset_config(config.dataset_name)
 
-
+    config.dataset_config.split = 0
     config.dataset_config.normalise = True
 
     # Kernel Configs
@@ -80,7 +80,7 @@ def get_config(config_string):
     
     config.mll_config = ml_collections.ConfigDict()
     config.mll_config.learning_rate = 0.1
-    config.mll_config.iterations = 300
+    config.mll_config.iterations = 150
     
     config.mll_config.init_length_scale = length_scale_dim * [0.]
 

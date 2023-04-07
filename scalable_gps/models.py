@@ -194,8 +194,15 @@ class ExactGPModel(GPModel):
         
         return jax.jit(_fn)
 
-    def compute_mll_optim(self, init_hparams: HparamsTuple, train_ds: Dataset, config: ml_collections.ConfigDict, test_ds,
-                          transform: Optional[Callable] = None):
+    def compute_mll_optim(
+        self, 
+        init_hparams: HparamsTuple, 
+        train_ds: Dataset, 
+        config: ml_collections.ConfigDict, 
+        test_ds,
+        full_train_ds: Optional[Dataset] = None, 
+        transform: Optional[Callable] = None, 
+        perform_eval: bool = True):
         
         log_hparams = init_hparams
 
@@ -219,31 +226,33 @@ class ExactGPModel(GPModel):
             # TODO: Cleanup eval if needed.
             ############################### EVAL METRICS ##################################
             # Populate evaluation metrics etc.
-            K = self.kernel.kernel_fn(
-                train_ds.x, train_ds.x, length_scale=hparams.length_scale, signal_scale=hparams.signal_scale)
+            if perform_eval:
+                eval_train_ds = full_train_ds if full_train_ds is not None else train_ds
+                K = self.kernel.kernel_fn(
+                    eval_train_ds.x, eval_train_ds.x, length_scale=hparams.length_scale, signal_scale=hparams.signal_scale)
 
-            # Compute the representer weights by solving alpha = (K + sigma^2 I)^{-1} y
-            alpha = solve_K_inv_v(K, train_ds.y, noise_scale=hparams.noise_scale)
+                # Compute the representer weights by solving alpha = (K + sigma^2 I)^{-1} y
+                alpha = solve_K_inv_v(K, eval_train_ds.y, noise_scale=hparams.noise_scale)
 
-            y_pred_test = KvP(
-                test_ds.x, train_ds.x, alpha, kernel_fn=self.kernel.kernel_fn, 
-                length_scale=hparams.length_scale, signal_scale=hparams.signal_scale)
-        
-            test_rmse = RMSE(test_ds.y, y_pred_test, mu=train_ds.mu_y, sigma=train_ds.sigma_y)
+                y_pred_test = KvP(
+                    test_ds.x, eval_train_ds.x, alpha, kernel_fn=self.kernel.kernel_fn, 
+                    length_scale=hparams.length_scale, signal_scale=hparams.signal_scale)
             
-            normalised_test_rmse = RMSE(test_ds.y, y_pred_test)
-            
-            iterator.set_description(f"Loss: {loss_val:.4f}")
-            eval_metrics = {
-                "mll": -loss_val, 
-                "signal_scale": hparams.signal_scale, 
-                "length_scale": hparams.length_scale,
-                "noise_scale": hparams.noise_scale,
-                "test_rmse": test_rmse,
-                "normalised_test_rmse": normalised_test_rmse,}
+                test_rmse = RMSE(test_ds.y, y_pred_test, mu=eval_train_ds.mu_y, sigma=eval_train_ds.sigma_y)
+                
+                normalised_test_rmse = RMSE(test_ds.y, y_pred_test)
+                
+                iterator.set_description(f"Loss: {loss_val:.4f}")
+                eval_metrics = {
+                    "mll": -loss_val / eval_train_ds.N, 
+                    "signal_scale": hparams.signal_scale, 
+                    "length_scale": hparams.length_scale,
+                    "noise_scale": hparams.noise_scale,
+                    "test_rmse": test_rmse,
+                    "normalised_test_rmse": normalised_test_rmse,}
 
-            if wandb.run is not None:
-                wandb.log({**eval_metrics, **{'mll_train_step': i}})
+                if wandb.run is not None:
+                    wandb.log({**eval_metrics, **{'mll_train_step': i}})
             #########################################################################
 
         print("Final hyperparameters: ", hparams)
