@@ -10,14 +10,18 @@ def get_dataset_config(name):
         config.n_test = 500
         config.n_per_period = 100
         config.seed = 42
+        config.input_dim = 1
     elif name in all_datasets.keys():
-        pass
+        config.input_dim = all_datasets[name][-1]
+        config.noise_scale = 1.0
 
     return config
 
 
-def get_config():
+def get_config(config_string):
     config = ml_collections.ConfigDict()
+
+    d_name = config_string.split(".")[0]
 
     # Saving configs
     config.save_dir = "results/toy_sin"
@@ -28,17 +32,22 @@ def get_config():
     config.use_tpu = True
 
     # Data Configs
-    config.dataset_name = "toy_sin"
+    config.dataset_name = d_name
 
     config.dataset_config = ml_collections.ConfigDict()
     config.dataset_config = get_dataset_config(config.dataset_name)
 
+
     config.dataset_config.normalise = True
 
     # Kernel Configs
+    config.kernel_name = "Matern32Kernel"
     config.kernel_config = ml_collections.ConfigDict()
-    config.kernel_config.signal_scale = 1.0
-    config.kernel_config.length_scale = 1.0
+    config.kernel_config.use_ard = True
+    config.kernel_config.signal_scale = 1.
+    
+    length_scale_dim = config.dataset_config.input_dim if config.kernel_config.use_ard else 1
+    config.kernel_config.length_scale = length_scale_dim * [1.]
 
     config.train_config = ml_collections.ConfigDict()
 
@@ -68,6 +77,19 @@ def get_config():
     config.sampling_config.recompute_features = True
     config.sampling_config.loss_objective = 2
     config.sampling_config.use_cholesky_prior_sample = False
+    
+    config.mll_config = ml_collections.ConfigDict()
+    config.mll_config.learning_rate = 0.1
+    config.mll_config.iterations = 300
+    
+    config.mll_config.init_length_scale = length_scale_dim * [0.]
+
+    config.mll_config.init_signal_scale = 0.
+    config.mll_config.init_noise_scale = 0.
+    
+    config.mll_config.subsample_seed = 0
+    config.mll_config.n_subsample = 10000
+
 
     # Wandb Configs
     config.wandb = ml_collections.ConfigDict()

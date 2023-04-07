@@ -6,7 +6,7 @@ import jax
 import jax.numpy as jnp
 import jax.random as jr
 from chex import Array
-from utils import TargetTuple
+from utils import HparamsTuple, TargetTuple
 
 
 def error(params: Array, idx: Array, x: Array, target: Array, kernel_fn: Callable):
@@ -40,6 +40,32 @@ def loss_fn(params: Array, idx: Array, x: Array, features:Array, target_tuple: T
     
     return err + reg, err, reg
 
+
+def marginal_likelihood(x: Array, targets: Array, kernel_fn: Callable, hparams_tuple: HparamsTuple, 
+                        transform: Optional[Callable] = None):
+    N = targets.shape[0]
+    
+    if transform:
+        signal_scale = transform(hparams_tuple.signal_scale)
+        length_scale = transform(hparams_tuple.length_scale)
+        noise_scale = transform(hparams_tuple.noise_scale)
+    else:
+        signal_scale = hparams_tuple.signal_scale
+        length_scale = hparams_tuple.length_scale
+        noise_scale = hparams_tuple.noise_scale
+    
+    K_train = kernel_fn(x, x, signal_scale=signal_scale, length_scale=length_scale)
+    K = K_train + (noise_scale**2) * jnp.identity(N)
+    K_cho_factor, lower = jax.scipy.linalg.cho_factor(K)
+
+    data_fit_term = -0.5 * jnp.dot(
+        targets, jax.scipy.linalg.cho_solve((K_cho_factor, lower), targets))
+    
+    log_det_term = -jnp.log(jnp.diag(K_cho_factor)).sum()
+    
+    const_term = - (N / 2.) * jnp.log(2. * jnp.pi)
+    
+    return data_fit_term + log_det_term + const_term
 
 @partial(jax.jit, backend='cpu')
 def exact_solution(targets, K, noise_scale):

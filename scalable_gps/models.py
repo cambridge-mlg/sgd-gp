@@ -1,4 +1,4 @@
-from typing import List, Optional
+from typing import Callable, List, Optional
 
 import chex
 import eval_utils
@@ -12,10 +12,12 @@ import sampling_utils
 import wandb
 from chex import Array
 from data import Dataset
+from eval_utils import RMSE
 from kernels import Kernel
 from linalg_utils import KvP, solve_K_inv_v
+from linear_model import marginal_likelihood
 from tqdm import tqdm
-from utils import ExactMetricsTuple, TargetTuple
+from utils import ExactMetricsTuple, HparamsTuple, TargetTuple, get_gpu_or_cpu_device
 
 
 class GPModel:
@@ -87,7 +89,7 @@ class GPModel:
                 recompute=recompute, 
                 x=train_ds.x)
         
-        return jax.jit(_fn)
+        return jax.jit(_fn)    
 
 
 class ExactGPModel(GPModel):
@@ -174,6 +176,79 @@ class ExactGPModel(GPModel):
 
         return posterior_samples, alpha_samples
 
+    def get_mll_loss_fn(self, train_ds: Dataset, kernel_fn: Callable, transform: Optional[Callable] = None):
+        """Factory function that wraps mll_loss_fn so that it is jittable."""
+        def _fn(log_hparams):
+
+            return -marginal_likelihood(train_ds.x, train_ds.y, kernel_fn, hparams_tuple=log_hparams, transform=transform)
+        
+        return jax.jit(_fn, device=get_gpu_or_cpu_device())
+    
+    def get_mll_update_fn(self, mll_loss_fn, optimizer):
+        """Factory function that wraps mll_update_fn so that it is jittable."""
+        def _fn(log_hparams, opt_state):
+            value, grad = jax.value_and_grad(mll_loss_fn)(log_hparams)
+            # print(grad)
+            updates, opt_state = optimizer.update(grad, opt_state)
+            return value, optax.apply_updates(log_hparams, updates), opt_state
+        
+        return jax.jit(_fn)
+
+    def compute_mll_optim(self, init_hparams: HparamsTuple, train_ds: Dataset, config: ml_collections.ConfigDict, test_ds,
+                          transform: Optional[Callable] = None):
+        
+        log_hparams = init_hparams
+
+        optimizer = optax.adam(learning_rate=config.learning_rate)
+        opt_state = optimizer.init(log_hparams)
+        
+        loss_fn = self.get_mll_loss_fn(train_ds, self.kernel.kernel_fn, transform=transform)
+        update_fn = self.get_mll_update_fn(loss_fn, optimizer)
+        
+        iterator = tqdm(range(config.iterations))
+        for i in iterator:
+            loss_val, log_hparams, opt_state = update_fn(log_hparams, opt_state)
+
+            hparams = log_hparams
+            if transform is not None:
+                hparams = HparamsTuple(
+                    length_scale=transform(log_hparams.length_scale),
+                    signal_scale=transform(log_hparams.signal_scale),
+                    noise_scale=transform(log_hparams.noise_scale),)
+                
+            # TODO: Cleanup eval if needed.
+            ############################### EVAL METRICS ##################################
+            # Populate evaluation metrics etc.
+            K = self.kernel.kernel_fn(
+                train_ds.x, train_ds.x, length_scale=hparams.length_scale, signal_scale=hparams.signal_scale)
+
+            # Compute the representer weights by solving alpha = (K + sigma^2 I)^{-1} y
+            alpha = solve_K_inv_v(K, train_ds.y, noise_scale=hparams.noise_scale)
+
+            y_pred_test = KvP(
+                test_ds.x, train_ds.x, alpha, kernel_fn=self.kernel.kernel_fn, 
+                length_scale=hparams.length_scale, signal_scale=hparams.signal_scale)
+        
+            test_rmse = RMSE(test_ds.y, y_pred_test, mu=train_ds.mu_y, sigma=train_ds.sigma_y)
+            
+            normalised_test_rmse = RMSE(test_ds.y, y_pred_test)
+            
+            iterator.set_description(f"Loss: {loss_val:.4f}")
+            eval_metrics = {
+                "mll": -loss_val, 
+                "signal_scale": hparams.signal_scale, 
+                "length_scale": hparams.length_scale,
+                "noise_scale": hparams.noise_scale,
+                "test_rmse": test_rmse,
+                "normalised_test_rmse": normalised_test_rmse,}
+
+            if wandb.run is not None:
+                wandb.log({**eval_metrics, **{'mll_train_step': i}})
+            #########################################################################
+
+        print("Final hyperparameters: ", hparams)
+        
+        return hparams
 
 class SGDGPModel(GPModel):
     def __init__(self, noise_scale: float, kernel: Kernel, **kwargs):

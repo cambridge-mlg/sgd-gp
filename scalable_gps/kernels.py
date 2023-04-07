@@ -1,4 +1,5 @@
 from functools import partial
+from typing import List, Optional
 
 import chex
 import jax
@@ -20,34 +21,43 @@ class Kernel:
                     f"Required hyperparameter '{hparam}' must be present in config dict"
                 )
 
-    def kernel_fn(self, x: Array, y: Array):
+    def kernel_fn(self, x: Array, y: Array, **kwargs):
         raise NotImplementedError("Subclasses should implement this method.")
     
     def omega_fn(self, key: chex.PRNGKey, n_input_dims: int, n_features: int):
         raise NotImplementedError("Subclasses should implement this method.")
     
     def phi_fn(self, key: chex.PRNGKey, n_features: int):
-        return jr.uniform(key, shape=(1, n_features), minval=-jnp.pi, maxval=jnp.pi)
+        return jr.uniform(key=key, shape=(1, n_features), minval=-jnp.pi, maxval=jnp.pi)
     
     def _sq_dist(self, x: Array, y: Array, length_scale: Array):
-        if not jnp.isscalar(length_scale):
-            length_scale = length_scale[None, :]
-            
         x, y = x / length_scale, y / length_scale
+        
         return jnp.sum((x[:, None] - y[None, :]) ** 2, axis=-1)
-
-    def feature_fn(self, key: chex.PRNGKey, n_features: int, x: Array, recompute: bool = False):
     
-        self.check_required_hparams_in_config(["signal_scale", "length_scale"], self.kernel_config)
+    def _get_hparams(self, hparam_names: List[str], kwargs: Optional[dict],):
+        
+        if kwargs is None or not kwargs:
+            self.check_required_hparams_in_config(hparam_names, self.kernel_config)
+            signal_scale = self.kernel_config["signal_scale"]
+            length_scale = self.kernel_config["length_scale"]
+
+        else:
+            self.check_required_hparams_in_config(hparam_names, self.kernel_config)
+            signal_scale = kwargs["signal_scale"]
+            length_scale = kwargs["length_scale"]
+            
+        length_scale = length_scale[None, :]
+        chex.assert_rank(length_scale, 2)
+
+        return signal_scale, length_scale
+
+    def feature_fn(self, key: chex.PRNGKey, n_features: int, x: Array, recompute: bool = False, **kwargs):
 
         M = n_features
         D = x.shape[-1]
 
-        signal_scale = self.kernel_config["signal_scale"]
-        length_scale = self.kernel_config["length_scale"]
-        
-        if not jnp.isscalar(length_scale):
-            length_scale = length_scale[None, :]
+        signal_scale, length_scale = self._get_hparams(["signal_scale", "length_scale"], kwargs)
 
         if recompute or self.omega is None or self.phi is None:
             # compute single random Fourier feature for RBF kernel
@@ -62,12 +72,8 @@ class Kernel:
 
 class RBFKernel(Kernel):
     @partial(jax.jit, static_argnums=(0,))
-    def kernel_fn(self, x: Array, y: Array):
-
-        self.check_required_hparams_in_config(["signal_scale", "length_scale"], self.kernel_config)
-
-        signal_scale = self.kernel_config["signal_scale"]
-        length_scale = self.kernel_config["length_scale"]
+    def kernel_fn(self, x: Array, y: Array, **kwargs):
+        signal_scale, length_scale = self._get_hparams(["signal_scale", "length_scale"], kwargs)
 
         return (signal_scale**2) * jnp.exp(-0.5 * self._sq_dist(x, y, length_scale))
 
@@ -77,16 +83,12 @@ class RBFKernel(Kernel):
 
 class MaternKernel(Kernel):
     @partial(jax.jit, static_argnums=(0,))
-    def kernel_fn(self, x: Array, y: Array):
-
-        self.check_required_hparams_in_config(
-            ["signal_scale", "length_scale"], self.kernel_config
-        )
-
-        signal_scale = self.kernel_config["signal_scale"]
-        length_scale = self.kernel_config["length_scale"]
+    def kernel_fn(self, x: Array, y: Array, **kwargs):
+        signal_scale, length_scale = self._get_hparams(["signal_scale", "length_scale"], kwargs)
 
         sq_dist = self._sq_dist(x, y, length_scale)
+        sq_dist = jnp.clip(sq_dist, a_min=1e-10, a_max=None)
+
         dist = jnp.sqrt(sq_dist)
 
         normaliser = self._normaliser(dist, sq_dist)
@@ -125,4 +127,3 @@ class Matern52Kernel(MaternKernel):
     
     def _normaliser(self, dist: Array, sq_dist: Array):
         return jnp.sqrt(5.0) * dist + (5.0 / 3.0) * sq_dist + 1.0 
-   

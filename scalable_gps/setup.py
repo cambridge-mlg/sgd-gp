@@ -1,9 +1,8 @@
 from os import path
 
-from setuptools import find_packages, setup
-
 # try:  # for pip >= 10
 from pip._internal.req import parse_requirements
+from setuptools import find_packages, setup
 
 # except ImportError:  # for pip <= 9.0.3
 #     from pip.req import parse_requirements
@@ -18,7 +17,7 @@ except:
     reqs = [str(ir.requirement) for ir in install_reqs]
 
 git_reqs = [
-    # "jaxutils @ git+https://github.com/shreyaspadhy/jaxutils"
+    "uci_datasets @ git+https://github.com/treforevans/uci_datasets.git"
 ]
 
 

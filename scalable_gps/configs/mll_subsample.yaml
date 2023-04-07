@@ -1,0 +1,15 @@
+entity: shreyaspadhy
+project: scalable-gps
+program: mll_optim.py
+
+method: grid
+parameters:
+  mll_config.subsample_seed:
+    values: [0, 1, 2, 3, 4]
+
+command:
+  - python
+  - ${program}
+  - --config
+  - configs/default.py:protein
+  - --config.wandb.log

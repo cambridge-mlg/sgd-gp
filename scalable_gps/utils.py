@@ -1,6 +1,6 @@
 import os
 from collections.abc import MutableMapping
-from typing import NamedTuple, Optional
+from typing import NamedTuple, Optional, Union
 
 import jax
 import jax.numpy as jnp
@@ -25,6 +25,17 @@ class ExactSamplesTuple(NamedTuple):
     alpha_map: Array
     f0_sample_test: Array
 
+
+class HparamsTuple(NamedTuple):
+    noise_scale: float
+    signal_scale: float
+    length_scale: Union[float, Array]
+
+def get_gpu_or_cpu_device():
+    if jax.default_backend() == "gpu":
+        return jax.devices('gpu')[0]
+    else:
+        return jax.devices('cpu')[0]
 
 def apply_z_score(data: Array, mu: Optional[Array]=None, sigma: Optional[Array]=None):
     if (mu is not None) and (sigma is not None):
