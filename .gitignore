@@ -133,6 +133,7 @@ hyperparams/
 metrics/
 plots/
 traces/
+logs/
 typings
 .vscode
 .ruff_cache

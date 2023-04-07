@@ -8,6 +8,7 @@
 # Batch job mode: pass a file with first the job tag and second the commands per line
 
 #SBATCH -A T2-CS117-CPU
+#SBATCH --mem-per-cpu=64G
 #SBATCH --mail-type=FAIL
 #SBATCH -p icelake
 
@@ -46,8 +47,6 @@ echo "Current directory: `pwd`"
 echo -e "\nPrinting some test variables\n"
 echo "PATH"
 echo "$PATH"
-echo "nvidia-smi"
-nvidia-smi
 
 
 ######################################

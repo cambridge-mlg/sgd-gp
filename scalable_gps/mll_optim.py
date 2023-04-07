@@ -29,7 +29,7 @@ def main(config):
         "name": config.wandb.name if config.wandb.name else None,
         "config": flatten_nested_dict(config.to_dict()),
         "mode": "online" if config.wandb.log else "disabled",
-        "settings": wandb.Settings(code_dir=config.wandb.code_dir),
+        "settings": wandb.Settings(code_dir=config.wandb.code_dir)
     }
     with wandb.init(**wandb_kwargs) as run:
         setup_training(run)
@@ -42,13 +42,17 @@ def main(config):
         
         print(f"train_ds.x.shape: {train_ds.x.shape}")
         print(f"train_ds.y.shape: {train_ds.y.shape}")
+        print(f"test_ds.x.shape: {test_ds.x.shape}")
+        print(f"test_ds.y.shape: {test_ds.y.shape}")
         
         train_subsample_key, test_subsample_key = jr.split(jr.PRNGKey(config.mll_config.subsample_seed))
-        subsampled_train_ds = subsample(train_subsample_key, train_ds, config.mll_config.n_subsample)
+        train_ds = subsample(train_subsample_key, train_ds, config.mll_config.n_subsample)
         test_ds = subsample(test_subsample_key, test_ds, config.mll_config.n_subsample)
 
-        print(f"subsampled train_ds.x.shape: {subsampled_train_ds.x.shape}")
-        print(f"subsampled train_ds.y.shape: {subsampled_train_ds.y.shape}")
+        print(f"subsampled train_ds.x.shape: {train_ds.x.shape}")
+        print(f"subsampled train_ds.y.shape: {train_ds.y.shape}")
+        print(f"subsampled test_ds.x.shape: {test_ds.x.shape}")
+        print(f"subsampled test_ds.y.shape: {test_ds.y.shape}")
 
         hparams = HparamsTuple(
             length_scale=jnp.array(config.mll_config.init_length_scale),
@@ -61,7 +65,7 @@ def main(config):
         exact_model = ExactGPModel(hparams.noise_scale, kernel)
 
         hparams = exact_model.compute_mll_optim(
-            hparams, subsampled_train_ds, config.mll_config, test_ds, train_ds, transform=jax.nn.softplus, perform_eval=True,)
+            hparams, train_ds, config.mll_config, test_ds, None, transform=jax.nn.softplus, perform_eval=True)
 
         # Use wandb artifacts to save model hparams for a given dataset split and subsample_idx.
         hparams_artifact = wandb.Artifact(
@@ -79,8 +83,9 @@ if __name__ == "__main__":
     import sys
 
     if sys.argv:
-        sys.argv[0]
-        os.environ["WANDB_API_KEY"] = sys.argv[0]
+        # pass wandb API as argv[1] and set environment variable
+        # 'python mll_optim.py MY_API_KEY'
+        os.environ["WANDB_API_KEY"] = sys.argv[1]
         
     # Adds jax flags to the program.
     jax.config.config_with_absl()

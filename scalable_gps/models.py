@@ -226,7 +226,7 @@ class ExactGPModel(GPModel):
             # TODO: Cleanup eval if needed.
             ############################### EVAL METRICS ##################################
             # Populate evaluation metrics etc.
-            if perform_eval:
+            if perform_eval and ((i == 0) or ((i + 1) % config.eval_every == 0) or (i == (config.iterations - 1))):
                 eval_train_ds = full_train_ds if full_train_ds is not None else train_ds
                 K = self.kernel.kernel_fn(
                     eval_train_ds.x, eval_train_ds.x, length_scale=hparams.length_scale, signal_scale=hparams.signal_scale)

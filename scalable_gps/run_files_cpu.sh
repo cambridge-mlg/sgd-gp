@@ -24,7 +24,7 @@ for FILE in $1*; do
     # Set/determine number of jobs to run in parallel
     jobs_in_parallel=auto
 
-    max_n_cpus=360
+    max_n_cpus=300
     if [ "$jobs_in_parallel" = "auto" ]; then
         max_n_jobs=$(($max_n_cpus / $cpus))
         # this computes min(max_n_jobs, n_jobs); see https://unix.stackexchange.com/a/186703

@@ -80,7 +80,8 @@ def get_config(config_string):
     
     config.mll_config = ml_collections.ConfigDict()
     config.mll_config.learning_rate = 0.1
-    config.mll_config.iterations = 150
+    config.mll_config.iterations = 300
+    config.mll_config.eval_every = 1
     
     config.mll_config.init_length_scale = length_scale_dim * [0.]
 
