@@ -65,9 +65,9 @@ def get_config(config_string):
     config.train_config.nesterov = True
     config.train_config.polyak = 1e-3
 
-    config.train_config.absolute_clipping = 0.1  # None to avoid clipping
+    config.train_config.absolute_clipping = None # 0.1  # None to avoid clipping
 
-    config.train_config.lr_schedule_name = "linear_schedule"
+    config.train_config.lr_schedule_name = None # "linear_schedule"
     config.train_config.lr_schedule_config = ml_collections.ConfigDict()
 
     if config.train_config.lr_schedule_name == "linear_schedule":
