@@ -52,7 +52,7 @@ def get_config(config_string):
     config.train_config = ml_collections.ConfigDict()
 
     # Full-batch training configs that get passed
-    config.train_config.learning_rate = 1e-2
+    config.train_config.learning_rate = 1e-3
     config.train_config.momentum = 0.9
     config.train_config.polyak = 1e-3
     config.train_config.iterations = 50000

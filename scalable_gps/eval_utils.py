@@ -100,6 +100,8 @@ def get_eval_fn(
             #     return grad_var_fn(params, grad_fn, B, train_ds, feature_fn)
             elif metric == "test_rmse":
                 return RMSE(test_ds.y, y_pred_test, mu=train_ds.mu_y, sigma=train_ds.sigma_y)
+            elif metric == "normalised_test_rmse":
+                return RMSE(test_ds.y, y_pred_test)
             elif metric == "alpha_diff":
                 return RMSE(alpha_exact, params)
             elif metric == "alpha_rkhs_diff":
