@@ -123,7 +123,7 @@ def get_lr_and_schedule(
 
             # Define LR Schedule
             lr = schedule(
-                init_value=optim_config.lr,
+                init_value=optim_config.learning_rate,
                 boundaries_and_scales=lr_boundaries_and_scales,
             )
         elif lr_schedule_name == "exponential_decay":
@@ -134,7 +134,7 @@ def get_lr_and_schedule(
 
             # Define LR Schedule
             lr = schedule(
-                init_value=optim_config.lr,
+                init_value=optim_config.learning_rate,
                 decay_rate=lr_schedule_config.decay_rate,
                 transition_steps=lr_schedule_config.transition_steps,
             )
@@ -149,7 +149,7 @@ def get_lr_and_schedule(
             # Define RL Schedule
             lr = schedule(
                 init_value=lr_schedule_config.init_value,
-                peak_value=optim_config.lr,
+                peak_value=optim_config.learning_rate,
                 warmup_steps=lr_schedule_config.warmup_steps,
                 transition_steps=lr_schedule_config.transition_steps,
                 decay_rate=lr_schedule_config.decay_rate,
@@ -163,7 +163,7 @@ def get_lr_and_schedule(
 
             # Define LR Schedule
             lr = schedule(
-                init_value=optim_config.lr,
+                init_value=optim_config.learning_rate,
                 end_value=lr_schedule_config.end_value,
                 transition_steps=lr_schedule_config.transition_steps,
             )
@@ -171,7 +171,7 @@ def get_lr_and_schedule(
             raise ValueError("Scheduler not supported")
     
     else:
-        lr = optim_config.lr
+        lr = optim_config.learning_rate
 
     optimizer = getattr(optax, optim_name)
     # optimizer = optax.inject_hyperparams(optimizer)
@@ -208,3 +208,19 @@ def get_lr_and_schedule(
         )
 
     return optimizer
+
+
+def get_lr(opt_state):
+    if isinstance(opt_state, optax.InjectHyperparamsState):
+        lr_to_log = opt_state.hyperparams["learning_rate"]
+    elif isinstance(opt_state, tuple):
+        for o_state in opt_state:
+            # print('test', type(o_state))
+            if isinstance(o_state, optax.InjectHyperparamsState):
+                lr_to_log = o_state.hyperparams["learning_rate"]
+            if isinstance(o_state, tuple):
+                for o_state2 in o_state:
+                    if isinstance(o_state2, optax.InjectHyperparamsState):
+                        lr_to_log = o_state2.hyperparams["learning_rate"]
+    
+    return lr_to_log
