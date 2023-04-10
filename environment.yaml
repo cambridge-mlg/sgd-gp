@@ -140,4 +140,4 @@ dependencies:
       - optax==0.1.4
       - toolz==0.12.0
       - uci-datasets==1.1.0
-      - https://storage.googleapis.com/jax-releases/libtpu_releases.html
+      - https://storage.googleapis.com/cloud-tpu-tpuvm-artifacts/wheels/libtpu-nightly/libtpu_nightly-0.1.dev20230410-py3-none-any.whl

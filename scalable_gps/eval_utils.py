@@ -67,9 +67,9 @@ def get_eval_fn(
         idx.shape[0]
         # Calculate all quantities of interest here, and each metric_fn gets passed all quantities.
         
+        y_pred_test = KvP(test_ds.x, train_ds.x, params, kernel_fn=kernel_fn)
         if exact_metrics is not None:
             alpha_exact, y_pred_exact, test_rmse_exact = exact_metrics
-            y_pred_test = KvP(test_ds.x, train_ds.x, params, kernel_fn=kernel_fn)
 
         if exact_samples is not None and vmap:
             # Exact samples needs to be vmapped, so we can access vmap_idx
