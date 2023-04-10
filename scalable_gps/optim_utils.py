@@ -1,8 +1,9 @@
-from typing import Callable
+from typing import Any, Callable, Optional
 
 import jax
 import jax.numpy as jnp
 import jax.random as jr
+import ml_collections
 import optax
 from chex import Array
 from linear_model import (
@@ -11,6 +12,7 @@ from linear_model import (
 )
 from utils import TargetTuple
 
+PyTree = Any
 
 def get_stochastic_gradient_fn(
     x: Array,
@@ -87,3 +89,122 @@ def get_iterative_idx_fn(batch_size: int, n_train: int):
         return idx
     # TODO: how to share same data for vmapped optimizers?
     return jax.jit(_fn)
+
+
+# Copied from https://github.com/shreyaspadhy/jaxutils/blob/29781a1ad835653e6709065d77eb1e90a8f60e1a/train/utils.py#L184
+def get_lr_and_schedule(
+    optim_name: str,
+    optim_config: ml_collections.ConfigDict,
+    lr_schedule_name: Optional[str],
+    lr_schedule_config: Optional[ml_collections.ConfigDict],
+    steps_per_epoch: Optional[int] = None,
+    model_mask: Optional[PyTree] = None,
+):
+    """Returns an optimizer with (optional lr_schedule)."""
+    if lr_schedule_name is not None and lr_schedule_config is not None:
+        schedule = getattr(optax, lr_schedule_name)
+        if lr_schedule_name == "piecewise_constant_schedule":
+            # Check required configs are present
+            required_configs = ["scales_per_epoch"]
+            if not all(name in lr_schedule_config for name in required_configs):
+                print(lr_schedule_config)
+                raise ValueError(f"{lr_schedule_name} requires {required_configs}")
+
+            # Convert scales_per_epoch from str to int, scale by train_loader
+            lr_boundaries_and_scales = {}
+            scales_per_epoch = lr_schedule_config.get("scales_per_epoch", None)
+            for k, v in scales_per_epoch.items():
+                boundary = int(k) * steps_per_epoch
+                lr_boundaries_and_scales[boundary] = v
+
+            lr_schedule_config.boundaries_and_scales = {
+                str(k): v for k, v in lr_boundaries_and_scales.items()
+            }
+
+            # Define LR Schedule
+            lr = schedule(
+                init_value=optim_config.lr,
+                boundaries_and_scales=lr_boundaries_and_scales,
+            )
+        elif lr_schedule_name == "exponential_decay":
+            # Check required configs are present
+            required_configs = ["decay_rate", "transition_steps"]
+            if not all(name in lr_schedule_config for name in required_configs):
+                raise ValueError(f"{lr_schedule_name} requires {required_configs}")
+
+            # Define LR Schedule
+            lr = schedule(
+                init_value=optim_config.lr,
+                decay_rate=lr_schedule_config.decay_rate,
+                transition_steps=lr_schedule_config.transition_steps,
+            )
+
+        elif lr_schedule_name == "warmup_exponential_decay_schedule":
+            # Check required configs are present
+            required_configs = ["init_value", "warmup_steps", "transition_steps",
+                                "decay_rate", "transition_begin",]
+            if not all(name in lr_schedule_config for name in required_configs):
+                raise ValueError(f"{lr_schedule_name} requires {required_configs}")
+            
+            # Define RL Schedule
+            lr = schedule(
+                init_value=lr_schedule_config.init_value,
+                peak_value=optim_config.lr,
+                warmup_steps=lr_schedule_config.warmup_steps,
+                transition_steps=lr_schedule_config.transition_steps,
+                decay_rate=lr_schedule_config.decay_rate,
+                transition_begin=lr_schedule_config.transition_begin,)
+
+        elif lr_schedule_name == "linear_schedule":
+            # Check required configs are present
+            required_configs = ["end_value", "transition_steps"]
+            if not all(name in lr_schedule_config for name in required_configs):
+                raise ValueError(f"{lr_schedule_name} requires {required_configs}")
+
+            # Define LR Schedule
+            lr = schedule(
+                init_value=optim_config.lr,
+                end_value=lr_schedule_config.end_value,
+                transition_steps=lr_schedule_config.transition_steps,
+            )
+        else:
+            raise ValueError("Scheduler not supported")
+    
+    else:
+        lr = optim_config.lr
+
+    optimizer = getattr(optax, optim_name)
+    # optimizer = optax.inject_hyperparams(optimizer)
+
+    use_nesterov = optim_config.get("nesterov", False)
+    weight_decay = optim_config.get("weight_decay", None)
+
+    absolute_clipping = optim_config.get("absolute_clipping", None)
+
+    if optim_name == "sgd":
+        optimizer = optax.inject_hyperparams(optax.sgd)(
+            learning_rate=lr, momentum=optim_config.momentum, nesterov=use_nesterov
+        )
+        if weight_decay is not None:
+            optimizer = optax.chain(
+                optimizer, optax.additive_weight_decay(weight_decay, model_mask)
+            )
+        
+
+    if optim_name == "adamw":
+        # If adamw, weight_decay is a passable parameter.
+        if weight_decay is None:
+            raise ValueError("weight_decay must be specified for adamw")
+        optimizer = optimizer(learning_rate=lr, weight_decay=weight_decay)
+
+    if optim_name == "adam":
+        optimizer = optimizer(learning_rate=lr)
+
+    if absolute_clipping is not None:
+        
+        optimizer = optax.chain(
+            optax.clip_by_global_norm(absolute_clipping),
+            optimizer
+        )
+
+    return optimizer
