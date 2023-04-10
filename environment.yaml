@@ -140,3 +140,4 @@ dependencies:
       - optax==0.1.4
       - toolz==0.12.0
       - uci-datasets==1.1.0
+      - https://storage.googleapis.com/jax-releases/libtpu_releases.html
