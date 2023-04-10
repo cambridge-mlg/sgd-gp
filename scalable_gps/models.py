@@ -16,6 +16,7 @@ from eval_utils import RMSE
 from kernels import Kernel
 from linalg_utils import KvP, solve_K_inv_v
 from linear_model import marginal_likelihood
+from optim_utils import get_lr, get_lr_and_schedule
 from tqdm import tqdm
 from utils import ExactMetricsTuple, HparamsTuple, TargetTuple, get_gpu_or_cpu_device
 
@@ -276,7 +277,10 @@ class SGDGPModel(GPModel):
         """Compute the representer weights alpha by solving alpha = (K + sigma^2 I)^{-1} y using SGD."""
         target_tuple = TargetTuple(error_target=train_ds.y, regularizer_target=jnp.zeros_like(train_ds.y))
         
-        optimizer = optax.sgd(learning_rate=config.learning_rate, momentum=config.momentum, nesterov=True)
+        # optimizer = optax.sgd(learning_rate=config.learning_rate, momentum=config.momentum, nesterov=True)
+        
+        optimizer = get_lr_and_schedule(
+            "sgd", config, config.lr_schedule_name, config.lr_schedule_config)
 
         # Define the gradient function
         grad_fn = optim_utils.get_stochastic_gradient_fn(train_ds.x, self.kernel.kernel_fn, self.noise_scale)
@@ -311,8 +315,11 @@ class SGDGPModel(GPModel):
 
             if i % config.eval_every == 0:
                 eval_metrics = eval_fn(alpha_polyak, idx, features, target_tuple)
+
+                lr_to_log = get_lr(opt_state)
+
                 if wandb.run is not None:
-                    wandb.log({**eval_metrics, **{'train_step': i}})
+                    wandb.log({**eval_metrics, **{'train_step': i, 'lr': lr_to_log}})
                 aux.append(eval_metrics)
 
         self.alpha = alpha_polyak

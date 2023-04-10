@@ -52,15 +52,31 @@ def get_config(config_string):
     config.train_config = ml_collections.ConfigDict()
 
     # Full-batch training configs that get passed
-    config.train_config.learning_rate = 1e-3
-    config.train_config.momentum = 0.9
-    config.train_config.polyak = 1e-3
     config.train_config.iterations = 50000
     config.train_config.batch_size = 4
     config.train_config.eval_every = 100
     # RFF Configs
     config.train_config.n_features_optim = 100
     config.train_config.recompute_features = True
+    
+    # Optimisation Configs
+    config.train_config.learning_rate = 1e-3
+    config.train_config.momentum = 0.9
+    config.train_config.nesterov = True
+    config.train_config.polyak = 1e-3
+
+    config.train_config.absolute_clipping = 0.1  # None to avoid clipping
+
+    config.train_config.lr_schedule_name = "linear_schedule"
+    config.train_config.lr_schedule_config = ml_collections.ConfigDict()
+
+    if config.train_config.lr_schedule_name == "linear_schedule":
+        config.train_config.lr_schedule_config.decay_rate = 1 / 33
+        config.train_config.lr_schedule_config.transition_steps = int(
+            config.train_config.iterations * 0.95
+        )  # I set this to N steps * 0.75
+        config.train_config.lr_schedule_config.end_value = config.train_config.learning_rate / 33
+
     
     config.sampling_config = config.train_config.copy_and_resolve_references()
     config.sampling_config.n_samples = 10
