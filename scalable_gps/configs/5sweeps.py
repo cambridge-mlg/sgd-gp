@@ -12,12 +12,12 @@ def get_config(config_string):
         
         config.kernel_config.signal_scale = 0.3939051330089569
         
-        config.kernel_config.noise_scale = 0.03657480329275131
+        config.dataset_config.noise_scale = 0.03657480329275131
     if config.dataset_name == "protein":
         config.kernel_config.length_scale = [0.39719116, 2.70550394, 0.8316101, 0.21243448, 0.37867384, 0.315153,
                                              0.12718033, 0.35584376, 0.27604335]
         config.kernel_config.signal_scale = 0.8629741787910461
-        config.kernel_config.noise_scale = 0.07735464163124561
+        config.dataset_config.noise_scale = 0.07735464163124561
         
     return config
     
