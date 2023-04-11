@@ -12,18 +12,19 @@ import sampling_utils
 import wandb
 from chex import Array
 from data import Dataset
-from eval_utils import RMSE
+from eval_utils import RMSE, LLH
 from kernels import Kernel
 from linalg_utils import KvP, solve_K_inv_v
 from linear_model import marginal_likelihood
 from optim_utils import get_lr, get_lr_and_schedule
 from tqdm import tqdm
-from utils import ExactMetricsTuple, HparamsTuple, TargetTuple, get_gpu_or_cpu_device
+from utils import ExactPredictionsTuple, HparamsTuple, TargetTuple, get_gpu_or_cpu_device
 
 
 class GPModel:
     def __init__(self, noise_scale: float, kernel: Kernel):
         self.alpha = None
+        self.y_pred = None
         self.K = None
         self.kernel = kernel
         self.noise_scale = noise_scale
@@ -31,12 +32,13 @@ class GPModel:
     def compute_representer_weights(self):
         raise NotImplementedError("compute_representer_weights() must be implemented in the derived class.")
 
-    def predictive_mean(self, train_ds: Dataset, test_ds: Dataset) -> Array:
+    def predictive_mean(self, train_ds: Dataset, test_ds: Dataset, recompute: bool = True) -> Array:
         if self.alpha is None:
             raise ValueError("alpha is None. Please call compute_representer_weights() first.")
-        y_pred = KvP(test_ds.x, train_ds.x, self.alpha, kernel_fn=self.kernel.kernel_fn)
+        if recompute or self.y_pred is None:
+            self.y_pred = KvP(test_ds.x, train_ds.x, self.alpha, kernel_fn=self.kernel.kernel_fn)
 
-        return y_pred  # (N_test, 1)
+        return self.y_pred  # (N_test, 1)
 
     def predictive_variance_samples(
         self, zero_mean_posterior_samples: Array, return_marginal_variance: bool = True) -> Array:
@@ -272,7 +274,7 @@ class SGDGPModel(GPModel):
         config: ml_collections.ConfigDict,
         metrics_list: List[str],
         metrics_prefix: str = "",
-        exact_metrics: Optional[ExactMetricsTuple] = None,
+        exact_metrics: Optional[ExactPredictionsTuple] = None,
     ):
         """Compute the representer weights alpha by solving alpha = (K + sigma^2 I)^{-1} y using SGD."""
         target_tuple = TargetTuple(error_target=train_ds.y, regularizer_target=jnp.zeros_like(train_ds.y))
@@ -286,7 +288,7 @@ class SGDGPModel(GPModel):
         grad_fn = optim_utils.get_stochastic_gradient_fn(train_ds.x, self.kernel.kernel_fn, self.noise_scale)
         update_fn = optim_utils.get_update_fn(grad_fn, optimizer, config.polyak, vmap=False)
         feature_fn = self.get_feature_fn(train_ds, config.n_features_optim, config.recompute_features)
-        idx_fn = optim_utils.get_uniform_idx_fn(config.batch_size, train_ds.N, vmap=False)
+        idx_fn = optim_utils.get_idx_fn(config.batch_size, train_ds.N, config.iterative_idx, vmap=False)
         
         eval_fn = eval_utils.get_eval_fn(
             metrics_list,
@@ -309,7 +311,7 @@ class SGDGPModel(GPModel):
         for i in tqdm(range(config.iterations)):
             key, idx_key, feature_key = jr.split(key, 3)
             features = feature_fn(feature_key)
-            idx = idx_fn(idx_key)
+            idx = idx_fn(i, idx_key)
 
             alpha, alpha_polyak, opt_state = update_fn(alpha, alpha_polyak, idx, features, opt_state, target_tuple)
 
@@ -363,12 +365,11 @@ class SGDGPModel(GPModel):
         grad_fn = optim_utils.get_stochastic_gradient_fn(train_ds.x, self.kernel.kernel_fn, self.noise_scale)
         update_fn = optim_utils.get_update_fn(grad_fn, optimizer, config.polyak, vmap=True)
         feature_fn = self.get_feature_fn(train_ds, config.n_features_optim, config.recompute_features)
-        idx_fn = optim_utils.get_uniform_idx_fn(config.batch_size, train_ds.N, vmap=False)
+        idx_fn = optim_utils.get_idx_fn(config.batch_size, train_ds.N, config.iterative_idx, vmap=False)
 
         # Call the vmapped functions
         f0_samples_train, f0_samples_test, eps0_samples = compute_prior_samples_fn(
             jr.split(prior_samples_key, n_samples))  # (n_samples, n_train), (n_samples, n_test), (n_samples, n_train)
-        
         
         if compare_exact:
             exact_gp = ExactGPModel(self.noise_scale, self.kernel)
@@ -407,13 +408,23 @@ class SGDGPModel(GPModel):
         for i in tqdm(range(config.iterations)):
             optim_key, idx_key, feature_key = jr.split(optim_key, 3)
             features = feature_fn(feature_key)
-            # idx = idx_fn(jr.split(idx_key, n_samples))
-            idx = idx_fn(idx_key)
+
+            idx = idx_fn(i, idx_key)
+
             alphas, alphas_polyak, opt_states = update_fn(alphas, alphas_polyak, idx, features, opt_states, target_tuples)
 
             if i % config.eval_every == 0:
                 vmapped_eval_metrics = eval_fn(alphas_polyak, idx, features, target_tuples)
-                wandb.log({**_process_vmapped_metrics(vmapped_eval_metrics), **{'sample_step': i}})
+
+                y_pred_loc = self.predictive_mean(train_ds, test_ds, recompute=False)
+                zero_mean_posterior_samples = compute_posterior_samples_fn(alphas_polyak, f0_samples_test)
+                y_pred_scale = self.predictive_variance_samples(zero_mean_posterior_samples)
+
+                llh = LLH(test_ds.y, y_pred_loc, y_pred_scale, mu=train_ds.mu_y, sigma=train_ds.sigma_y)
+                normalised_llh = LLH(test_ds.y, y_pred_loc, y_pred_scale)
+
+                wandb.log({**_process_vmapped_metrics(vmapped_eval_metrics),
+                           **{'test_llh': llh, 'normalised_test_llh': normalised_llh, 'sample_step': i}})
                 aux.append(vmapped_eval_metrics)
 
         print(f'alphas_polyak: {alphas_polyak.shape}')

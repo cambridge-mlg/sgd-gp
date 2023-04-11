@@ -69,9 +69,10 @@ def get_target_tuples_fn(loss_objective: int):
     return jax.jit(jax.vmap(_fn))
 
 
-def get_uniform_idx_fn(batch_size: int, n_train: int, vmap: bool = True):
+# TODO: rename vmap to share_idx
+def get_uniform_idx_fn(batch_size: int, n_train: int, vmap: bool = False):
     
-    def _fn(key):
+    def _fn(_, key):
         idx = jr.randint(key, shape=(batch_size,), minval=0, maxval=n_train)
         
         return idx
@@ -83,12 +84,20 @@ def get_uniform_idx_fn(batch_size: int, n_train: int, vmap: bool = True):
 
 def get_iterative_idx_fn(batch_size: int, n_train: int):
     
-    def _fn(iter):
-        idx = (jnp.arange(batch_size) + iter * batch_size) % n_train
+    def _fn(iter, _):
+        idx = jnp.arange(batch_size) + ((iter * batch_size) % n_train)
         
         return idx
     # TODO: how to share same data for vmapped optimizers?
     return jax.jit(_fn)
+
+
+def get_idx_fn(batch_size: int, n_train: int, iterative_idx: bool = True, vmap: bool = False):
+    if iterative_idx:
+        idx_fn = get_iterative_idx_fn(batch_size, n_train)
+    else:
+        idx_fn = get_uniform_idx_fn(batch_size, n_train, vmap=vmap)
+    return idx_fn
 
 
 # Copied from https://github.com/shreyaspadhy/jaxutils/blob/29781a1ad835653e6709065d77eb1e90a8f60e1a/train/utils.py#L184

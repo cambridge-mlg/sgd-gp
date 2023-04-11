@@ -60,6 +60,7 @@ def get_config(config_string):
     config.train_config.recompute_features = True
     
     # Optimisation Configs
+    config.train_config.iterative_idx = True
     config.train_config.learning_rate = 1e-3
     config.train_config.momentum = 0.9
     config.train_config.nesterov = True
@@ -81,6 +82,7 @@ def get_config(config_string):
     config.sampling_config = config.train_config.copy_and_resolve_references()
     config.sampling_config.n_samples = 10
     # Full-batch training configs that get passed
+    config.sampling_config.iterative_idx = True
     config.sampling_config.learning_rate = 1e-2
     config.sampling_config.momentum = 0.9
     config.sampling_config.polyak = 1e-3

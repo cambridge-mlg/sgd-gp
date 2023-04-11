@@ -13,10 +13,9 @@ class TargetTuple(NamedTuple):
     regularizer_target: Array
 
 
-class ExactMetricsTuple(NamedTuple):
+class ExactPredictionsTuple(NamedTuple):
     alpha: Array
-    y_pred: Array
-    test_rmse: Array
+    y_pred_loc: Array
 
 
 class ExactSamplesTuple(NamedTuple):

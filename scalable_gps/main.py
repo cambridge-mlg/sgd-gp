@@ -10,7 +10,7 @@ from data import get_dataset
 from eval_utils import RMSE
 from linear_model import marginal_likelihood
 from models import ExactGPModel, SGDGPModel
-from utils import ExactMetricsTuple, HparamsTuple, flatten_nested_dict, setup_training, update_config_dict
+from utils import ExactPredictionsTuple, HparamsTuple, flatten_nested_dict, setup_training, update_config_dict
 
 ml_collections.config_flags.DEFINE_config_file(
     "config",
@@ -69,10 +69,9 @@ def main(config):
                     "mll": mll / train_ds.N})
 
             # Define exact metrics that we will use later to compare with stochastic solution
-            exact_metrics = ExactMetricsTuple(
+            exact_metrics = ExactPredictionsTuple(
                 alpha=exact_model.alpha,
-                y_pred=y_pred_exact,
-                test_rmse=test_rmse_exact
+                y_pred_loc=y_pred_exact
             )
 
         # Compute stochastic optimised solution

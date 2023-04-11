@@ -8,7 +8,7 @@ from chex import Array
 from data import Dataset
 from linalg_utils import KvP
 from linear_model import loss_fn
-from utils import ExactMetricsTuple, ExactSamplesTuple, revert_z_score
+from utils import ExactPredictionsTuple, ExactSamplesTuple, revert_z_score
 
 
 def grad_var_fn(
@@ -50,6 +50,16 @@ def RMSE(
     return jnp.sqrt(jnp.mean((x - x_hat) ** 2))
 
 
+def LLH(
+    x: Array, loc: Array, scale: Array, mu: Optional[Array] = None, sigma: Optional[Array] = None
+):
+    if mu is not None and sigma is not None:
+        x = revert_z_score(x, mu, sigma)
+        loc = revert_z_score(loc, mu, sigma)
+        scale = revert_z_score(scale, 0.0, sigma)
+    return jax.scipy.stats.norm.logpdf(x, loc=loc, scale=scale)
+
+
 def get_eval_fn(
     metrics_list: List[str],
     train_ds: Dataset,
@@ -59,7 +69,7 @@ def get_eval_fn(
     feature_fn: Callable,
     noise_scale: float,
     metrics_prefix: str = "",
-    exact_metrics: Optional[ExactMetricsTuple] = None,
+    exact_metrics: Optional[ExactPredictionsTuple] = None,
     exact_samples: Optional[ExactSamplesTuple] = None,
     vmap: bool = False,
 ):
@@ -67,25 +77,25 @@ def get_eval_fn(
         idx.shape[0]
         # Calculate all quantities of interest here, and each metric_fn gets passed all quantities.
         
-        y_pred_test = KvP(test_ds.x, train_ds.x, params, kernel_fn=kernel_fn)
         if exact_metrics is not None:
-            alpha_exact, y_pred_exact, test_rmse_exact = exact_metrics
+            alpha_exact = exact_metrics.alpha
+            y_pred_loc_exact = exact_metrics.y_pred_loc
 
         if exact_samples is not None and vmap:
             # Exact samples needs to be vmapped, so we can access vmap_idx
             vmap_idx = jax.lax.axis_index("sample")
             
-
             alpha_exact = exact_samples.alpha_sample[vmap_idx]
             # y_pred_exact = (K(·)x(Kxx + Σ)^{−1} y) + f0(·) − K(·) (Kxx + Σ)^{−1} (f0(x) + ε0).
-            y_pred_exact = exact_samples.posterior_sample[vmap_idx]
+            y_pred_loc_exact = exact_samples.posterior_sample[vmap_idx]
             alpha_map = exact_samples.alpha_map[vmap_idx]
             f0_sample_test = exact_samples.f0_sample_test[vmap_idx]
             
-            y_pred_test = f0_sample_test + KvP(test_ds.x, train_ds.x, alpha_map - params, kernel_fn=kernel_fn)
-            test_rmse_exact = RMSE(test_ds.y, y_pred_exact, mu=train_ds.mu_y, sigma=train_ds.sigma_y)
+            y_pred_loc_sgd = f0_sample_test + KvP(test_ds.x, train_ds.x, alpha_map - params, kernel_fn=kernel_fn)
             
             print(f'alpha_exact.shape: {alpha_exact.shape}')
+        else:
+            y_pred_loc_sgd = KvP(test_ds.x, train_ds.x, params, kernel_fn=kernel_fn)
 
         # Define all metric function calls here for now, refactor later.
         def _get_metric(metric):
@@ -99,20 +109,17 @@ def get_eval_fn(
             # elif metric == "grad_var":
             #     return grad_var_fn(params, grad_fn, B, train_ds, feature_fn)
             elif metric == "test_rmse":
-                return RMSE(test_ds.y, y_pred_test, mu=train_ds.mu_y, sigma=train_ds.sigma_y)
+                return RMSE(test_ds.y, y_pred_loc_sgd, mu=train_ds.mu_y, sigma=train_ds.sigma_y)
             elif metric == "normalised_test_rmse":
-                return RMSE(test_ds.y, y_pred_test)
+                return RMSE(test_ds.y, y_pred_loc_sgd)
             elif metric == "alpha_diff":
                 return RMSE(alpha_exact, params)
             elif metric == "alpha_rkhs_diff":
                 return hilbert_space_RMSE(alpha_exact, params, K=kernel_fn(train_ds.x, train_ds.x))
-            elif metric == "test_rmse_diff":
-                # TODO: for sampling this is technically wrong as we always use exact_gp.alpha_map as mean.
-                return RMSE(_get_metric("test_rmse"), test_rmse_exact)
             elif metric == "y_pred_diff":
                 # TODO: right now we measure the difference between zero_mean posterior_samples, as alpha_map used for
                 # both y_pred_test and y_pred_exact is alpha_map of ExactGP, and gets cancelled out.
-                return RMSE(y_pred_test, y_pred_exact, mu=train_ds.mu_y, sigma=train_ds.sigma_y)
+                return RMSE(y_pred_loc_sgd, y_pred_loc_exact, mu=train_ds.mu_y, sigma=train_ds.sigma_y)
 
         metrics_update_dict = {}
 
