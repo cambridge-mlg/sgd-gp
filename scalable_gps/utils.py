@@ -111,7 +111,7 @@ def get_tuned_hparams(d_name: str, split: int):
     for i in range(n_seeds):
         hparams_artifact_name = f"hparams_{d_name}_{split}_{i}"
         
-        artifact = api.artifact(f"scalable-gps/{hparams_artifact_name}:latest")
+        artifact = api.artifact(f"shreyaspadhy/scalable-gps/{hparams_artifact_name}:latest")
         data = pickle.load(open(artifact.file(), "rb"))
         noise_scales.append(data.noise_scale)
         signal_scales.append(data.signal_scale)
