@@ -1,6 +1,5 @@
 
 import jax
-import jax.numpy as jnp
 import jax.random as jr
 import kernels
 import ml_collections.config_flags
@@ -10,7 +9,13 @@ from data import get_dataset
 from eval_utils import RMSE
 from linear_model import marginal_likelihood
 from models import ExactGPModel, SGDGPModel
-from utils import ExactPredictionsTuple, HparamsTuple, flatten_nested_dict, setup_training, update_config_dict
+from utils import (
+    ExactPredictionsTuple,
+    flatten_nested_dict,
+    get_tuned_hparams,
+    setup_training,
+    update_config_dict,
+)
 
 ml_collections.config_flags.DEFINE_config_file(
     "config",
@@ -39,10 +44,12 @@ def main(config):
         print(config)
         train_ds, test_ds = get_dataset(config.dataset_name, **config.dataset_config)
 
-        hparams = HparamsTuple(
-            length_scale=jnp.array(config.kernel_config.length_scale),
-            signal_scale=config.kernel_config.signal_scale,
-            noise_scale=config.dataset_config.noise_scale,)
+        hparams = get_tuned_hparams(config.dataset_name, config.dataset_config.split)
+
+        # hparams = HparamsTuple(
+        #     length_scale=jnp.array(config.kernel_config.length_scale),
+        #     signal_scale=config.kernel_config.signal_scale,
+        #     noise_scale=config.dataset_config.noise_scale,)
         
         print(hparams)
         

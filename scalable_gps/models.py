@@ -12,7 +12,7 @@ import sampling_utils
 import wandb
 from chex import Array
 from data import Dataset
-from eval_utils import RMSE, LLH
+from eval_utils import LLH, RMSE
 from kernels import Kernel
 from linalg_utils import KvP, solve_K_inv_v
 from linear_model import marginal_likelihood
@@ -416,15 +416,21 @@ class SGDGPModel(GPModel):
             if i % config.eval_every == 0:
                 vmapped_eval_metrics = eval_fn(alphas_polyak, idx, features, target_tuples)
 
-                y_pred_loc = self.predictive_mean(train_ds, test_ds, recompute=False)
-                zero_mean_posterior_samples = compute_posterior_samples_fn(alphas_polyak, f0_samples_test)
-                y_pred_scale = self.predictive_variance_samples(zero_mean_posterior_samples)
-
-                llh = LLH(test_ds.y, y_pred_loc, y_pred_scale, mu=train_ds.mu_y, sigma=train_ds.sigma_y)
-                normalised_llh = LLH(test_ds.y, y_pred_loc, y_pred_scale)
+                aux_metrics = {}
+                if "test_llh" in metrics_list or "normalised_test_llh" in metrics_list:
+                    y_pred_loc = self.predictive_mean(train_ds, test_ds, recompute=False)
+                    zero_mean_posterior_samples = compute_posterior_samples_fn(alphas_polyak, f0_samples_test)
+                    y_pred_scale = self.predictive_variance_samples(zero_mean_posterior_samples)
+                    if "test_llh" in metrics_list:
+                        aux_metrics['test_llh'] = LLH(
+                            test_ds.y, y_pred_loc, y_pred_scale, mu=train_ds.mu_y, sigma=train_ds.sigma_y)
+                    if "normalised_test_llh" in metrics_list:
+                        aux_metrics['normalised_test_llh'] = LLH(test_ds.y, y_pred_loc, y_pred_scale)
 
                 wandb.log({**_process_vmapped_metrics(vmapped_eval_metrics),
-                           **{'test_llh': llh, 'normalised_test_llh': normalised_llh, 'sample_step': i}})
+                           **{'sample_step': i},
+                           **aux_metrics})
+
                 aux.append(vmapped_eval_metrics)
 
         print(f'alphas_polyak: {alphas_polyak.shape}')

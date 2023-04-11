@@ -5,6 +5,7 @@ from typing import NamedTuple, Optional, Union
 import jax
 import jax.numpy as jnp
 import ml_collections
+import wandb
 from chex import Array
 
 
@@ -98,5 +99,31 @@ def setup_training(wandb_run):
         print("8 cores of TPU ( Local devices in Jax ):")
         print("\n".join(map(str, jax.local_devices())))
 
+
+def get_tuned_hparams(d_name: str, split: int):
+    n_seeds = 10
+    import pickle
+    api = wandb.Api()
+    
+    noise_scales = []
+    signal_scales = []
+    length_scales = []
+    for i in range(n_seeds):
+        hparams_artifact_name = f"hparams_{d_name}_{split}_{i}"
+        
+        artifact = api.artifact(f"scalable-gps/{hparams_artifact_name}:latest")
+        data = pickle.load(open(artifact.file(), "rb"))
+        noise_scales.append(data.noise_scale)
+        signal_scales.append(data.signal_scale)
+        length_scales.append(data.length_scale)
+
+    mean_hparams = HparamsTuple(
+        noise_scale=float(jnp.mean(jnp.array(noise_scales))),
+        signal_scale=float(jnp.mean(jnp.array(signal_scales))),
+        length_scale=jnp.mean(jnp.array(length_scales), axis=0))
+    
+    return mean_hparams
+    
+    
 if __name__ == '__main__':
     pass

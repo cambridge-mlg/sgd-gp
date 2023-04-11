@@ -24,7 +24,7 @@ def get_config(config_string):
     d_name = config_string.split(".")[0]
 
     # Saving configs
-    config.save_dir = "results/toy_sin"
+    config.save_dir = f"results/{d_name}"
 
     config.seed = 12345
 
@@ -75,7 +75,7 @@ def get_config(config_string):
         config.train_config.lr_schedule_config.decay_rate = 1 / 33
         config.train_config.lr_schedule_config.transition_steps = int(
             config.train_config.iterations * 0.95
-        )  # I set this to N steps * 0.75
+        )  # I set this to N steps * 0.95
         config.train_config.lr_schedule_config.end_value = config.train_config.learning_rate / 33
 
     
