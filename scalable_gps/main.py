@@ -45,11 +45,6 @@ def main(config):
         train_ds, test_ds = get_dataset(config.dataset_name, **config.dataset_config)
 
         hparams = get_tuned_hparams(config.dataset_name, config.dataset_config.split)
-
-        # hparams = HparamsTuple(
-        #     length_scale=jnp.array(config.kernel_config.length_scale),
-        #     signal_scale=config.kernel_config.signal_scale,
-        #     noise_scale=config.dataset_config.noise_scale,)
         
         print(hparams)
         

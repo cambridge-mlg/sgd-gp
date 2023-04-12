@@ -76,7 +76,7 @@ def get_uniform_idx_fn(batch_size: int, n_train: int, vmap: bool = False):
         idx = jr.randint(key, shape=(batch_size,), minval=0, maxval=n_train)
         
         return idx
-    # TODO: do we want to vmap here? using the same mini-batches could possibly allow shared memory access to data?
+
     if vmap:
         return jax.jit(jax.vmap(_fn))
     return jax.jit(_fn)
@@ -88,7 +88,7 @@ def get_iterative_idx_fn(batch_size: int, n_train: int):
         idx = jnp.arange(batch_size) + ((iter * batch_size) % n_train)
         
         return idx
-    # TODO: how to share same data for vmapped optimizers?
+
     return jax.jit(_fn)
 
 

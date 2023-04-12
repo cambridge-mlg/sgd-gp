@@ -75,7 +75,7 @@ def get_config(config_string):
         config.train_config.lr_schedule_config.decay_rate = 1 / 33
         config.train_config.lr_schedule_config.transition_steps = int(
             config.train_config.iterations * 0.95
-        )  # I set this to N steps * 0.95
+        )  # I set this to N steps * 0.75
         config.train_config.lr_schedule_config.end_value = config.train_config.learning_rate / 33
 
     
