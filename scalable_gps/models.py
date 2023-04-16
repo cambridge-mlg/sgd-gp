@@ -39,6 +39,7 @@ class GPModel:
             self.y_pred = KvP(test_ds.x, train_ds.x, self.alpha, kernel_fn=self.kernel.kernel_fn)
 
         return self.y_pred  # (N_test, 1)
+
     # TODO: Biased: use the method that double counts the diagonal (first paragraph of page 28 of https://arxiv.org/pdf/2210.04994.pdf
     # TODO: Unbiased: use a mixture of isotropic Gaussian likelihood with each mixture component's mean being centred at a sample. Then we can compute joint likelihoods as in the "EFFICIENT κ-ADIC SAMPLING" section on page 26 of https://arxiv.org/pdf/2210.04994.pdf
     def predictive_variance_samples(
@@ -449,3 +450,33 @@ def _process_vmapped_metrics(vmapped_metrics):
         std_metrics[f'{k}_std'] = jnp.std(v)
         
     return {**vmapped_metrics, **mean_metrics, **std_metrics}
+
+
+
+class CGGPModel(GPModel):
+    
+    def get_cg_closure_fn(self, noise_std, train_ds):
+        
+        def _fn(params):
+            return KvP(train_ds.x, train_ds.x, params, kernel_fn=self.kernel.kernel_fn) + params * noise_std**2
+        
+        return jax.jit(_fn)
+
+    def get_cg_solve_fn(self, cg_closure_fn, tol, atol, maxiter, M=None):
+        
+        def _fn(v):
+            return jax.scipy.sparse.linalg.cg(cg_closure_fn, v, tol=tol, atol=atol, maxiter=maxiter, M=M)[0]
+        
+        return jax.jit(_fn)
+        
+    
+    def compute_representer_weights(self, train_ds: Dataset, config: ml_collections.ConfigDict) -> Array:
+        """Compute representer weights alpha by solving a linear system using Conjugate Gradients."""
+        
+        cg_closure_fn = self.get_cg_closure_fn(self.noise_scale, train_ds)
+        cg_fn = self.get_cg_solve_fn(cg_closure_fn, tol=config.tol, atol=config.atol, maxiter=config.maxiter, M=None)
+        
+        # Compute alpha
+        self.alpha = cg_fn(train_ds.y)
+        
+        
