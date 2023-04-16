@@ -53,6 +53,7 @@ def RMSE(
 def LLH(
     x: Array, loc: Array, scale: Array, mu: Optional[Array] = None, sigma: Optional[Array] = None
 ):
+    """Calculate the log-likelihood of x given loc and scale."""
     if mu is not None and sigma is not None:
         x = revert_z_score(x, mu, sigma)
         loc = revert_z_score(loc, mu, sigma)
