@@ -109,6 +109,11 @@ def get_config(config_string):
     config.mll_config.subsample_seed = 0
     config.mll_config.n_subsample = 10000
 
+    config.cg_config = ml_collections.ConfigDict()
+    config.cg_config.tol = 1e-3
+    config.cg_config.maxiter = 200
+    config.cg_config.atol = 0.
+    config.cg_config.eval_every = 1
 
     # Wandb Configs
     config.wandb = ml_collections.ConfigDict()

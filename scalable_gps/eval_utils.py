@@ -65,17 +65,16 @@ def get_eval_fn(
     metrics_list: List[str],
     train_ds: Dataset,
     test_ds: Dataset,
-    grad_fn: Callable,
     kernel_fn: Callable,
     feature_fn: Callable,
     noise_scale: float,
+    grad_fn: Optional[Callable] = None,
     metrics_prefix: str = "",
     exact_metrics: Optional[ExactPredictionsTuple] = None,
     exact_samples: Optional[ExactSamplesTuple] = None,
     vmap: bool = False,
 ):
     def _fn(params, idx, features, target_tuple):
-        idx.shape[0]
         # Calculate all quantities of interest here, and each metric_fn gets passed all quantities.
         
         if exact_metrics is not None:

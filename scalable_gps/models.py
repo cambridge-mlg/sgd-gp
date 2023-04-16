@@ -296,10 +296,10 @@ class SGDGPModel(GPModel):
             metrics_list,
             train_ds,
             test_ds,
-            grad_fn,
             self.kernel.kernel_fn,
             feature_fn,
             self.noise_scale,
+            grad_fn=grad_fn,
             metrics_prefix=metrics_prefix,
             exact_metrics=exact_metrics
         )
@@ -392,10 +392,10 @@ class SGDGPModel(GPModel):
             metrics_list,
             train_ds,
             test_ds,
-            grad_fn,
             kernel_fn=self.kernel.kernel_fn,
             feature_fn=feature_fn,
             noise_scale=self.noise_scale,
+            grad_fn=grad_fn,
             metrics_prefix=metrics_prefix,
             exact_samples=exact_samples_tuple if compare_exact else None,
             vmap=True
@@ -470,17 +470,52 @@ class CGGPModel(GPModel):
         return jax.jit(_fn)
         
     
-    def compute_representer_weights(self, train_ds: Dataset, config: ml_collections.ConfigDict) -> Array:
+    def compute_representer_weights(
+        self, 
+        train_ds: Dataset, 
+        test_ds: Dataset,
+        config: ml_collections.ConfigDict,
+        metrics_list: List[str],
+        metrics_prefix: str="",
+        exact_metrics: Optional[ExactPredictionsTuple] = None,) -> Array:
         """Compute representer weights alpha by solving a linear system using Conjugate Gradients."""
         
         cg_closure_fn = self.get_cg_closure_fn(self.noise_scale, train_ds)
-        cg_fn = self.get_cg_solve_fn(cg_closure_fn, tol=config.tol, atol=config.atol, maxiter=config.maxiter, M=None)
         
-        # Compute alpha
-        self.alpha = cg_fn(train_ds.y)
+        eval_fn = eval_utils.get_eval_fn(
+            metrics_list,
+            train_ds,
+            test_ds,
+            self.kernel.kernel_fn,
+            self.kernel.feature_fn,
+            self.noise_scale,
+            grad_fn=None,
+            metrics_prefix=metrics_prefix,
+            exact_metrics=exact_metrics
+        )
         
-        # TODO: Potentially add an eval fn here that runs CG from 0 to maxiter, and plots the error vs iteration.
-        # Look at toy_demo.ipynb, eval CG over time block.
+        if not metrics_list:
+            cg_fn = self.get_cg_solve_fn(cg_closure_fn, tol=config.tol, atol=config.atol, maxiter=config.maxiter, M=None)
+        
+            # Compute alpha
+            self.alpha = cg_fn(train_ds.y)
+        else:
+            aux = []
+            # Compute metrics by running for longer maxiter
+            for i in tqdm(range(config.maxiter)):
+                cg_fn = self.get_cg_solve_fn(cg_closure_fn, tol=config.tol, atol=config.atol, maxiter=i, M=None)
+                
+                alpha = cg_fn(train_ds.y)
+                
+                if i % config.eval_every == 0:
+                    eval_metrics = eval_fn(alpha, i, None, None)
+
+                    if wandb.run is not None:
+                        wandb.log({**eval_metrics, **{'train_step': i}})
+                    aux.append(eval_metrics)
+            
+                self.alpha = alpha
+        
         return self.alpha
     
     # TODO: Implement compute_posterior_samples function.
