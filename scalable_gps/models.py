@@ -479,4 +479,10 @@ class CGGPModel(GPModel):
         # Compute alpha
         self.alpha = cg_fn(train_ds.y)
         
+        # TODO: Potentially add an eval fn here that runs CG from 0 to maxiter, and plots the error vs iteration.
+        # Look at toy_demo.ipynb, eval CG over time block.
+        return self.alpha
+    
+    # TODO: Implement compute_posterior_samples function.
+        
         
