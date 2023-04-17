@@ -8,7 +8,13 @@ from data import get_dataset
 from eval_utils import RMSE
 from linear_model import marginal_likelihood
 from models import CGGPModel, ExactGPModel
-from utils import ExactPredictionsTuple, flatten_nested_dict, get_tuned_hparams, setup_training, update_config_dict
+from utils import (
+    ExactPredictionsTuple,
+    flatten_nested_dict,
+    get_tuned_hparams,
+    setup_training,
+    update_config_dict,
+)
 
 ml_collections.config_flags.DEFINE_config_file(
     "config",
@@ -40,6 +46,7 @@ def main(config):
         print(f"train_ds.x.shape: {train_ds.x.shape}")
         print(f"train_ds.y.shape: {train_ds.y.shape}")
 
+        # TODO: Check if artifact exists, otherwise do default values.
         hparams = get_tuned_hparams(config.dataset_name, config.dataset_config.split)
         
         # hparams = HparamsTuple(

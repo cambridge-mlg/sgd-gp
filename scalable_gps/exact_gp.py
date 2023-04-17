@@ -1,6 +1,5 @@
 
 import jax
-import jax.numpy as jnp
 import kernels
 import ml_collections.config_flags
 import wandb
@@ -9,7 +8,7 @@ from data import get_dataset
 from eval_utils import RMSE
 from linear_model import marginal_likelihood
 from models import ExactGPModel
-from utils import HparamsTuple, flatten_nested_dict, setup_training, update_config_dict
+from utils import flatten_nested_dict, get_tuned_hparams, setup_training, update_config_dict
 
 ml_collections.config_flags.DEFINE_config_file(
     "config",
@@ -53,7 +52,7 @@ def main(config):
         exact_model.compute_representer_weights(train_ds)
         y_pred = exact_model.predictive_mean(train_ds, test_ds)
         test_rmse = RMSE(test_ds.y, y_pred, mu=train_ds.mu_y, sigma=train_ds.sigma_y)
-        normalised_test_rmse = RMSE(test_ds.y, y_pred_exact)
+        normalised_test_rmse = RMSE(test_ds.y, y_pred)
 
         mll = marginal_likelihood(train_ds.x, train_ds.y, exact_model.kernel.kernel_fn, hparams)
         print(f"test_rmse_exact = {test_rmse}")

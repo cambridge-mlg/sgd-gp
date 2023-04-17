@@ -96,7 +96,7 @@ def get_eval_fn(
             print(f'alpha_exact.shape: {alpha_exact.shape}')
         else:
             y_pred_loc_sgd = KvP(test_ds.x, train_ds.x, params, kernel_fn=kernel_fn)
-
+        # TODO: Add normalised_test_rmse_Diff and test_rmse_Diff
         # Define all metric function calls here for now, refactor later.
         def _get_metric(metric):
             if metric == "loss":

@@ -53,7 +53,7 @@ def get_config(config_string):
 
     # Full-batch training configs that get passed
     config.train_config.iterations = 50000
-    config.train_config.batch_size = 4
+    config.train_config.batch_size = 4096
     config.train_config.eval_every = 100
     # RFF Configs
     config.train_config.n_features_optim = 100
@@ -61,12 +61,12 @@ def get_config(config_string):
     
     # Optimisation Configs
     config.train_config.iterative_idx = True
-    config.train_config.learning_rate = 1e-3
+    config.train_config.learning_rate = 5e-1
     config.train_config.momentum = 0.9
     config.train_config.nesterov = True
     config.train_config.polyak = 1e-3
 
-    config.train_config.absolute_clipping = -1.# 0.1  # -1 to avoid clipping
+    config.train_config.absolute_clipping = 0.1  # -1 to avoid clipping
 
     config.train_config.lr_schedule_name = None # "linear_schedule"
     config.train_config.lr_schedule_config = ml_collections.ConfigDict()
@@ -111,9 +111,13 @@ def get_config(config_string):
 
     config.cg_config = ml_collections.ConfigDict()
     config.cg_config.tol = 1e-3
-    config.cg_config.maxiter = 1000
+    config.cg_config.maxiter = 200
     config.cg_config.atol = 0.
-    config.cg_config.eval_every = 50
+    config.cg_config.eval_every = 10
+    config.cg_config.preconditioner = True
+    config.cg_config.pivoted_chol_rank = 100
+    config.cg_config.pivoted_diag_rtol = 1e-3
+    config.cg_config.pivoted_jitter = 1
 
     # Wandb Configs
     config.wandb = ml_collections.ConfigDict()
