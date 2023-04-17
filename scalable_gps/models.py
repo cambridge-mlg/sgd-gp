@@ -457,17 +457,20 @@ class CGGPModel(GPModel):
     
     def get_cg_closure_fn(self, noise_std, train_ds):
         
+        # (K(x, x) + noise_std**2 * I) * params = y
+        
+        # f(params) = y 
         def _fn(params):
             return KvP(train_ds.x, train_ds.x, params, kernel_fn=self.kernel.kernel_fn) + params * noise_std**2
         
-        return jax.jit(_fn)
+        return _fn
 
     def get_cg_solve_fn(self, cg_closure_fn, tol, atol, maxiter, M=None):
         
-        def _fn(v):
-            return jax.scipy.sparse.linalg.cg(cg_closure_fn, v, tol=tol, atol=atol, maxiter=maxiter, M=M)[0]
+        def _fn(v, x0):
+            return jax.scipy.sparse.linalg.cg(cg_closure_fn, v, x0=x0, tol=tol, atol=atol, maxiter=maxiter, M=M)[0]
         
-        return jax.jit(_fn)
+        return _fn
         
     
     def compute_representer_weights(
@@ -495,17 +498,36 @@ class CGGPModel(GPModel):
         )
         
         if not metrics_list:
-            cg_fn = self.get_cg_solve_fn(cg_closure_fn, tol=config.tol, atol=config.atol, maxiter=config.maxiter, M=None)
+            cg_fn = self.get_cg_solve_fn(
+                cg_closure_fn, tol=config.tol, atol=config.atol, maxiter=config.maxiter, M=None)
         
             # Compute alpha
-            self.alpha = cg_fn(train_ds.y)
+            self.alpha = cg_fn(train_ds.y, x0=None)
         else:
             aux = []
             # Compute metrics by running for longer maxiter
+            alpha = None
+            import numpy as np
+            import tensorflow_probability as tfp
+            # from tensorflow_probability.substrates import jax as tfp
+            
+            K = self.kernel.kernel_fn(train_ds.x, train_ds.x) + self.noise_scale**2 * jnp.eye(train_ds.N)
+            Lk = jnp.array(tfp.math.pivoted_cholesky(np.array(K), 100))
+            
+            print(f'Lk: {Lk.shape}')
+            def P_inv_v(v):
+                print(f'Lk_inv_v shape: {jnp.linalg.solve(Lk.T, v).shape}')
+                return jnp.linalg.solve(Lk.T, jnp.linalg.solve(Lk, v))
+                # return jnp.linalg.solve(Lk, Lk.T @ v)
+            
+            # print(f'P_inv_V: P_inv_v(train_ds.y).shape: {P_inv_v(train_ds.y).shape)}')
+
             for i in tqdm(range(config.maxiter)):
-                cg_fn = self.get_cg_solve_fn(cg_closure_fn, tol=config.tol, atol=config.atol, maxiter=i, M=None)
+                    
+                cg_fn = self.get_cg_solve_fn(
+                    cg_closure_fn, tol=config.tol, atol=config.atol, maxiter=1, M=P_inv_v)
                 
-                alpha = cg_fn(train_ds.y)
+                alpha = cg_fn(train_ds.y, x0=alpha)
                 
                 if i % config.eval_every == 0:
                     eval_metrics = eval_fn(alpha, i, None, None)

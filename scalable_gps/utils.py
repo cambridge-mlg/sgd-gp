@@ -108,6 +108,7 @@ def get_tuned_hparams(d_name: str, split: int):
     noise_scales = []
     signal_scales = []
     length_scales = []
+    
     for i in range(n_seeds):
         hparams_artifact_name = f"hparams_{d_name}_{split}_{i}"
         
@@ -123,6 +124,8 @@ def get_tuned_hparams(d_name: str, split: int):
         length_scale=jnp.mean(jnp.array(length_scales), axis=0))
     
     return mean_hparams
+
+    
     
     
 if __name__ == '__main__':
