@@ -467,8 +467,9 @@ class CGGPModel(GPModel):
 
     def get_cg_solve_fn(self, cg_closure_fn, tol, atol, maxiter, M=None):
         
-        def _fn(v, x0):
-            return jax.scipy.sparse.linalg.cg(cg_closure_fn, v, x0=x0, tol=tol, atol=atol, maxiter=maxiter, M=M)[0]
+        def _fn(v):
+            return jax.scipy.sparse.linalg.cg(
+                cg_closure_fn, v, tol=tol, atol=atol, maxiter=maxiter, M=M)[0]
         
         return _fn
         
@@ -511,30 +512,42 @@ class CGGPModel(GPModel):
             import tensorflow_probability as tfp
             # from tensorflow_probability.substrates import jax as tfp
             
-            K = self.kernel.kernel_fn(train_ds.x, train_ds.x) + self.noise_scale**2 * jnp.eye(train_ds.N)
-            Lk = jnp.array(tfp.math.pivoted_cholesky(np.array(K), 100))
+            K = self.kernel.kernel_fn(train_ds.x, train_ds.x)
+            # TODO: Why does adding noise to pivoted cholesky improve y_pred performance so much?
+            Lk = jnp.array(tfp.math.pivoted_cholesky(np.array(K) + jnp.eye(train_ds.N), 100)) # (N, k)
             
             print(f'Lk: {Lk.shape}')
             def P_inv_v(v):
-                print(f'Lk_inv_v shape: {jnp.linalg.solve(Lk.T, v).shape}')
-                return jnp.linalg.solve(Lk.T, jnp.linalg.solve(Lk, v))
-                # return jnp.linalg.solve(Lk, Lk.T @ v)
-            
-            # print(f'P_inv_V: P_inv_v(train_ds.y).shape: {P_inv_v(train_ds.y).shape)}')
+                A_inv = self.noise_scale**-2
+                
+                U = Lk  # N, k
+                V = Lk.T  #k, N
+                C_inv = jnp.eye(U.shape[1]) # k, k
+                # (A+U C V)^{-1} = A^{-1}- A^{-1} U (C^{-1} + V A^{-1} U )^{-1} V A^{-1}
+                # (A+U C V)^{-1} v = A^{-1} v - A^{-1} U (C^{-1} + V A^{-1} U )^{-1} V A^{-1} v
+                first_term = A_inv * v # (N, ) 
+                
+                inner_inv = (C_inv + A_inv * V @ U)  # k, k
+                
+                inner_solve = jax.scipy.linalg.solve(inner_inv, V @ v, assume_a='pos')  # k,
+                
+                second_term = (A_inv ** 2) * U @ inner_solve  # (N, )
+                
+                return first_term - second_term
 
-            for i in tqdm(range(config.maxiter)):
+
+            for i in tqdm(range(0, config.maxiter, config.eval_every)):
                     
                 cg_fn = self.get_cg_solve_fn(
-                    cg_closure_fn, tol=config.tol, atol=config.atol, maxiter=1, M=P_inv_v)
+                    cg_closure_fn, tol=config.tol, atol=config.atol, maxiter=i, M=None)
                 
-                alpha = cg_fn(train_ds.y, x0=alpha)
+                alpha = cg_fn(train_ds.y)
                 
-                if i % config.eval_every == 0:
-                    eval_metrics = eval_fn(alpha, i, None, None)
+                eval_metrics = eval_fn(alpha, i, None, None)
 
-                    if wandb.run is not None:
-                        wandb.log({**eval_metrics, **{'train_step': i}})
-                    aux.append(eval_metrics)
+                if wandb.run is not None:
+                    wandb.log({**eval_metrics, **{'train_step': i}})
+                aux.append(eval_metrics)
             
                 self.alpha = alpha
         

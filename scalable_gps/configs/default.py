@@ -66,7 +66,7 @@ def get_config(config_string):
     config.train_config.nesterov = True
     config.train_config.polyak = 1e-3
 
-    config.train_config.absolute_clipping = -1.# 0.1  # None to avoid clipping
+    config.train_config.absolute_clipping = -1.# 0.1  # -1 to avoid clipping
 
     config.train_config.lr_schedule_name = None # "linear_schedule"
     config.train_config.lr_schedule_config = ml_collections.ConfigDict()
@@ -113,7 +113,7 @@ def get_config(config_string):
     config.cg_config.tol = 1e-3
     config.cg_config.maxiter = 1000
     config.cg_config.atol = 0.
-    config.cg_config.eval_every = 1
+    config.cg_config.eval_every = 50
 
     # Wandb Configs
     config.wandb = ml_collections.ConfigDict()
