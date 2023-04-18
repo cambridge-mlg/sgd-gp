@@ -544,7 +544,7 @@ class CGGPModel(ExactGPModel):
                 cg_closure_fn, tol=config.tol, atol=config.atol, maxiter=config.maxiter, M=pivoted_solve_fn)
         
             # Compute alpha
-            self.alpha = cg_fn(train_ds.y, x0=None)
+            self.alpha = cg_fn(train_ds.y)
         else:
             aux = []
             # Compute metrics by running for longer maxiter
@@ -651,32 +651,31 @@ class CGGPModel(ExactGPModel):
         
         aux = []
         # Number of CG iterations to evaluate.
-        for i in tqdm(range(config.iterations)):
+        for i in tqdm(range(0, config.maxiter, config.eval_every)):
             
             cg_fn = self.get_cg_solve_fn(
                     cg_closure_fn, tol=config.tol, atol=config.atol, maxiter=i, M=pivoted_solve_fn, vmap=True)
             
             alphas = cg_fn(f0_samples_train + eps0_samples)  # (n_samples, n_train)
     
-            if i % config.eval_every == 0:
-                vmapped_eval_metrics = eval_fn(alphas, i, None, target_tuples)
+            vmapped_eval_metrics = eval_fn(alphas, i, None, target_tuples)
 
-                aux_metrics = {}
-                if "test_llh" in metrics_list or "normalised_test_llh" in metrics_list:
-                    y_pred_loc = self.predictive_mean(train_ds, test_ds, recompute=False)
-                    zero_mean_posterior_samples = compute_posterior_samples_fn(alphas, f0_samples_test)
-                    y_pred_scale = self.predictive_variance_samples(zero_mean_posterior_samples)
-                    if "test_llh" in metrics_list:
-                        aux_metrics['test_llh'] = LLH(
-                            test_ds.y, y_pred_loc, y_pred_scale, mu=train_ds.mu_y, sigma=train_ds.sigma_y)
-                    if "normalised_test_llh" in metrics_list:
-                        aux_metrics['normalised_test_llh'] = LLH(test_ds.y, y_pred_loc, y_pred_scale)
-
+            aux_metrics = {}
+            if "test_llh" in metrics_list or "normalised_test_llh" in metrics_list:
+                y_pred_loc = self.predictive_mean(train_ds, test_ds, recompute=False)
+                zero_mean_posterior_samples = compute_posterior_samples_fn(alphas, f0_samples_test)
+                y_pred_scale = self.predictive_variance_samples(zero_mean_posterior_samples)
+                if "test_llh" in metrics_list:
+                    aux_metrics['test_llh'] = LLH(
+                        test_ds.y, y_pred_loc, y_pred_scale, mu=train_ds.mu_y, sigma=train_ds.sigma_y)
+                if "normalised_test_llh" in metrics_list:
+                    aux_metrics['normalised_test_llh'] = LLH(test_ds.y, y_pred_loc, y_pred_scale)
+            if wandb.run is not None:
                 wandb.log({**_process_vmapped_metrics(vmapped_eval_metrics),
-                           **{'sample_step': i},
-                           **aux_metrics})
+                            **{'sample_step': i},
+                            **aux_metrics})
 
-                aux.append(vmapped_eval_metrics)
+            aux.append(vmapped_eval_metrics)
 
         print(f'alphas: {alphas.shape}')
         

@@ -118,6 +118,7 @@ def get_config(config_string):
     config.cg_config.pivoted_chol_rank = 100
     config.cg_config.pivoted_diag_rtol = 1e-3
     config.cg_config.pivoted_jitter = 1
+    config.cg_config.loss_objective = 2
 
     # Wandb Configs
     config.wandb = ml_collections.ConfigDict()
