@@ -25,8 +25,8 @@ def KvP(x1: Array, x2: Array, v: Array, kernel_fn: Kernel_fn, **kernel_kwargs):
     def _idx_KvP(carry, idx):
         return carry, _KvP(x1[idx], x2, v, kernel_fn, **kernel_kwargs)
 
-    idx_vec = jnp.array([jnp.arange(x1.shape[0])])
-    # idx_vec
+    # idx_vec = jnp.array([jnp.arange(x1.shape[0])])
+    idx_vec = jnp.arange(x1.shape[0])
     return jax.lax.scan(_idx_KvP, jnp.zeros(()), idx_vec)[1].squeeze()
 
 

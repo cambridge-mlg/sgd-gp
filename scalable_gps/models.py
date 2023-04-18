@@ -129,6 +129,7 @@ class ExactGPModel(GPModel):
     def get_alpha_samples_fn(self):
         """Vmap factory function that returns a function that computes alpha samples from f0 and eps0 samples."""
         def _fn(f0_sample_train, eps0_sample):
+            # (K + noise_scale**2 I)^{-1} (f0_sample_train + eps0_sample)
             alpha_sample = solve_K_inv_v(
                 self.K,
                 f0_sample_train + eps0_sample,
@@ -329,7 +330,6 @@ class SGDGPModel(GPModel):
         self.alpha = alpha_polyak
         return self.alpha, aux
 
-
     def compute_posterior_samples( 
         self, 
         key: chex.PRNGKey, 
@@ -453,7 +453,7 @@ def _process_vmapped_metrics(vmapped_metrics):
 
 
 
-class CGGPModel(GPModel):
+class CGGPModel(ExactGPModel):
     def __init__(self, noise_scale: float, kernel: Kernel, **kwargs):
         super().__init__(noise_scale=noise_scale, kernel=kernel, **kwargs)
         
@@ -461,21 +461,23 @@ class CGGPModel(GPModel):
     
     def get_cg_closure_fn(self, noise_std, train_ds):
         
-        # (K(x, x) + noise_std**2 * I) * params = y
-        
-        # f(params) = y 
+        # (K(x, x) + noise_std**2 * I) * params = y # (n_train)
         def _fn(params):
             return KvP(train_ds.x, train_ds.x, params, kernel_fn=self.kernel.kernel_fn) + params * noise_std**2
-        
-        return _fn
 
-    def get_cg_solve_fn(self, cg_closure_fn, tol, atol, maxiter, M=None):
+        return jax.jit(_fn)
+
+
+    def get_cg_solve_fn(self, cg_closure_fn, tol, atol, maxiter, M=None, vmap=False):
         
         def _fn(v):
             return jax.scipy.sparse.linalg.cg(
                 cg_closure_fn, v, tol=tol, atol=atol, maxiter=maxiter, M=M)[0]
         
-        return _fn
+        if vmap:
+            return jax.jit(jax.vmap(_fn))
+        else:
+            return jax.jit(_fn)
     
     
     def get_cg_preconditioner_solve_fn(self, pivoted_chol):
@@ -564,9 +566,8 @@ class CGGPModel(GPModel):
                 self.alpha = alpha
         
         return self.alpha
-    
-    # TODO: Implement compute_posterior_samples function.
-        
+
+
     def compute_posterior_samples( 
         self, 
         key: chex.PRNGKey, 
@@ -594,6 +595,21 @@ class CGGPModel(GPModel):
                 n_features=n_features, 
                 chol_eps=chol_eps)
         
+        cg_closure_fn = self.get_cg_closure_fn(self.noise_scale, train_ds)
+        
+        if config.preconditioner:
+            if self.pivoted_chol is None:
+                self.pivoted_chol = pivoted_cholesky(
+                    self.kernel, 
+                    train_ds.x, 
+                    config.pivoted_chol_rank, 
+                    config.pivoted_diag_rtol, 
+                    config.pivoted_jitter)
+            
+            pivoted_solve_fn = self.get_cg_preconditioner_solve_fn(self.pivoted_chol)
+        else:
+            pivoted_solve_fn = None
+
         # Get vmapped functions for sampling from the prior and computing the posterior.
         compute_prior_samples_fn = self.get_prior_samples_fn(train_ds.N, L, use_rff)
         compute_posterior_samples_fn = self.get_posterior_samples_fn(train_ds, test_ds, zero_mean)
@@ -632,21 +648,23 @@ class CGGPModel(GPModel):
         )
 
         target_tuples = compute_target_tuples_fn(f0_samples_train, eps0_samples) # (n_samples, TargetTuples)
-
-        alphas, alphas_polyak = jnp.zeros((n_samples, train_ds.N)), jnp.zeros((n_samples, train_ds.N))
         
         aux = []
         # Number of CG iterations to evaluate.
         for i in tqdm(range(config.iterations)):
-
-
+            
+            cg_fn = self.get_cg_solve_fn(
+                    cg_closure_fn, tol=config.tol, atol=config.atol, maxiter=i, M=pivoted_solve_fn, vmap=True)
+            
+            alphas = cg_fn(f0_samples_train + eps0_samples)  # (n_samples, n_train)
+    
             if i % config.eval_every == 0:
-                vmapped_eval_metrics = eval_fn(alphas_polyak, i, None, target_tuples)
+                vmapped_eval_metrics = eval_fn(alphas, i, None, target_tuples)
 
                 aux_metrics = {}
                 if "test_llh" in metrics_list or "normalised_test_llh" in metrics_list:
                     y_pred_loc = self.predictive_mean(train_ds, test_ds, recompute=False)
-                    zero_mean_posterior_samples = compute_posterior_samples_fn(alphas_polyak, f0_samples_test)
+                    zero_mean_posterior_samples = compute_posterior_samples_fn(alphas, f0_samples_test)
                     y_pred_scale = self.predictive_variance_samples(zero_mean_posterior_samples)
                     if "test_llh" in metrics_list:
                         aux_metrics['test_llh'] = LLH(
@@ -660,8 +678,8 @@ class CGGPModel(GPModel):
 
                 aux.append(vmapped_eval_metrics)
 
-        print(f'alphas_polyak: {alphas_polyak.shape}')
+        print(f'alphas: {alphas.shape}')
         
-        posterior_samples = compute_posterior_samples_fn(alphas_polyak, f0_samples_test)  # (n_samples, n_test)
+        posterior_samples = compute_posterior_samples_fn(alphas, f0_samples_test)  # (n_samples, n_test)
         
-        return posterior_samples, alphas_polyak
+        return posterior_samples, alphas
