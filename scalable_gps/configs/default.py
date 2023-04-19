@@ -55,6 +55,8 @@ def get_config(config_string):
     config.train_config.iterations = 50000
     config.train_config.batch_size = 4096
     config.train_config.eval_every = 100
+    config.train_config.time_budget_in_seconds = None
+    config.train_config.eval_every_in_seconds = None
     # RFF Configs
     config.train_config.n_features_optim = 100
     config.train_config.recompute_features = True

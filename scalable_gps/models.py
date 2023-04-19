@@ -9,6 +9,7 @@ import ml_collections
 import optax
 import optim_utils
 import sampling_utils
+import time
 import wandb
 from chex import Array
 from data import Dataset
@@ -311,21 +312,52 @@ class SGDGPModel(GPModel):
         opt_state = optimizer.init(alpha)
 
         aux = []
-        for i in tqdm(range(config.iterations)):
-            key, idx_key, feature_key = jr.split(key, 3)
-            features = feature_fn(feature_key)
-            idx = idx_fn(i, idx_key)
+        if config.time_budget_in_seconds is not None:
+            compute_time_elapsed_in_seconds = 0.0
+            iter_counter = 0
+            eval_counter = 0
+            with tqdm(desc="Time: ", total=config.time_budget_in_seconds, unit="s") as pbar:
+                while compute_time_elapsed_in_seconds < config.time_budget_in_seconds:
+                    time_before_update = time.time()
+                    key, idx_key, feature_key = jr.split(key, 3)
+                    features = feature_fn(feature_key)
+                    idx = idx_fn(iter_counter, idx_key)
 
-            alpha, alpha_polyak, opt_state = update_fn(alpha, alpha_polyak, idx, features, opt_state, target_tuple)
+                    alpha, alpha_polyak, opt_state = update_fn(alpha, alpha_polyak, idx, features, opt_state, target_tuple)
+                    time_after_update = time.time()
 
-            if i % config.eval_every == 0:
-                eval_metrics = eval_fn(alpha_polyak, idx, features, target_tuple)
+                    time_delta = time_after_update - time_before_update
+                    compute_time_elapsed_in_seconds += time_delta
 
-                lr_to_log = get_lr(opt_state)
+                    if compute_time_elapsed_in_seconds >= (eval_counter * config.eval_every_in_seconds):
+                        eval_metrics = eval_fn(alpha_polyak, idx, features, target_tuple)
 
-                if wandb.run is not None:
-                    wandb.log({**eval_metrics, **{'train_step': i, 'lr': lr_to_log}})
-                aux.append(eval_metrics)
+                        lr_to_log = get_lr(opt_state)
+
+                        if wandb.run is not None:
+                            wandb.log({**eval_metrics, **{'train_step': iter_counter, 'lr': lr_to_log}})
+                        aux.append(eval_metrics)
+
+                        eval_counter += 1
+                    iter_counter += 1
+                    pbar.update(time_delta)
+            print(f"iter_counter: {iter_counter}, eval_counter: {eval_counter}")
+        else:
+            for i in tqdm(range(config.iterations)):
+                key, idx_key, feature_key = jr.split(key, 3)
+                features = feature_fn(feature_key)
+                idx = idx_fn(i, idx_key)
+
+                alpha, alpha_polyak, opt_state = update_fn(alpha, alpha_polyak, idx, features, opt_state, target_tuple)
+
+                if i % config.eval_every == 0:
+                    eval_metrics = eval_fn(alpha_polyak, idx, features, target_tuple)
+
+                    lr_to_log = get_lr(opt_state)
+
+                    if wandb.run is not None:
+                        wandb.log({**eval_metrics, **{'train_step': i, 'lr': lr_to_log}})
+                    aux.append(eval_metrics)
 
         self.alpha = alpha_polyak
         return self.alpha, aux
