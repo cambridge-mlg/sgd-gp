@@ -1,25 +1,25 @@
 from typing import Callable, List, Optional
 
 import chex
-import eval_utils
+from scalable_gps import eval_utils
 import jax
 import jax.numpy as jnp
 import jax.random as jr
 import ml_collections
 import optax
-import optim_utils
-import sampling_utils
+from scalable_gps import optim_utils
+from scalable_gps import sampling_utils
 import time
 import wandb
 from chex import Array
-from data import Dataset
-from eval_utils import LLH, RMSE
-from kernels import Kernel
-from linalg_utils import KvP, pivoted_cholesky, solve_K_inv_v
-from linear_model import marginal_likelihood
-from optim_utils import get_lr, get_lr_and_schedule
+from scalable_gps.data import Dataset
+from scalable_gps.eval_utils import LLH, RMSE
+from scalable_gps.kernels import Kernel
+from scalable_gps.linalg_utils import KvP, pivoted_cholesky, solve_K_inv_v
+from scalable_gps.linear_model import marginal_likelihood
+from scalable_gps.optim_utils import get_lr, get_lr_and_schedule
+from scalable_gps.utils import ExactPredictionsTuple, HparamsTuple, TargetTuple, get_gpu_or_cpu_device
 from tqdm import tqdm
-from utils import ExactPredictionsTuple, HparamsTuple, TargetTuple, get_gpu_or_cpu_device
 
 
 class GPModel:
@@ -514,6 +514,7 @@ class CGGPModel(ExactGPModel):
     
     def get_cg_preconditioner_solve_fn(self, pivoted_chol):
         def _fn(v):
+            """Woodbury identity-based matvec."""
             A_inv = self.noise_scale**-2
             
             U = pivoted_chol  # N, k

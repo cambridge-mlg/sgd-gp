@@ -1,14 +1,14 @@
 
 import jax
-import kernels
+from scalable_gps import kernels
 import ml_collections.config_flags
 import wandb
 from absl import app, flags
-from data import get_dataset
-from eval_utils import RMSE
-from linear_model import marginal_likelihood
-from models import ExactGPModel
-from utils import flatten_nested_dict, get_tuned_hparams, setup_training, update_config_dict
+from scalable_gps.data import get_dataset
+from scalable_gps.eval_utils import RMSE
+from scalable_gps.linear_model import marginal_likelihood
+from scalable_gps.models import ExactGPModel
+from scalable_gps.utils import flatten_nested_dict, get_tuned_hparams, setup_training, update_config_dict
 
 ml_collections.config_flags.DEFINE_config_file(
     "config",

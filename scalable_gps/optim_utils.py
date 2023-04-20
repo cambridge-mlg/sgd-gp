@@ -6,11 +6,11 @@ import jax.random as jr
 import ml_collections
 import optax
 from chex import Array
-from linear_model import (
+from scalable_gps.linear_model import (
     error_grad_sample,
     regularizer_grad_sample,
 )
-from utils import TargetTuple
+from scalable_gps.utils import TargetTuple
 
 PyTree = Any
 

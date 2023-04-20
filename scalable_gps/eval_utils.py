@@ -5,10 +5,10 @@ import jax
 import jax.numpy as jnp
 import jax.random as jr
 from chex import Array
-from data import Dataset
-from linalg_utils import KvP
-from linear_model import loss_fn
-from utils import ExactPredictionsTuple, ExactSamplesTuple, revert_z_score
+from scalable_gps.data import Dataset
+from scalable_gps.linalg_utils import KvP
+from scalable_gps.linear_model import loss_fn
+from scalable_gps.utils import ExactPredictionsTuple, ExactSamplesTuple, revert_z_score
 
 
 def grad_var_fn(

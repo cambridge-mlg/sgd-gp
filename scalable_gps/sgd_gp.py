@@ -1,15 +1,14 @@
-
 import jax
 import jax.random as jr
-import kernels
+from scalable_gps import kernels
 import ml_collections.config_flags
 import wandb
 from absl import app, flags
-from data import get_dataset
-from eval_utils import RMSE
-from linear_model import marginal_likelihood
-from models import ExactGPModel, SGDGPModel
-from utils import (
+from scalable_gps.data import get_dataset
+from scalable_gps.eval_utils import RMSE
+from scalable_gps.linear_model import marginal_likelihood
+from scalable_gps.models import ExactGPModel, SGDGPModel
+from scalable_gps.utils import (
     ExactPredictionsTuple,
     flatten_nested_dict,
     get_tuned_hparams,

@@ -7,7 +7,7 @@ import jax.random as jr
 from chex import Array
 from uci_datasets import Dataset as uci_dataset
 from uci_datasets import all_datasets
-from utils import apply_z_score
+from scalable_gps.utils import apply_z_score
 
 KwArgs = Any
 
