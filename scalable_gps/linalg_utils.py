@@ -4,7 +4,7 @@ from typing import Callable
 import jax
 import jax.numpy as jnp
 from chex import Array
-from utils import get_gpu_or_cpu_device
+from scalable_gps.utils import get_gpu_or_cpu_device
 
 Kernel_fn = Callable[[Array, Array], Array]
 
