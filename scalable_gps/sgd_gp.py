@@ -1,15 +1,18 @@
 import jax
+import jax.numpy as jnp
 import jax.random as jr
-from scalable_gps import kernels
 import ml_collections.config_flags
 import wandb
 from absl import app, flags
+
+from scalable_gps import kernels
 from scalable_gps.data import get_dataset
 from scalable_gps.eval_utils import RMSE
 from scalable_gps.linear_model import marginal_likelihood
 from scalable_gps.models import ExactGPModel, SGDGPModel
 from scalable_gps.utils import (
     ExactPredictionsTuple,
+    HparamsTuple,
     flatten_nested_dict,
     get_tuned_hparams,
     setup_training,
@@ -43,7 +46,15 @@ def main(config):
         print(config)
         train_ds, test_ds = get_dataset(config.dataset_name, **config.dataset_config)
 
-        hparams = get_tuned_hparams(config.dataset_name, config.dataset_config.split)
+        try:
+            hparams = get_tuned_hparams(config.dataset_name, config.dataset_config.split)
+        except wandb.CommError:
+            print("Could not fetch hparams from wandb. Using default values.")
+        
+            hparams = HparamsTuple(
+                length_scale=jnp.array(config.kernel_config.length_scale),
+                signal_scale=config.kernel_config.signal_scale,
+                noise_scale=config.dataset_config.noise_scale,)
         
         print(hparams)
         

@@ -5,6 +5,7 @@ import jax
 import jax.numpy as jnp
 import jax.random as jr
 from chex import Array
+
 from scalable_gps.data import Dataset
 from scalable_gps.linalg_utils import KvP
 from scalable_gps.linear_model import loss_fn
@@ -66,8 +67,8 @@ def get_eval_fn(
     train_ds: Dataset,
     test_ds: Dataset,
     kernel_fn: Callable,
-    feature_fn: Callable,
     noise_scale: float,
+    feature_fn: Optional[Callable] = None,
     grad_fn: Optional[Callable] = None,
     metrics_prefix: str = "",
     exact_metrics: Optional[ExactPredictionsTuple] = None,

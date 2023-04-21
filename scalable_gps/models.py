@@ -1,17 +1,17 @@
+import time
 from typing import Callable, List, Optional
 
 import chex
-from scalable_gps import eval_utils
 import jax
 import jax.numpy as jnp
 import jax.random as jr
 import ml_collections
 import optax
-from scalable_gps import optim_utils
-from scalable_gps import sampling_utils
-import time
 import wandb
 from chex import Array
+from tqdm import tqdm
+
+from scalable_gps import eval_utils, optim_utils, sampling_utils
 from scalable_gps.data import Dataset
 from scalable_gps.eval_utils import LLH, RMSE
 from scalable_gps.kernels import Kernel
@@ -19,9 +19,9 @@ from scalable_gps.linalg_utils import KvP, pivoted_cholesky, solve_K_inv_v
 from scalable_gps.linear_model import marginal_likelihood
 from scalable_gps.optim_utils import get_lr, get_lr_and_schedule
 from scalable_gps.utils import ExactPredictionsTuple, HparamsTuple, TargetTuple, get_gpu_or_cpu_device
-from tqdm import tqdm
 
 
+# TODO: Split file into three files within a models folder.
 class GPModel:
     def __init__(self, noise_scale: float, kernel: Kernel):
         self.alpha = None
@@ -299,8 +299,8 @@ class SGDGPModel(GPModel):
             train_ds,
             test_ds,
             self.kernel.kernel_fn,
-            feature_fn,
             self.noise_scale,
+            feature_fn=feature_fn,
             grad_fn=grad_fn,
             metrics_prefix=metrics_prefix,
             exact_metrics=exact_metrics
@@ -335,7 +335,9 @@ class SGDGPModel(GPModel):
                         lr_to_log = get_lr(opt_state)
 
                         if wandb.run is not None:
-                            wandb.log({**eval_metrics, **{'train_step': iter_counter, 'lr': lr_to_log}})
+                            wandb.log(
+                                {**eval_metrics, 
+                                **{'train_step': iter_counter, 'lr': lr_to_log, 'time_elapsed': compute_time_elapsed_in_seconds}})
                         aux.append(eval_metrics)
 
                         eval_counter += 1
@@ -405,6 +407,7 @@ class SGDGPModel(GPModel):
         f0_samples_train, f0_samples_test, eps0_samples = compute_prior_samples_fn(
             jr.split(prior_samples_key, n_samples))  # (n_samples, n_train), (n_samples, n_test), (n_samples, n_train)
         
+        exact_samples_tuple = None
         if compare_exact:
             exact_gp = ExactGPModel(self.noise_scale, self.kernel)
             exact_gp.K = exact_gp.kernel.kernel_fn(train_ds.x, train_ds.x)
@@ -492,7 +495,7 @@ class CGGPModel(ExactGPModel):
         self.pivoted_chol = None
     
     def get_cg_closure_fn(self, noise_std, train_ds):
-        
+        # TODO: Pipe in the correct batch size here for KvP.
         # (K(x, x) + noise_std**2 * I) * params = y # (n_train)
         def _fn(params):
             return KvP(train_ds.x, train_ds.x, params, kernel_fn=self.kernel.kernel_fn) + params * noise_std**2
@@ -542,7 +545,8 @@ class CGGPModel(ExactGPModel):
         config: ml_collections.ConfigDict,
         metrics_list: List[str],
         metrics_prefix: str="",
-        exact_metrics: Optional[ExactPredictionsTuple] = None,) -> Array:
+        exact_metrics: Optional[ExactPredictionsTuple] = None,
+        eval_intermediate_cg: bool=False) -> Array:
         """Compute representer weights alpha by solving a linear system using Conjugate Gradients."""
         
         cg_closure_fn = self.get_cg_closure_fn(self.noise_scale, train_ds)
@@ -552,8 +556,8 @@ class CGGPModel(ExactGPModel):
             train_ds,
             test_ds,
             self.kernel.kernel_fn,
-            self.kernel.feature_fn,
             self.noise_scale,
+            feature_fn=self.kernel.feature_fn,
             grad_fn=None,
             metrics_prefix=metrics_prefix,
             exact_metrics=exact_metrics
@@ -572,12 +576,18 @@ class CGGPModel(ExactGPModel):
         else:
             pivoted_solve_fn = None
 
-        if not metrics_list:
+        aux = []
+        if not eval_intermediate_cg:
             cg_fn = self.get_cg_solve_fn(
                 cg_closure_fn, tol=config.tol, atol=config.atol, maxiter=config.maxiter, M=pivoted_solve_fn)
         
             # Compute alpha
             self.alpha = cg_fn(train_ds.y)
+            
+            eval_metrics = eval_fn(self.alpha, config.maxiter, None, None)
+            if wandb.run is not None:
+                wandb.log({**eval_metrics, **{'train_step': config.maxiter}})
+            aux.append(eval_metrics)
         else:
             aux = []
             # Compute metrics by running for longer maxiter
@@ -612,9 +622,10 @@ class CGGPModel(ExactGPModel):
         n_features: int = 0,
         chol_eps: float = 1e-5,
         zero_mean: bool = True,
-        metrics_list=[],
-        metrics_prefix="",
-        compare_exact=False):
+        metrics_list: list = [],
+        metrics_prefix: str = "",
+        compare_exact: bool = False,
+        eval_intermediate_cg: bool = False,):
         
         prior_covariance_key, prior_samples_key, optim_key = jr.split(key, 3)
     
@@ -652,6 +663,7 @@ class CGGPModel(ExactGPModel):
         f0_samples_train, f0_samples_test, eps0_samples = compute_prior_samples_fn(
             jr.split(prior_samples_key, n_samples))  # (n_samples, n_train), (n_samples, n_test), (n_samples, n_train)
         
+        exact_samples_tuple = None
         if compare_exact:
             exact_gp = ExactGPModel(self.noise_scale, self.kernel)
             exact_gp.K = exact_gp.kernel.kernel_fn(train_ds.x, train_ds.x)
@@ -683,16 +695,15 @@ class CGGPModel(ExactGPModel):
         target_tuples = compute_target_tuples_fn(f0_samples_train, eps0_samples) # (n_samples, TargetTuples)
         
         aux = []
-        # Number of CG iterations to evaluate.
-        for i in tqdm(range(0, config.maxiter, config.eval_every)):
-            
+        alphas = None
+        if not eval_intermediate_cg:
             cg_fn = self.get_cg_solve_fn(
-                    cg_closure_fn, tol=config.tol, atol=config.atol, maxiter=i, M=pivoted_solve_fn, vmap=True)
+                    cg_closure_fn, tol=config.tol, atol=config.atol, maxiter=config.maxiter, M=pivoted_solve_fn, vmap=True)
             
             alphas = cg_fn(f0_samples_train + eps0_samples)  # (n_samples, n_train)
     
-            vmapped_eval_metrics = eval_fn(alphas, i, None, target_tuples)
-
+            vmapped_eval_metrics = eval_fn(alphas, config.maxiter, None, target_tuples)
+            
             aux_metrics = {}
             if "test_llh" in metrics_list or "normalised_test_llh" in metrics_list:
                 y_pred_loc = self.predictive_mean(train_ds, test_ds, recompute=False)
@@ -705,12 +716,38 @@ class CGGPModel(ExactGPModel):
                     aux_metrics['normalised_test_llh'] = LLH(test_ds.y, y_pred_loc, y_pred_scale)
             if wandb.run is not None:
                 wandb.log({**_process_vmapped_metrics(vmapped_eval_metrics),
-                            **{'sample_step': i},
+                            **{'sample_step': config.maxiter},
                             **aux_metrics})
 
             aux.append(vmapped_eval_metrics)
+        else:
+            
+            # Number of CG iterations to evaluate.
+            for i in tqdm(range(0, config.maxiter, config.eval_every)):
+                
+                cg_fn = self.get_cg_solve_fn(
+                        cg_closure_fn, tol=config.tol, atol=config.atol, maxiter=i, M=pivoted_solve_fn, vmap=True)
+                
+                alphas = cg_fn(f0_samples_train + eps0_samples)  # (n_samples, n_train)
+        
+                vmapped_eval_metrics = eval_fn(alphas, i, None, target_tuples)
 
-        print(f'alphas: {alphas.shape}')
+                aux_metrics = {}
+                if "test_llh" in metrics_list or "normalised_test_llh" in metrics_list:
+                    y_pred_loc = self.predictive_mean(train_ds, test_ds, recompute=False)
+                    zero_mean_posterior_samples = compute_posterior_samples_fn(alphas, f0_samples_test)
+                    y_pred_scale = self.predictive_variance_samples(zero_mean_posterior_samples)
+                    if "test_llh" in metrics_list:
+                        aux_metrics['test_llh'] = LLH(
+                            test_ds.y, y_pred_loc, y_pred_scale, mu=train_ds.mu_y, sigma=train_ds.sigma_y)
+                    if "normalised_test_llh" in metrics_list:
+                        aux_metrics['normalised_test_llh'] = LLH(test_ds.y, y_pred_loc, y_pred_scale)
+                if wandb.run is not None:
+                    wandb.log({**_process_vmapped_metrics(vmapped_eval_metrics),
+                                **{'sample_step': i},
+                                **aux_metrics})
+
+                aux.append(vmapped_eval_metrics)
         
         posterior_samples = compute_posterior_samples_fn(alphas, f0_samples_test)  # (n_samples, n_test)
         

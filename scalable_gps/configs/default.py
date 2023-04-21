@@ -66,6 +66,7 @@ def get_config(config_string):
     config.train_config.learning_rate = 5e-1
     config.train_config.momentum = 0.9
     config.train_config.nesterov = True
+    # TODO: Calculate polyak dynamically.
     config.train_config.polyak = 1e-3
 
     config.train_config.absolute_clipping = 0.1  # -1 to avoid clipping

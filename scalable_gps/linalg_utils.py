@@ -4,6 +4,8 @@ from typing import Callable
 import jax
 import jax.numpy as jnp
 from chex import Array
+
+from scalable_gps.kernels import Kernel
 from scalable_gps.utils import get_gpu_or_cpu_device
 
 Kernel_fn = Callable[[Array, Array], Array]
@@ -30,7 +32,7 @@ def KvP(x1: Array, x2: Array, v: Array, kernel_fn: Kernel_fn, **kernel_kwargs):
     return jax.lax.scan(_idx_KvP, jnp.zeros(()), idx_vec)[1].squeeze()
 
 
-def pivoted_cholesky(kernel, x, max_rank, diag_rtol=1e-3, jitter=1e-3, name=None):
+def pivoted_cholesky(kernel: Kernel, x: Array, max_rank: int, diag_rtol: float=1e-3, jitter: float=1e-3):
     n = x.shape[0]
     assert max_rank <= n
 
