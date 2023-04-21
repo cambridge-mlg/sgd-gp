@@ -374,7 +374,7 @@ class SGDGPModel(GPModel):
                     aux.append(eval_metrics)
 
                     eval_counter += 1
-                    print("Iter: ", iter_counter, "Time: ", time_elapsed, "Eval: ", eval_counter)
+                    # print("Iter: ", iter_counter, "Time: ", time_elapsed, "Eval: ", eval_counter)
 
                 iter_counter += 1
                 tqdm_update_fn(time_delta)
