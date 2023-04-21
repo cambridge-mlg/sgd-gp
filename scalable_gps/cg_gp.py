@@ -48,7 +48,6 @@ def main(config):
         print(f"train_ds.x.shape: {train_ds.x.shape}")
         print(f"train_ds.y.shape: {train_ds.y.shape}")
 
-        # TODO: Check if artifact exists, otherwise do default values.
         try:
             hparams = get_tuned_hparams(config.dataset_name, config.dataset_config.split)
         except wandb.CommError:
