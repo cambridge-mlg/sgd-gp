@@ -17,7 +17,7 @@ from scalable_gps.eval_utils import LLH, RMSE
 from scalable_gps.kernels import Kernel
 from scalable_gps.linalg_utils import KvP, pivoted_cholesky, solve_K_inv_v
 from scalable_gps.linear_model import marginal_likelihood
-from scalable_gps.optim_utils import get_lr, get_lr_and_schedule
+from scalable_gps.optim_utils import get_lr_and_schedule
 from scalable_gps.utils import ExactPredictionsTuple, HparamsTuple, TargetTuple, get_gpu_or_cpu_device
 
 
@@ -294,7 +294,7 @@ class SGDGPModel(GPModel):
         feature_fn = self.get_feature_fn(train_ds, config.n_features_optim, config.recompute_features)
         idx_fn = optim_utils.get_idx_fn(config.batch_size, train_ds.N, config.iterative_idx, vmap=False)
         
-        eval_fn = eval_utils.get_eval_fn(
+        eval_utils.get_eval_fn(
             metrics_list,
             train_ds,
             test_ds,
@@ -306,60 +306,72 @@ class SGDGPModel(GPModel):
             exact_metrics=exact_metrics
         )
 
+        def _get_cond_fn(time_budget_in_seconds, iterations, eval_every_in_seconds, eval_every):
+            def _loop_cond_fn(time_elapsed, iter_counter):
+                if time_budget_in_seconds > 0.:
+                    return time_elapsed < time_budget_in_seconds
+                else:
+                    return iter_counter < iterations
+            
+            def _eval_cond_fn(time_elapsed, iter_counter, eval_counter):
+                if time_budget_in_seconds > 0.:
+                    return time_elapsed >= (eval_counter * eval_every_in_seconds)
+                else:
+                    return (iter_counter % eval_every == 0)
+
+            if time_budget_in_seconds > 0.:
+                pbar = tqdm(desc="Time: ", total=time_budget_in_seconds, unit="s")
+            else:
+                pbar = tqdm(desc="Iters: ", total=iterations)
+            
+            def _tqdm_update_fn(time_delta):
+                pbar.update(time_delta if time_budget_in_seconds > 0. else 1)
+
+            return jax.jit(_loop_cond_fn), jax.jit(_eval_cond_fn), pbar, _tqdm_update_fn
+        
+        loop_cond_fn, eval_cond_fn, pbar, tqdm_update_fn = _get_cond_fn(
+            config.time_budget_in_seconds, config.iterations, config.eval_every_in_seconds, config.eval_every)
+            
         # Initialise alpha and alpha_polyak
         alpha, alpha_polyak = jnp.zeros((train_ds.N,)), jnp.zeros((train_ds.N,))
 
         opt_state = optimizer.init(alpha)
 
         aux = []
-        if config.time_budget_in_seconds is not None:
-            compute_time_elapsed_in_seconds = 0.0
-            iter_counter = 0
-            eval_counter = 0
-            with tqdm(desc="Time: ", total=config.time_budget_in_seconds, unit="s") as pbar:
-                while compute_time_elapsed_in_seconds < config.time_budget_in_seconds:
-                    time_before_update = time.time()
-                    key, idx_key, feature_key = jr.split(key, 3)
-                    features = feature_fn(feature_key)
-                    idx = idx_fn(iter_counter, idx_key)
-
-                    alpha, alpha_polyak, opt_state = update_fn(alpha, alpha_polyak, idx, features, opt_state, target_tuple)
-                    time_after_update = time.time()
-
-                    time_delta = time_after_update - time_before_update
-                    compute_time_elapsed_in_seconds += time_delta
-
-                    if compute_time_elapsed_in_seconds >= (eval_counter * config.eval_every_in_seconds):
-                        eval_metrics = eval_fn(alpha_polyak, idx, features, target_tuple)
-
-                        lr_to_log = get_lr(opt_state)
-
-                        if wandb.run is not None:
-                            wandb.log(
-                                {**eval_metrics, 
-                                **{'train_step': iter_counter, 'lr': lr_to_log, 'time_elapsed': compute_time_elapsed_in_seconds}})
-                        aux.append(eval_metrics)
-
-                        eval_counter += 1
-                    iter_counter += 1
-                    pbar.update(time_delta)
-            print(f"iter_counter: {iter_counter}, eval_counter: {eval_counter}")
-        else:
-            for i in tqdm(range(config.iterations)):
+        
+        time_elapsed = 0.0
+        iter_counter = 0
+        eval_counter = 0
+        
+        with pbar:
+            while loop_cond_fn(time_elapsed, iter_counter):
+                time_before_update = time.time()
                 key, idx_key, feature_key = jr.split(key, 3)
                 features = feature_fn(feature_key)
-                idx = idx_fn(i, idx_key)
+                idx = idx_fn(iter_counter, idx_key)
 
                 alpha, alpha_polyak, opt_state = update_fn(alpha, alpha_polyak, idx, features, opt_state, target_tuple)
+                time_after_update = time.time()
 
-                if i % config.eval_every == 0:
-                    eval_metrics = eval_fn(alpha_polyak, idx, features, target_tuple)
+                time_delta = time_after_update - time_before_update
+                time_elapsed += time_delta
+        
+                if eval_cond_fn(time_elapsed, iter_counter, eval_counter):
+                    # eval_metrics = eval_fn(alpha_polyak, idx, features, target_tuple)
 
-                    lr_to_log = get_lr(opt_state)
+                    # lr_to_log = get_lr(opt_state)
 
-                    if wandb.run is not None:
-                        wandb.log({**eval_metrics, **{'train_step': i, 'lr': lr_to_log}})
-                    aux.append(eval_metrics)
+                    # if wandb.run is not None:
+                    #     wandb.log(
+                    #         {**eval_metrics, 
+                    #         **{'train_step': iter_counter, 'lr': lr_to_log, 'time_elapsed': time_elapsed}})
+                    # aux.append(eval_metrics)
+
+                    eval_counter += 1
+                    print("Iter: ", iter_counter, "Time: ", time_elapsed, "Eval: ", eval_counter)
+
+                iter_counter += 1
+                tqdm_update_fn(time_delta)
 
         self.alpha = alpha_polyak
         return self.alpha, aux
