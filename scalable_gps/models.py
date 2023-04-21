@@ -17,7 +17,7 @@ from scalable_gps.eval_utils import LLH, RMSE
 from scalable_gps.kernels import Kernel
 from scalable_gps.linalg_utils import KvP, pivoted_cholesky, solve_K_inv_v
 from scalable_gps.linear_model import marginal_likelihood
-from scalable_gps.optim_utils import get_lr_and_schedule
+from scalable_gps.optim_utils import get_lr, get_lr_and_schedule
 from scalable_gps.utils import ExactPredictionsTuple, HparamsTuple, TargetTuple, get_gpu_or_cpu_device
 
 
@@ -294,7 +294,7 @@ class SGDGPModel(GPModel):
         feature_fn = self.get_feature_fn(train_ds, config.n_features_optim, config.recompute_features)
         idx_fn = optim_utils.get_idx_fn(config.batch_size, train_ds.N, config.iterative_idx, vmap=False)
         
-        eval_utils.get_eval_fn(
+        eval_fn = eval_utils.get_eval_fn(
             metrics_list,
             train_ds,
             test_ds,
@@ -339,6 +339,12 @@ class SGDGPModel(GPModel):
 
         aux = []
         
+        # force JIT by running a single step
+        _, idx_key, feature_key = jr.split(key, 3)
+        features = feature_fn(feature_key)
+        idx = idx_fn(0, idx_key)
+        update_fn(alpha, alpha_polyak, idx, features, opt_state, target_tuple)
+
         time_elapsed = 0.0
         iter_counter = 0
         eval_counter = 0
@@ -357,15 +363,15 @@ class SGDGPModel(GPModel):
                 time_elapsed += time_delta
         
                 if eval_cond_fn(time_elapsed, iter_counter, eval_counter):
-                    # eval_metrics = eval_fn(alpha_polyak, idx, features, target_tuple)
+                    eval_metrics = eval_fn(alpha_polyak, idx, features, target_tuple)
 
-                    # lr_to_log = get_lr(opt_state)
+                    lr_to_log = get_lr(opt_state)
 
-                    # if wandb.run is not None:
-                    #     wandb.log(
-                    #         {**eval_metrics, 
-                    #         **{'train_step': iter_counter, 'lr': lr_to_log, 'time_elapsed': time_elapsed}})
-                    # aux.append(eval_metrics)
+                    if wandb.run is not None:
+                        wandb.log(
+                            {**eval_metrics, 
+                            **{'train_step': iter_counter, 'lr': lr_to_log, 'time_elapsed': time_elapsed}})
+                    aux.append(eval_metrics)
 
                     eval_counter += 1
                     print("Iter: ", iter_counter, "Time: ", time_elapsed, "Eval: ", eval_counter)
