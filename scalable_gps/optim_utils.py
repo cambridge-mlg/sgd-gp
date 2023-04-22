@@ -6,6 +6,7 @@ import jax.random as jr
 import ml_collections
 import optax
 from chex import Array
+
 from scalable_gps.linear_model import (
     error_grad_sample,
     regularizer_grad_sample,
@@ -100,6 +101,7 @@ def get_iterative_idx_fn(batch_size: int, n_train: int):
 def get_idx_fn(
     batch_size: int, n_train: int, iterative_idx: bool = True, vmap: bool = False
 ):
+    # TODO: Should we assert that batch_size < n_train?
     if iterative_idx:
         assert (
             n_train % batch_size == 0

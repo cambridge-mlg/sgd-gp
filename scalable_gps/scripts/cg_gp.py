@@ -1,4 +1,3 @@
-
 import jax
 import jax.numpy as jnp
 import ml_collections.config_flags
@@ -6,11 +5,19 @@ import wandb
 from absl import app, flags
 
 from scalable_gps import kernels
+from scalable_gps.baselines.exact_gp_model import ExactGPModel
 from scalable_gps.data import get_dataset
 from scalable_gps.eval_utils import RMSE
 from scalable_gps.linear_model import marginal_likelihood
-from scalable_gps.models import ExactGPModel
-from scalable_gps.utils import HparamsTuple, flatten_nested_dict, get_tuned_hparams, setup_training, update_config_dict
+from scalable_gps.models import CGGPModel
+from scalable_gps.utils import (
+    ExactPredictionsTuple,
+    HparamsTuple,
+    flatten_nested_dict,
+    get_tuned_hparams,
+    setup_training,
+    update_config_dict,
+)
 
 ml_collections.config_flags.DEFINE_config_file(
     "config",
@@ -57,18 +64,54 @@ def main(config):
         kernel_init_fn = getattr(kernels, config.kernel_name)
         
         kernel = kernel_init_fn({'signal_scale': hparams.signal_scale, 'length_scale': hparams.length_scale})
-        exact_model = ExactGPModel(hparams.noise_scale, kernel)
+        
+        # Compute exact solution
+        exact_model, exact_metrics = None, None
+        if config.compute_exact_soln:
+            exact_model = ExactGPModel(hparams.noise_scale, kernel)
 
-        exact_model.compute_representer_weights(train_ds)
-        y_pred = exact_model.predictive_mean(train_ds, test_ds)
+            exact_model.compute_representer_weights(train_ds)
+            y_pred_exact = exact_model.predictive_mean(train_ds, test_ds)
+            test_rmse_exact = RMSE(test_ds.y, y_pred_exact, mu=train_ds.mu_y, sigma=train_ds.sigma_y)
+            normalised_test_rmse = RMSE(test_ds.y, y_pred_exact)
+
+            mll = marginal_likelihood(train_ds.x, train_ds.y, exact_model.kernel.kernel_fn, hparams)
+            print(f"test_rmse_exact = {test_rmse_exact}")
+            wandb.log({"test_rmse": test_rmse_exact,
+                    "normalised_test_rmse": normalised_test_rmse,
+                    "mll": mll / train_ds.N})
+
+            # Define exact metrics that we will use later to compare with stochastic solution
+            exact_metrics = ExactPredictionsTuple(
+                alpha=exact_model.alpha,
+                y_pred_loc=y_pred_exact
+            )
+        
+        cg_model = CGGPModel(hparams.noise_scale, kernel)
+
+        metrics_list = ["test_rmse", "normalised_test_rmse"]
+        if config.compute_exact_soln:
+            metrics_list.extend(["alpha_diff", "y_pred_diff", "test_rmse_diff", "alpha_rkhs_diff"])
+
+        alpha = cg_model.compute_representer_weights(
+            train_ds, 
+            test_ds, 
+            config.cg_config, 
+            metrics_list, 
+            metrics_prefix="train", 
+            exact_metrics=exact_metrics if config.compute_exact_soln else None)
+
+        y_pred = cg_model.predictive_mean(train_ds, test_ds)
         test_rmse = RMSE(test_ds.y, y_pred, mu=train_ds.mu_y, sigma=train_ds.sigma_y)
         normalised_test_rmse = RMSE(test_ds.y, y_pred)
 
-        mll = marginal_likelihood(train_ds.x, train_ds.y, exact_model.kernel.kernel_fn, hparams)
-        print(f"test_rmse_exact = {test_rmse}")
+        mll = marginal_likelihood(train_ds.x, train_ds.y, cg_model.kernel.kernel_fn, hparams)
+        print(f"test_rmse_cg = {test_rmse}")
         wandb.log({"test_rmse": test_rmse,
                    "normalised_test_rmse": normalised_test_rmse,
                    "mll": mll / train_ds.N})
+        
+        return alpha
 
 if __name__ == "__main__":
     # Adds jax flags to the program.

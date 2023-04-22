@@ -125,6 +125,15 @@ def get_tuned_hparams(d_name: str, split: int):
     
     return mean_hparams
 
+
+def process_vmapped_metrics(vmapped_metrics):
+    mean_metrics, std_metrics = {}, {}
+    for k, v in vmapped_metrics.items():
+        vmapped_metrics[k] = wandb.Histogram(v)
+        mean_metrics[f'{k}_mean'] = jnp.mean(v)
+        std_metrics[f'{k}_std'] = jnp.std(v)
+        
+    return {**vmapped_metrics, **mean_metrics, **std_metrics}
     
     
     
