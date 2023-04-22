@@ -482,9 +482,10 @@ class SGDGPModel(GPModel):
                     if "normalised_test_llh" in metrics_list:
                         aux_metrics['normalised_test_llh'] = LLH(test_ds.y, y_pred_loc, y_pred_scale)
 
-                wandb.log({**_process_vmapped_metrics(vmapped_eval_metrics),
-                           **{'sample_step': i},
-                           **aux_metrics})
+                if wandb.run is not None:
+                    wandb.log({**_process_vmapped_metrics(vmapped_eval_metrics),
+                            **{'sample_step': i},
+                            **aux_metrics})
 
                 aux.append(vmapped_eval_metrics)
 
@@ -492,7 +493,7 @@ class SGDGPModel(GPModel):
         
         posterior_samples = compute_posterior_samples_fn(alphas_polyak, f0_samples_test)  # (n_samples, n_test)
         
-        return posterior_samples, alphas_polyak
+        return posterior_samples, alphas_polyak, aux
         
             
 def _process_vmapped_metrics(vmapped_metrics):
