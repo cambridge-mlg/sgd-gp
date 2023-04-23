@@ -1,5 +1,4 @@
 from functools import partial
-import time
 import operator
 import numpy as np
 import jax.numpy as jnp
@@ -70,12 +69,55 @@ def _shapes(pytree):
     return map(jnp.shape, tree_leaves(pytree))
 
 
-def _isolve(A, b, eval_fn=None, max_iter=None, eval_every_iter=None, max_time_in_secs=None, eval_every_in_secs=None,
-            x0=None, *, tol=1e-5, atol=0.0, M=None, check_symmetric=False):
+def _cg_solve(A, b, x0=None, cg_state=None, *, maxiter, tol=1e-5, atol=0.0, M=_identity):
+
+    # tolerance handling uses the "non-legacy" behavior of scipy.sparse.linalg.cg
+    bs = _vdot_real_tree(b, b)
+    atol2 = jnp.maximum(jnp.square(tol) * bs, jnp.square(atol))
+
+    # https://en.wikipedia.org/wiki/Conjugate_gradient_method#The_preconditioned_conjugate_gradient_method
+
+    def cond_fun(value):
+        _, r, gamma, _, k = value
+        rs = gamma.real if M is _identity else _vdot_real_tree(r, r)
+        return (rs > atol2) & (k < maxiter)
+
+    def body_fun(value):
+        x, r, gamma, p, k = value
+        Ap = A(p)
+        alpha = gamma / _vdot_real_tree(p, Ap).astype(dtype)
+        x_ = _add(x, _mul(alpha, p))
+        r_ = _sub(r, _mul(alpha, Ap))
+        z_ = M(r_)
+        gamma_ = _vdot_real_tree(r_, z_).astype(dtype)
+        beta_ = gamma_ / gamma
+        p_ = _add(z_, _mul(beta_, p))
+        return x_, r_, gamma_, p_, k + 1
+
+    if cg_state is not None:
+        x0, r0, gamma0, p0 = cg_state
+    else:
+        r0 = _sub(b, A(x0))
+        p0 = z0 = M(r0)
+        dtype = jnp.result_type(*tree_leaves(p0))
+        gamma0 = _vdot_real_tree(r0, z0).astype(dtype)
+    initial_value = (x0, r0, gamma0, p0, 0)
+
+    x, r, gamma, p, _ = lax.while_loop(cond_fun, body_fun, initial_value)
+
+    return x, (x, r, gamma, p)
+
+
+def _isolve(_isolve_solve, A, b, x0=None, cg_state=None, *, tol=1e-5, atol=0.0,
+            maxiter=None, M=None, check_symmetric=False):
     if x0 is None:
         x0 = tree_map(jnp.zeros_like, b)
 
     b, x0 = device_put((b, x0))
+
+    if maxiter is None:
+        size = sum(bi.size for bi in tree_leaves(b))
+        maxiter = 10 * size  # copied from scipy
 
     if M is None:
         M = _identity
@@ -92,15 +134,8 @@ def _isolve(A, b, eval_fn=None, max_iter=None, eval_every_iter=None, max_time_in
             'arrays in x0 and b must have matching shapes: '
             f'{_shapes(x0)} vs {_shapes(b)}')
 
-    # prioritise max_time_in_seconds if specified
-    if max_time_in_secs is not None:
-        isolve_solve = partial(_cg_solve_max_time, eval_fn=eval_fn,
-                               max_time_in_secs=max_time_in_secs, eval_every_in_secs=eval_every_in_secs,
-                               x0=x0, tol=tol, atol=atol, M=M)
-    else:
-        isolve_solve = partial(_cg_solve_max_iter, eval_fn=eval_fn,
-                               max_iter=max_iter, eval_every_iter=eval_every_iter,
-                               x0=x0, tol=tol, atol=atol, M=M)
+    isolve_solve = partial(
+        _isolve_solve, x0=x0, cg_state=cg_state, tol=tol, atol=atol, maxiter=maxiter, M=M)
 
     # real-valued positive-definite linear operators are symmetric
     def real_valued(x):
@@ -114,99 +149,7 @@ def _isolve(A, b, eval_fn=None, max_iter=None, eval_every_iter=None, max_time_in
     return x, info
 
 
-def _cg_solve_max_iter(A, b, eval_fn=None, max_iter=None, eval_every_iter=None, x0=None, *, tol=1e-5, atol=0.0, M=_identity):
-    # tolerance handling uses the "non-legacy" behavior of scipy.sparse.linalg.cg
-    bs = _vdot_real_tree(b, b)
-    atol2 = jnp.maximum(jnp.square(tol) * bs, jnp.square(atol))
-
-    def _eval_skip(*args):
-        return None
-
-    # https://en.wikipedia.org/wiki/Conjugate_gradient_method#The_preconditioned_conjugate_gradient_method
-
-    def cond_fun(value):
-        _, r, gamma, _, k = value
-        rs = gamma.real if M is _identity else _vdot_real_tree(r, r)
-        return (rs > atol2) & (k < max_iter)
-
-    def body_fun(value):
-        x, r, gamma, p, k = value
-        Ap = A(p)
-        alpha = gamma / _vdot_real_tree(p, Ap).astype(dtype)
-        x_ = _add(x, _mul(alpha, p))
-        r_ = _sub(r, _mul(alpha, Ap))
-        z_ = M(r_)
-        gamma_ = _vdot_real_tree(r_, z_).astype(dtype)
-        beta_ = gamma_ / gamma
-        p_ = _add(z_, _mul(beta_, p))
-
-
-        eval_cond = k % eval_every_iter == 0
-        jax.lax.cond(eval_cond, eval_fn, _eval_skip, k, x_)
-        return x_, r_, gamma_, p_, k + 1
-
-    r0 = _sub(b, A(x0))
-    p0 = z0 = M(r0)
-    dtype = jnp.result_type(*tree_leaves(p0))
-    gamma0 = _vdot_real_tree(r0, z0).astype(dtype)
-    initial_value = (x0, r0, gamma0, p0, 0)
-
-    x_final, *_ = lax.while_loop(cond_fun, body_fun, initial_value)
-
-    return x_final
-
-
-def _cg_solve_max_time(A, b, eval_fn=None, max_time_in_secs=None, eval_every_in_secs=None, x0=None, *, tol=1e-5, atol=0.0, M=_identity):
-    # tolerance handling uses the "non-legacy" behavior of scipy.sparse.linalg.cg
-    bs = _vdot_real_tree(b, b)
-    atol2 = jnp.maximum(jnp.square(tol) * bs, jnp.square(atol))
-
-    def _eval_fn(eval_counter, *args):
-        return eval_counter + 1, eval_fn(*args)
-
-    def _eval_skip(eval_counter, *args):
-        return eval_counter, None
-
-    # https://en.wikipedia.org/wiki/Conjugate_gradient_method#The_preconditioned_conjugate_gradient_method
-
-    def cond_fun(value):
-        _, r, gamma, _, time_elapsed_in_secs, _, _ = value
-        rs = gamma.real if M is _identity else _vdot_real_tree(r, r)
-        return (rs > atol2) & (time_elapsed_in_secs < max_time_in_secs)
-
-    def body_fun(value):
-        x, r, gamma, p, time_elapsed_in_secs, iter_counter, eval_counter = value
-        start_time = time.time()
-
-        Ap = A(p)
-        alpha = gamma / _vdot_real_tree(p, Ap).astype(dtype)
-        x_ = _add(x, _mul(alpha, p))
-        r_ = _sub(r, _mul(alpha, Ap))
-        z_ = M(r_)
-        gamma_ = _vdot_real_tree(r_, z_).astype(dtype)
-        beta_ = gamma_ / gamma
-        p_ = _add(z_, _mul(beta_, p))
-
-        end_time = time.time()
-        time_elapsed_in_secs = time_elapsed_in_secs + (end_time - start_time)
-
-        eval_cond = time_elapsed_in_secs >= (eval_counter * eval_every_in_secs)
-        eval_counter, _ = jax.lax.cond(eval_cond, _eval_fn, _eval_skip, eval_counter, iter_counter, x_)
-        return x_, r_, gamma_, p_, time_elapsed_in_secs, iter_counter, eval_counter
-
-    r0 = _sub(b, A(x0))
-    p0 = z0 = M(r0)
-    dtype = jnp.result_type(*tree_leaves(p0))
-    gamma0 = _vdot_real_tree(r0, z0).astype(dtype)
-    initial_value = (x0, r0, gamma0, p0, 0.0, 0, 0)
-
-    x_final, *_ = lax.while_loop(cond_fun, body_fun, initial_value)
-
-    return x_final
-
-
-def custom_cg(A, b, eval_fn=None, max_iter=None, eval_every_iter=None, max_time_in_secs=None, eval_every_in_secs=None,
-              x0=None, *, tol=1e-5, atol=0.0, M=None):
+def custom_cg(A, b, x0=None, cg_state=None, *, tol=1e-5, atol=0.0, maxiter=None, M=None):
     """Use Conjugate Gradient iteration to solve ``Ax = b``.
 
     The numerics of JAX's ``cg`` should exact match SciPy's ``cg`` (up to
@@ -245,12 +188,9 @@ def custom_cg(A, b, eval_fn=None, max_iter=None, eval_every_iter=None, max_time_
         Tolerances for convergence, ``norm(residual) <= max(tol*norm(b), atol)``.
         We do not implement SciPy's "legacy" behavior, so JAX's tolerance will
         differ from SciPy unless you explicitly pass ``atol`` to SciPy's ``cg``.
-    max_iter : integer
-        Maximum number of iterations. Iteration will stop after maxiter
+    maxiter : integer
+        Maximum number of iterations.  Iteration will stop after maxiter
         steps even if the specified tolerance has not been achieved.
-    max_time_in_secs : float
-        Maximum amount of compute time in seconds. Iteration will stop after max_time_in_secs
-        seconds even if the specified tolerance has not been achieved.
     M : ndarray, function, or matmul-compatible object
         Preconditioner for A.  The preconditioner should approximate the
         inverse of A.  Effective preconditioning dramatically improves the
@@ -262,7 +202,6 @@ def custom_cg(A, b, eval_fn=None, max_iter=None, eval_every_iter=None, max_time_
     scipy.sparse.linalg.cg
     jax.lax.custom_linear_solve
     """
-    return _isolve(A=A, b=b, eval_fn=eval_fn,
-                   max_iter=max_iter, eval_every_iter=eval_every_iter,
-                   max_time_in_secs=max_time_in_secs, eval_every_in_secs=eval_every_in_secs,
-                   x0=x0, tol=tol, atol=atol, M=M, check_symmetric=True)
+    return _isolve(_cg_solve,
+                    A=A, b=b, x0=x0, cg_state=cg_state, tol=tol, atol=atol,
+                    maxiter=maxiter, M=M, check_symmetric=True)
