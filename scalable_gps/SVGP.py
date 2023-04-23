@@ -54,7 +54,7 @@ def regression_SVGP(
 
     if inducing_init == "kmeans":
         z, _ = kmeans(key, train_dataset.x, k=num_inducing, thresh=1e-3)
-    elif inducing_init == "equally_spaced":
+    elif inducing_init == "equidistant":
         chex.assert_axis_dimension(D.X, axis=1, expected=1)
         z = jnp.linspace(D.X.min(), D.X.max(), num_inducing).reshape(-1, 1)
     elif inducing_init == "uniform":
