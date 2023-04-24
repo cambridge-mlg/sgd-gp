@@ -1,3 +1,4 @@
+import time
 from typing import List, Optional
 
 import chex
@@ -85,6 +86,7 @@ class SGDGPModel(GPModel):
         idx = idx_fn(0, idx_key)
         update_fn(alpha, alpha_polyak, idx, features, opt_state, target_tuple)
 
+        start_time = time.time()
         aux = []
         for i in tqdm(range(config.iterations)):
             key, idx_key, feature_key = jr.split(key, 3)
@@ -99,7 +101,8 @@ class SGDGPModel(GPModel):
                 lr_to_log = get_lr(opt_state)
 
                 if wandb.run is not None:
-                    wandb.log({**eval_metrics, **{'train_step': i, 'lr': lr_to_log}})
+                    wandb.log({**eval_metrics, 
+                               **{'train_step': i, 'lr': lr_to_log, 'wall_clock_time': time.time() - start_time}})
                 aux.append(eval_metrics)
 
         self.alpha = alpha_polyak
@@ -305,6 +308,7 @@ class CGGPModel(ExactGPModel):
         )
         
         if config.preconditioner:
+            precond_start_time = time.time()
             if self.pivoted_chol is None:
                 self.pivoted_chol = pivoted_cholesky(
                     self.kernel, 
@@ -314,8 +318,10 @@ class CGGPModel(ExactGPModel):
                     config.pivoted_jitter)
             
             pivoted_solve_fn = self.get_cg_preconditioner_solve_fn(self.pivoted_chol)
+            precond_time = time.time() - precond_start_time
         else:
             pivoted_solve_fn = None
+            precond_time = 0.
 
         if config.batch_size is None:
             def partial_fn(batch_size):
@@ -333,13 +339,14 @@ class CGGPModel(ExactGPModel):
         aux = []
         alpha = None
         cg_state = None
-
+        
+        start_time = time.time()
         for i in tqdm(range(0, config.maxiter, config.eval_every)):
             alpha, cg_state = cg_fn(train_ds.y, cg_state, i)
             eval_metrics = eval_fn(alpha, i, None, None)
 
             if wandb.run is not None:
-                wandb.log({**eval_metrics, **{'train_step': i}})
+                wandb.log({**eval_metrics, **{'train_step': i, 'wall_clock_time': time.time() - start_time + precond_time}})
             aux.append(eval_metrics)
         
             self.alpha = alpha
