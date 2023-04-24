@@ -49,7 +49,6 @@ class SGDGPModel(GPModel):
         grad_fn = optim_utils.get_stochastic_gradient_fn(train_ds.x, self.kernel.kernel_fn, self.noise_scale)
         update_fn = optim_utils.get_update_fn(grad_fn, optimizer, config.polyak, vmap=False)
         feature_fn = self.get_feature_fn(train_ds, config.n_features_optim, config.recompute_features)
-        idx_fn = optim_utils.get_idx_fn(config.batch_size, train_ds.N, config.iterative_idx, vmap=False)
         
         eval_fn = eval_utils.get_eval_fn(
             metrics_list,
@@ -67,15 +66,35 @@ class SGDGPModel(GPModel):
 
         opt_state = optimizer.init(alpha)
 
-        aux = []
+        idx_key, feature_key = jr.split(key, 2)
+        features = feature_fn(feature_key)
+
+        if config.batch_size is None:
+            config.batch_size = 1
+            with tqdm(total=int(jnp.log2(train_ds.N)) + 1) as pbar:
+                while config.batch_size < train_ds.N:
+                    try:
+                        new_batch_size = min(config.batch_size * 2, train_ds.N)
+                        pbar.set_description(f"Trying batch size = {new_batch_size}")
+                        idx_fn = optim_utils.get_idx_fn(new_batch_size, train_ds.N, config.iterative_idx, vmap=False)
+                        idx = idx_fn(0, idx_key)
+                        update_fn(alpha, alpha_polyak, idx, features, opt_state, target_tuple)
+                    except Exception:
+                        break
+                    else:
+                        pbar.update()
+                        config.batch_size = new_batch_size
+            print(f"Selected batch size: {config.batch_size}, (N = {train_ds.N}, D = {train_ds.D}, "
+                  f"length_scale dims: {self.kernel.get_length_scale().shape[-1]})")
+        idx_fn = optim_utils.get_idx_fn(config.batch_size, train_ds.N, config.iterative_idx, vmap=False)
         
         # force JIT by running a single step
         # TODO: Wrap this in something we can call outside this function potentially. When we run 10 steps to calculate
         # num_iterations per budget, this will have to be called once there.
-        _, idx_key, feature_key = jr.split(key, 3)
-        features = feature_fn(feature_key)
         idx = idx_fn(0, idx_key)
         update_fn(alpha, alpha_polyak, idx, features, opt_state, target_tuple)
+
+        aux = []
 
         for i in tqdm(range(config.iterations)):
             key, idx_key, feature_key = jr.split(key, 3)
