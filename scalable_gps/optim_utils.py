@@ -250,32 +250,14 @@ def get_lr(opt_state):
     return lr_to_log
 
 
-def select_dynamic_batch_size(idx_key, N, partial_update_fn, partial_get_idx_fn):
+def select_dynamic_batch_size(N, partial_fn):
     batch_size = 1
     with tqdm(total=int(jnp.log2(N)) + 1) as pbar:
         while batch_size < N:
             try:
                 new_batch_size = min(batch_size * 2, N)
                 pbar.set_description(f"Trying batch size = {new_batch_size}")
-                idx_fn = partial_get_idx_fn(new_batch_size)
-                idx = idx_fn(0, idx_key)
-                partial_update_fn(idx)
-            except Exception:
-                break
-            else:
-                batch_size = new_batch_size
-                pbar.update()
-    return batch_size
-
-
-def select_dynamic_batch_size_cg(N, partial_KvP_fn):
-    batch_size = 1
-    with tqdm(total=int(jnp.log2(N)) + 1) as pbar:
-        while batch_size < N:
-            try:
-                new_batch_size = min(batch_size * 2, N)
-                pbar.set_description(f"Trying batch size = {new_batch_size}")
-                partial_KvP_fn(new_batch_size)
+                partial_fn(new_batch_size)
             except Exception:
                 break
             else:
