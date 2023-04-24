@@ -9,6 +9,7 @@ import optax
 import wandb
 from chex import Array
 from tqdm import tqdm
+from functools import partial
 
 from scalable_gps import eval_utils, optim_utils, sampling_utils
 from scalable_gps.baselines.base_gp_model import GPModel
@@ -68,25 +69,13 @@ class SGDGPModel(GPModel):
 
         idx_key, feature_key = jr.split(key, 2)
         features = feature_fn(feature_key)
-
         if config.batch_size is None:
-            config.batch_size = 1
-            with tqdm(total=int(jnp.log2(train_ds.N)) + 1) as pbar:
-                while config.batch_size < train_ds.N:
-                    try:
-                        new_batch_size = min(config.batch_size * 2, train_ds.N)
-                        pbar.set_description(f"Trying batch size = {new_batch_size}")
-                        idx_fn = optim_utils.get_idx_fn(new_batch_size, train_ds.N, config.iterative_idx, vmap=False)
-                        idx = idx_fn(0, idx_key)
-                        update_fn(alpha, alpha_polyak, idx, features, opt_state, target_tuple)
-                    except Exception:
-                        break
-                    else:
-                        pbar.update()
-                        config.batch_size = new_batch_size
+            partial_update_fn = lambda idx: update_fn(alpha, alpha_polyak, idx, features, opt_state, target_tuple)
+            partial_get_idx_fn = lambda batch_size: optim_utils.get_idx_fn(batch_size, train_ds.N, config.iterative_idx, share_idx=False)
+            config.batch_size = optim_utils.select_dynamic_batch_size(idx_key, train_ds.N, partial_update_fn, partial_get_idx_fn)
             print(f"Selected batch size: {config.batch_size}, (N = {train_ds.N}, D = {train_ds.D}, "
                   f"length_scale dims: {self.kernel.get_length_scale().shape[-1]})")
-        idx_fn = optim_utils.get_idx_fn(config.batch_size, train_ds.N, config.iterative_idx, vmap=False)
+        idx_fn = optim_utils.get_idx_fn(config.batch_size, train_ds.N, config.iterative_idx, share_idx=False)
         
         # force JIT by running a single step
         # TODO: Wrap this in something we can call outside this function potentially. When we run 10 steps to calculate
@@ -95,7 +84,6 @@ class SGDGPModel(GPModel):
         update_fn(alpha, alpha_polyak, idx, features, opt_state, target_tuple)
 
         aux = []
-
         for i in tqdm(range(config.iterations)):
             key, idx_key, feature_key = jr.split(key, 3)
             features = feature_fn(feature_key)
@@ -153,8 +141,7 @@ class SGDGPModel(GPModel):
         grad_fn = optim_utils.get_stochastic_gradient_fn(train_ds.x, self.kernel.kernel_fn, self.noise_scale)
         update_fn = optim_utils.get_update_fn(grad_fn, optimizer, config.polyak, vmap=True)
         feature_fn = self.get_feature_fn(train_ds, config.n_features_optim, config.recompute_features)
-        idx_fn = optim_utils.get_idx_fn(config.batch_size, train_ds.N, config.iterative_idx, vmap=False)
-
+ 
         # Call the vmapped functions
         f0_samples_train, f0_samples_test, eps0_samples = compute_prior_samples_fn(
             jr.split(prior_samples_key, n_samples))  # (n_samples, n_train), (n_samples, n_test), (n_samples, n_train)
@@ -192,6 +179,20 @@ class SGDGPModel(GPModel):
         alphas, alphas_polyak = jnp.zeros((n_samples, train_ds.N)), jnp.zeros((n_samples, train_ds.N))
         opt_states = optimizer.init(alphas)
         
+        idx_key, feature_key = jr.split(key, 2)
+        features = feature_fn(feature_key)
+        if config.batch_size is None:
+            partial_update_fn = lambda idx: update_fn(alphas, alphas_polyak, idx, features, opt_states, target_tuples)
+            partial_get_idx_fn = lambda batch_size: optim_utils.get_idx_fn(batch_size, train_ds.N, config.iterative_idx, share_idx=False)
+            config.batch_size = optim_utils.select_dynamic_batch_size(idx_key, train_ds.N, partial_update_fn, partial_get_idx_fn)
+            print(f"Selected batch size: {config.batch_size}, (N = {train_ds.N}, D = {train_ds.D}, "
+                  f"length_scale dims: {self.kernel.get_length_scale().shape[-1]})")
+        idx_fn = optim_utils.get_idx_fn(config.batch_size, train_ds.N, config.iterative_idx, share_idx=False)
+
+        # force JIT
+        idx = idx_fn(0, idx_key)
+        update_fn(alphas, alphas_polyak, idx, features, opt_states, target_tuples)
+
         aux = []
         for i in tqdm(range(config.iterations)):
             optim_key, idx_key, feature_key = jr.split(optim_key, 3)
@@ -234,11 +235,10 @@ class CGGPModel(ExactGPModel):
         
         self.pivoted_chol = None
     
-    def get_cg_closure_fn(self, noise_std, train_ds):
-        # TODO: Pipe in the correct batch size here for KvP.
+    def get_cg_closure_fn(self, noise_std, train_ds, batch_size):
         # (K(x, x) + noise_std**2 * I) * params = y # (n_train)
         def _fn(params):
-            return KvP(train_ds.x, train_ds.x, params, kernel_fn=self.kernel.kernel_fn) + params * noise_std**2
+            return KvP(train_ds.x, train_ds.x, params, kernel_fn=self.kernel.kernel_fn, batch_size=batch_size) + params * noise_std**2
 
         return jax.jit(_fn)
 
@@ -289,7 +289,14 @@ class CGGPModel(ExactGPModel):
         eval_intermediate_cg: bool=False) -> Array:
         """Compute representer weights alpha by solving a linear system using Conjugate Gradients."""
         
-        cg_closure_fn = self.get_cg_closure_fn(self.noise_scale, train_ds)
+        if config.batch_size is None:
+            partial_KvP_fn = lambda batch_size: KvP(train_ds.x, train_ds.x, jnp.zeros((train_ds.N,)),
+                                                    kernel_fn=self.kernel.kernel_fn, batch_size=batch_size)
+            config.batch_size = optim_utils.select_dynamic_batch_size_cg(train_ds.N, partial_KvP_fn)
+            print(f"Selected batch size: {config.batch_size}, (N = {train_ds.N}, D = {train_ds.D}, "
+                  f"length_scale dims: {self.kernel.get_length_scale().shape[-1]})")
+
+        cg_closure_fn = self.get_cg_closure_fn(self.noise_scale, train_ds, config.batch_size)
         
         eval_fn = eval_utils.get_eval_fn(
             metrics_list,
@@ -378,7 +385,14 @@ class CGGPModel(ExactGPModel):
                 n_features=n_features, 
                 chol_eps=chol_eps)
         
-        cg_closure_fn = self.get_cg_closure_fn(self.noise_scale, train_ds)
+        if config.batch_size is None:
+            partial_vmap_KvP_fn = lambda params, batch_size: KvP(train_ds.x, train_ds.x, params, kernel_fn=self.kernel.kernel_fn, batch_size=batch_size)
+            partial_KvP_fn = lambda batch_size: jax.vmap(partial_vmap_KvP_fn, in_axes=(0, None))(jnp.zeros((n_samples, train_ds.N)), batch_size)
+            config.batch_size = optim_utils.select_dynamic_batch_size_cg(train_ds.N, partial_KvP_fn)
+            print(f"Selected batch size: {config.batch_size}, (N = {train_ds.N}, D = {train_ds.D}, "
+                  f"length_scale dims: {self.kernel.get_length_scale().shape[-1]})")
+        
+        cg_closure_fn = self.get_cg_closure_fn(self.noise_scale, train_ds, config.batch_size)
         
         if config.preconditioner:
             if self.pivoted_chol is None:

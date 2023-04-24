@@ -6,12 +6,14 @@ import jax.random as jr
 import ml_collections
 import optax
 from chex import Array
+from tqdm import tqdm
 
 from scalable_gps.linear_model import (
     error_grad_sample,
     regularizer_grad_sample,
 )
 from scalable_gps.utils import TargetTuple
+from scalable_gps.optim_utils import get_idx_fn
 
 PyTree = Any
 
@@ -78,18 +80,18 @@ def get_target_tuples_fn(loss_objective: int):
 
 
 # TODO: rename vmap to share_idx
-def get_uniform_idx_fn(batch_size: int, n_train: int, vmap: bool = False):
+def get_uniform_idx_fn(batch_size: int, n_train: int, share_idx: bool = False):
     def _fn(_, key):
         idx = jr.randint(key, shape=(batch_size,), minval=0, maxval=n_train)
 
         return idx
 
-    if vmap:
-        # TODO: this should probably be vmap over 'key'
+    if share_idx:
         return jax.jit(jax.vmap(_fn))
     return jax.jit(_fn)
 
 
+# TODO: implement dataset shuffle
 def get_iterative_idx_fn(batch_size: int, n_train: int):
     def _fn(iter, _):
         idx = (jnp.arange(batch_size) + (iter * batch_size)) % n_train
@@ -100,7 +102,7 @@ def get_iterative_idx_fn(batch_size: int, n_train: int):
 
 
 def get_idx_fn(
-    batch_size: int, n_train: int, iterative_idx: bool = True, vmap: bool = False
+    batch_size: int, n_train: int, iterative_idx: bool = True, share_idx: bool = False
 ):
     # TODO: Should we assert that batch_size < n_train?
     if iterative_idx:
@@ -109,7 +111,7 @@ def get_idx_fn(
         ), "non-random idx with batch_size non multiple n_train causes training instability"
         idx_fn = get_iterative_idx_fn(batch_size, n_train)
     else:
-        idx_fn = get_uniform_idx_fn(batch_size, n_train, vmap=vmap)
+        idx_fn = get_uniform_idx_fn(batch_size, n_train, share_idx=share_idx)
     return idx_fn
 
 
@@ -247,3 +249,37 @@ def get_lr(opt_state):
                         lr_to_log = o_state2.hyperparams["learning_rate"]
 
     return lr_to_log
+
+
+def select_dynamic_batch_size(idx_key, N, partial_update_fn, partial_get_idx_fn):
+    batch_size = 1
+    with tqdm(total=int(jnp.log2(N)) + 1) as pbar:
+        while batch_size < N:
+            try:
+                new_batch_size = min(batch_size * 2, N)
+                pbar.set_description(f"Trying batch size = {new_batch_size}")
+                idx_fn = partial_get_idx_fn(new_batch_size)
+                idx = idx_fn(0, idx_key)
+                partial_update_fn(idx)
+            except Exception:
+                break
+            else:
+                batch_size = new_batch_size
+                pbar.update()
+    return batch_size
+
+
+def select_dynamic_batch_size_cg(N, partial_KvP_fn):
+    batch_size = 1
+    with tqdm(total=int(jnp.log2(N)) + 1) as pbar:
+        while batch_size < N:
+            try:
+                new_batch_size = min(batch_size * 2, N)
+                pbar.set_description(f"Trying batch size = {new_batch_size}")
+                partial_KvP_fn(new_batch_size)
+            except Exception:
+                break
+            else:
+                batch_size = new_batch_size
+                pbar.update()
+    return batch_size
