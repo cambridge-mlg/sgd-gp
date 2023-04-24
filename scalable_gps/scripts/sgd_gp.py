@@ -105,22 +105,21 @@ def main(config):
             exact_metrics=exact_metrics if config.compute_exact_soln else None,
         )
         
-        return None
-        # zero_mean_samples, alpha_samples = model.compute_posterior_samples(
-        #     sampling_key,
-        #     n_samples=config.sampling_config.n_samples,
-        #     train_ds=train_ds,
-        #     test_ds=test_ds,
-        #     config=config.sampling_config,
-        #     use_rff=False,
-        #     n_features=config.sampling_config.n_features_optim,
-        #     zero_mean=True,
-        #     metrics_list=metrics_list,
-        #     metrics_prefix="sampling",
-        #     compare_exact=True
-        # )
+        zero_mean_samples, alpha_samples = model.compute_posterior_samples(
+            sampling_key,
+            n_samples=config.sampling_config.n_samples,
+            train_ds=train_ds,
+            test_ds=test_ds,
+            config=config.sampling_config,
+            use_rff=False,
+            n_features=config.sampling_config.n_features_prior,
+            zero_mean=True,
+            metrics_list=metrics_list,
+            metrics_prefix="sampling",
+            compare_exact=True
+        )
 
-        # return zero_mean_samples, alpha_samples
+        return zero_mean_samples, alpha_samples
 
 
 if __name__ == "__main__":

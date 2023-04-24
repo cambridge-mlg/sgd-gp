@@ -339,7 +339,6 @@ class CGGPModel(ExactGPModel):
     
         return self.alpha
 
-
     def compute_posterior_samples( 
         self, 
         key: chex.PRNGKey, 

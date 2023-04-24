@@ -1,5 +1,6 @@
 import jax
 import jax.numpy as jnp
+import jax.random as jr
 import ml_collections.config_flags
 import wandb
 from absl import app, flags
@@ -62,9 +63,11 @@ def main(config):
         print(hparams)
         
         kernel_init_fn = getattr(kernels, config.kernel_name)
-        
         kernel = kernel_init_fn({'signal_scale': hparams.signal_scale, 'length_scale': hparams.length_scale})
         
+        key = jr.PRNGKey(config.seed)
+        _, sampling_key, key = jr.split(key, 3)
+
         # Compute exact solution
         exact_model, exact_metrics = None, None
         if config.compute_exact_soln:
@@ -91,9 +94,9 @@ def main(config):
 
         metrics_list = ["test_rmse", "normalised_test_rmse"]
         if config.compute_exact_soln:
-            metrics_list.extend(["alpha_diff", "y_pred_diff", "test_rmse_diff", "alpha_rkhs_diff"])
+            metrics_list.extend(["alpha_diff", "y_pred_diff", "alpha_rkhs_diff"])
 
-        alpha = cg_model.compute_representer_weights(
+        cg_model.compute_representer_weights(
             train_ds, 
             test_ds, 
             config.cg_config, 
@@ -111,7 +114,22 @@ def main(config):
                    "normalised_test_rmse": normalised_test_rmse,
                    "mll": mll / train_ds.N})
         
-        return alpha
+        zero_mean_samples, alpha_samples = cg_model.compute_posterior_samples(
+            sampling_key,
+            n_samples=config.cg_sampling_config.n_samples,
+            train_ds=train_ds,
+            test_ds=test_ds,
+            config=config.cg_sampling_config,
+            use_rff=False,
+            n_features=config.cg_sampling_config.n_features_prior,
+            zero_mean=True,
+            metrics_list=metrics_list,
+            metrics_prefix="sampling",
+            compare_exact=True
+        )
+
+        return zero_mean_samples, alpha_samples
+
 
 if __name__ == "__main__":
     # Adds jax flags to the program.
