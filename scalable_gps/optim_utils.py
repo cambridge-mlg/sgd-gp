@@ -91,7 +91,7 @@ def get_uniform_idx_fn(batch_size: int, n_train: int, vmap: bool = False):
 
 def get_iterative_idx_fn(batch_size: int, n_train: int):
     def _fn(iter, _):
-        idx = jnp.arange(batch_size) + ((iter * batch_size) % n_train)
+        idx = (jnp.arange(batch_size) + (iter * batch_size)) % n_train
 
         return idx
 
