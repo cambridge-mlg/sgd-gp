@@ -78,7 +78,6 @@ def get_target_tuples_fn(loss_objective: int):
     return jax.jit(jax.vmap(_fn))
 
 
-# TODO: rename vmap to share_idx
 def get_uniform_idx_fn(batch_size: int, n_train: int, share_idx: bool = False):
     def _fn(_, key):
         idx = jr.randint(key, shape=(batch_size,), minval=0, maxval=n_train)
@@ -92,9 +91,12 @@ def get_uniform_idx_fn(batch_size: int, n_train: int, share_idx: bool = False):
 
 # TODO: implement dataset shuffle
 def get_iterative_idx_fn(batch_size: int, n_train: int):
+    n_steps_per_epoch = n_train // batch_size
     def _fn(iter, _):
+        epoch_id = iter // n_steps_per_epoch
+        epoch_key = jr.PRNGKey(epoch_id)
         idx = (jnp.arange(batch_size) + (iter * batch_size)) % n_train
-
+        idx = jr.permutation(epoch_key, n_train)[idx]
         return idx
 
     return jax.jit(_fn)
@@ -105,9 +107,6 @@ def get_idx_fn(
 ):
     # TODO: Should we assert that batch_size < n_train?
     if iterative_idx:
-        assert (
-            n_train % batch_size == 0
-        ), "non-random idx with batch_size non multiple n_train causes training instability"
         idx_fn = get_iterative_idx_fn(batch_size, n_train)
     else:
         idx_fn = get_uniform_idx_fn(batch_size, n_train, share_idx=share_idx)

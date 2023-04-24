@@ -121,7 +121,7 @@ def main(config):
             test_ds=test_ds,
             config=config.cg_sampling_config,
             use_rff=False,
-            n_features=config.cg_sampling_config.n_features_prior,
+            n_features=config.cg_sampling_config.n_features_prior_sample,
             zero_mean=True,
             metrics_list=metrics_list,
             metrics_prefix="sampling",

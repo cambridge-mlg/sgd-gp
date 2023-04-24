@@ -92,7 +92,7 @@ def main(config):
 
         metrics_list = ["loss", "test_rmse", "err", "reg", "normalised_test_rmse"]
         if config.compute_exact_soln:
-            metrics_list.extend(["alpha_diff", "y_pred_diff", "test_rmse_diff", "alpha_rkhs_diff"])
+            metrics_list.extend(["alpha_diff", "y_pred_diff", "alpha_rkhs_diff"])
 
         # Compute the SGD MAP solution for representer weights.
         model.compute_representer_weights(
@@ -105,14 +105,14 @@ def main(config):
             exact_metrics=exact_metrics if config.compute_exact_soln else None,
         )
         
-        zero_mean_samples, alpha_samples = model.compute_posterior_samples(
+        zero_mean_samples, alpha_samples, _ = model.compute_posterior_samples(
             sampling_key,
             n_samples=config.sampling_config.n_samples,
             train_ds=train_ds,
             test_ds=test_ds,
             config=config.sampling_config,
             use_rff=False,
-            n_features=config.sampling_config.n_features_prior,
+            n_features=config.sampling_config.n_features_prior_sample,
             zero_mean=True,
             metrics_list=metrics_list,
             metrics_prefix="sampling",

@@ -53,7 +53,7 @@ def get_config(config_string):
 
     # Full-batch training configs that get passed
     config.train_config.iterations = 50000
-    config.train_config.batch_size = 4096
+    config.train_config.batch_size = 0
     config.train_config.eval_every = 100
     config.train_config.time_budget_in_seconds = 0.
     config.train_config.eval_every_in_seconds = 0.
@@ -86,11 +86,11 @@ def get_config(config_string):
     config.sampling_config.n_samples = 10
     # Full-batch training configs that get passed
     config.sampling_config.iterative_idx = True
-    config.sampling_config.learning_rate = 1e-2
+    config.sampling_config.learning_rate = 1e-3
     config.sampling_config.momentum = 0.9
     config.sampling_config.polyak = 1e-3
     config.sampling_config.iterations = 50000
-    config.sampling_config.batch_size = 4
+    config.sampling_config.batch_size = None
     config.sampling_config.eval_every = 100
     # RFF Configs
     config.sampling_config.n_features_prior_sample = 2000
@@ -115,26 +115,26 @@ def get_config(config_string):
     config.mll_config.n_subsample = 10000
 
     config.cg_config = ml_collections.ConfigDict()
-    config.cg_config.batch_size = 10
+    config.cg_config.batch_size = 0
     config.cg_config.tol = 1e-3
-    config.cg_config.maxiter = 100
+    config.cg_config.maxiter = 300
     config.cg_config.atol = 0.
     config.cg_config.eval_every = 10
-    config.cg_config.preconditioner = False
+    config.cg_config.preconditioner = True
     config.cg_config.pivoted_chol_rank = 100
     config.cg_config.pivoted_diag_rtol = 1e-3
     config.cg_config.pivoted_jitter = 1
     config.cg_config.loss_objective = 2
 
     config.cg_sampling_config = ml_collections.ConfigDict()
-    config.cg_sampling_config.batch_size = 2
-    config.cg_sampling_config.n_features_prior = 2000
+    config.cg_sampling_config.batch_size = None
+    config.cg_sampling_config.n_features_prior_sample = 2000
     config.cg_sampling_config.n_samples = 10
     config.cg_sampling_config.tol = 1e-3
-    config.cg_sampling_config.maxiter = 100
+    config.cg_sampling_config.maxiter = 300
     config.cg_sampling_config.atol = 0.
     config.cg_sampling_config.eval_every = 10
-    config.cg_sampling_config.preconditioner = False
+    config.cg_sampling_config.preconditioner = True
     config.cg_sampling_config.pivoted_chol_rank = 100
     config.cg_sampling_config.pivoted_diag_rtol = 1e-3
     config.cg_sampling_config.pivoted_jitter = 1
