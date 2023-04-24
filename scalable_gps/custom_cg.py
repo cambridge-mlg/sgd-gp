@@ -95,17 +95,18 @@ def _cg_solve(A, b, x0=None, cg_state=None, *, maxiter, tol=1e-5, atol=0.0, M=_i
         return x_, r_, gamma_, p_, k + 1
 
     if cg_state is not None:
-        x0, r0, gamma0, p0 = cg_state
+        x0, r0, gamma0, p0, k0 = cg_state
     else:
         r0 = _sub(b, A(x0))
         p0 = z0 = M(r0)
         dtype = jnp.result_type(*tree_leaves(p0))
         gamma0 = _vdot_real_tree(r0, z0).astype(dtype)
-    initial_value = (x0, r0, gamma0, p0, 0)
+        k0 = 0
+    initial_value = (x0, r0, gamma0, p0, k0)
 
-    x, r, gamma, p, _ = lax.while_loop(cond_fun, body_fun, initial_value)
+    x, r, gamma, p, k = lax.while_loop(cond_fun, body_fun, initial_value)
 
-    return x, (x, r, gamma, p)
+    return x, (x, r, gamma, p, k)
 
 
 def _isolve(_isolve_solve, A, b, x0=None, cg_state=None, *, tol=1e-5, atol=0.0,
