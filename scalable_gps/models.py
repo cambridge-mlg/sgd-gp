@@ -57,7 +57,6 @@ class SGDGPModel(GPModel):
             test_ds,
             self.kernel.kernel_fn,
             self.noise_scale,
-            feature_fn=feature_fn,
             grad_fn=grad_fn,
             metrics_prefix=metrics_prefix,
             exact_metrics=exact_metrics
@@ -162,7 +161,6 @@ class SGDGPModel(GPModel):
             train_ds,
             test_ds,
             kernel_fn=self.kernel.kernel_fn,
-            feature_fn=feature_fn,
             noise_scale=self.noise_scale,
             grad_fn=grad_fn,
             metrics_prefix=metrics_prefix,
@@ -280,7 +278,6 @@ class CGGPModel(ExactGPModel):
             test_ds,
             self.kernel.kernel_fn,
             self.noise_scale,
-            feature_fn=self.kernel.feature_fn,
             grad_fn=None,
             metrics_prefix=metrics_prefix,
             exact_metrics=exact_metrics
@@ -407,7 +404,6 @@ class CGGPModel(ExactGPModel):
             train_ds,
             test_ds,
             kernel_fn=self.kernel.kernel_fn,
-            feature_fn=None,
             noise_scale=self.noise_scale,
             grad_fn=None,
             metrics_prefix=metrics_prefix,

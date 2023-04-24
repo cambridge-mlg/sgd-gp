@@ -85,6 +85,7 @@ def get_uniform_idx_fn(batch_size: int, n_train: int, vmap: bool = False):
         return idx
 
     if vmap:
+        # TODO: this should probably be vmap over 'key'
         return jax.jit(jax.vmap(_fn))
     return jax.jit(_fn)
 
