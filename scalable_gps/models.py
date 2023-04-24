@@ -70,11 +70,11 @@ class SGDGPModel(GPModel):
         idx_key, feature_key = jr.split(key, 2)
         features = feature_fn(feature_key)
         if config.batch_size is None:
-            def partial_update_fn(idx):
-                return update_fn(alpha, alpha_polyak, idx, features, opt_state, target_tuple)
-            def partial_get_idx_fn(batch_size):
-                return optim_utils.get_idx_fn(batch_size, train_ds.N, config.iterative_idx, share_idx=False)
-            config.batch_size = optim_utils.select_dynamic_batch_size(idx_key, train_ds.N, partial_update_fn, partial_get_idx_fn)
+            def partial_fn(batch_size):
+                idx_fn = optim_utils.get_idx_fn(batch_size, train_ds.N, config.iterative_idx, share_idx=False)
+                idx = idx_fn(0, idx_key)
+                update_fn(alpha, alpha_polyak, idx, features, opt_state, target_tuple)
+            config.batch_size = optim_utils.select_dynamic_batch_size(train_ds.N, partial_fn)
             print(f"Selected batch size: {config.batch_size}, (N = {train_ds.N}, D = {train_ds.D}, "
                   f"length_scale dims: {self.kernel.get_length_scale().shape[-1]})")
         idx_fn = optim_utils.get_idx_fn(config.batch_size, train_ds.N, config.iterative_idx, share_idx=False)
@@ -184,11 +184,11 @@ class SGDGPModel(GPModel):
         idx_key, feature_key = jr.split(key, 2)
         features = feature_fn(feature_key)
         if config.batch_size is None:
-            def partial_update_fn(idx):
-                return update_fn(alphas, alphas_polyak, idx, features, opt_states, target_tuples)
-            def partial_get_idx_fn(batch_size):
-                return optim_utils.get_idx_fn(batch_size, train_ds.N, config.iterative_idx, share_idx=False)
-            config.batch_size = optim_utils.select_dynamic_batch_size(idx_key, train_ds.N, partial_update_fn, partial_get_idx_fn)
+            def partial_fn(batch_size):
+                idx_fn = optim_utils.get_idx_fn(batch_size, train_ds.N, config.iterative_idx, share_idx=False)
+                idx = idx_fn(0, idx_key)
+                update_fn(alphas, alphas_polyak, idx, features, opt_states, target_tuples)
+            config.batch_size = optim_utils.select_dynamic_batch_size(train_ds.N, partial_fn)
             print(f"Selected batch size: {config.batch_size}, (N = {train_ds.N}, D = {train_ds.D}, "
                   f"length_scale dims: {self.kernel.get_length_scale().shape[-1]})")
         idx_fn = optim_utils.get_idx_fn(config.batch_size, train_ds.N, config.iterative_idx, share_idx=False)
@@ -214,11 +214,13 @@ class SGDGPModel(GPModel):
                     y_pred_loc = self.predictive_mean(train_ds, test_ds, recompute=False)
                     zero_mean_posterior_samples = compute_posterior_samples_fn(alphas_polyak, f0_samples_test)
                     y_pred_scale = self.predictive_variance_samples(zero_mean_posterior_samples)
+                    del zero_mean_posterior_samples
                     if "test_llh" in metrics_list:
                         aux_metrics['test_llh'] = LLH(
                             test_ds.y, y_pred_loc, y_pred_scale, mu=train_ds.mu_y, sigma=train_ds.sigma_y)
                     if "normalised_test_llh" in metrics_list:
                         aux_metrics['normalised_test_llh'] = LLH(test_ds.y, y_pred_loc, y_pred_scale)
+                    del y_pred_loc, y_pred_scale
 
                 if wandb.run is not None:
                     wandb.log({**process_vmapped_metrics(vmapped_eval_metrics),
@@ -291,15 +293,6 @@ class CGGPModel(ExactGPModel):
         exact_metrics: Optional[ExactPredictionsTuple] = None) -> Array:
         """Compute representer weights alpha by solving a linear system using Conjugate Gradients."""
         
-        if config.batch_size is None:
-            def partial_KvP_fn(batch_size):
-                return KvP(train_ds.x, train_ds.x, jnp.zeros((train_ds.N,)), kernel_fn=self.kernel.kernel_fn, batch_size=batch_size)
-            config.batch_size = optim_utils.select_dynamic_batch_size_cg(train_ds.N, partial_KvP_fn)
-            print(f"Selected batch size: {config.batch_size}, (N = {train_ds.N}, D = {train_ds.D}, "
-                  f"length_scale dims: {self.kernel.get_length_scale().shape[-1]})")
-        print(f'batch_size: {config.batch_size}')
-        cg_closure_fn = self.get_cg_closure_fn(self.noise_scale, train_ds, config.batch_size)
-        
         eval_fn = eval_utils.get_eval_fn(
             metrics_list,
             train_ds,
@@ -324,6 +317,17 @@ class CGGPModel(ExactGPModel):
         else:
             pivoted_solve_fn = None
 
+        if config.batch_size is None:
+            def partial_fn(batch_size):
+                cg_closure_fn = self.get_cg_closure_fn(self.noise_scale, train_ds, batch_size)
+                cg_fn = self.get_cg_solve_fn(cg_closure_fn, tol=config.tol, atol=config.atol, M=pivoted_solve_fn)
+                alpha, cg_state = cg_fn(train_ds.y, None, 1)
+                cg_fn(train_ds.y, cg_state, 2)
+            config.batch_size = optim_utils.select_dynamic_batch_size(train_ds.N, partial_fn)
+            print(f"Selected batch size: {config.batch_size}, (N = {train_ds.N}, D = {train_ds.D}, "
+                  f"length_scale dims: {self.kernel.get_length_scale().shape[-1]})")
+        print(f'batch_size: {config.batch_size}')
+        cg_closure_fn = self.get_cg_closure_fn(self.noise_scale, train_ds, config.batch_size)
         cg_fn = self.get_cg_solve_fn(cg_closure_fn, tol=config.tol, atol=config.atol, M=pivoted_solve_fn)
 
         aux = []
@@ -368,32 +372,6 @@ class CGGPModel(ExactGPModel):
                 use_rff=use_rff, 
                 n_features=n_features, 
                 chol_eps=chol_eps)
-        
-        if config.batch_size is None:
-            def partial_vmap_KvP_fn(params, batch_size):
-                return KvP(train_ds.x, train_ds.x, params, kernel_fn=self.kernel.kernel_fn, batch_size=batch_size)
-            def partial_KvP_fn(batch_size):
-                return jax.vmap(partial_vmap_KvP_fn, in_axes=(0, None))(jnp.zeros((n_samples, train_ds.N)), batch_size)
-            config.batch_size = optim_utils.select_dynamic_batch_size_cg(train_ds.N, partial_KvP_fn)
-            print(f"Selected batch size: {config.batch_size}, (N = {train_ds.N}, D = {train_ds.D}, "
-                  f"length_scale dims: {self.kernel.get_length_scale().shape[-1]})")
-        
-        cg_closure_fn = self.get_cg_closure_fn(self.noise_scale, train_ds, config.batch_size)
-
-        if config.preconditioner:
-            if self.pivoted_chol is None:
-                self.pivoted_chol = pivoted_cholesky(
-                    self.kernel, 
-                    train_ds.x, 
-                    config.pivoted_chol_rank, 
-                    config.pivoted_diag_rtol, 
-                    config.pivoted_jitter)
-            
-            pivoted_solve_fn = self.get_cg_preconditioner_solve_fn(self.pivoted_chol)
-        else:
-            pivoted_solve_fn = None
-
-        cg_fn = self.get_cg_solve_fn(cg_closure_fn, tol=config.tol, atol=config.atol, M=pivoted_solve_fn, vmap=True)
 
         # Get vmapped functions for sampling from the prior and computing the posterior.
         compute_prior_samples_fn = self.get_prior_samples_fn(train_ds.N, L, use_rff)
@@ -433,13 +411,38 @@ class CGGPModel(ExactGPModel):
         )
 
         target_tuples = compute_target_tuples_fn(f0_samples_train, eps0_samples) # (n_samples, TargetTuples)
+
+        if config.preconditioner:
+            if self.pivoted_chol is None:
+                self.pivoted_chol = pivoted_cholesky(
+                    self.kernel, 
+                    train_ds.x, 
+                    config.pivoted_chol_rank, 
+                    config.pivoted_diag_rtol, 
+                    config.pivoted_jitter)
+            
+            pivoted_solve_fn = self.get_cg_preconditioner_solve_fn(self.pivoted_chol)
+        else:
+            pivoted_solve_fn = None
+
+        if config.batch_size is None:
+            def partial_fn(batch_size):
+                cg_closure_fn = self.get_cg_closure_fn(self.noise_scale, train_ds, batch_size)
+                cg_fn = self.get_cg_solve_fn(cg_closure_fn, tol=config.tol, atol=config.atol, M=pivoted_solve_fn, vmap=True)
+                alphas, cg_states = cg_fn(f0_samples_train + eps0_samples, None, 1)
+                cg_fn(f0_samples_train + eps0_samples, cg_states, 2)
+            config.batch_size = optim_utils.select_dynamic_batch_size(train_ds.N, partial_fn)
+            print(f"Selected batch size: {config.batch_size}, (N = {train_ds.N}, D = {train_ds.D}, "
+                  f"length_scale dims: {self.kernel.get_length_scale().shape[-1]})")
+
+        cg_closure_fn = self.get_cg_closure_fn(self.noise_scale, train_ds, config.batch_size)
+        cg_fn = self.get_cg_solve_fn(cg_closure_fn, tol=config.tol, atol=config.atol, M=pivoted_solve_fn, vmap=True)
         
         aux = []
         alphas = None
         cg_states = None
         
         for i in tqdm(range(0, config.maxiter, config.eval_every)):
-            
             
             alphas, cg_states = cg_fn(f0_samples_train + eps0_samples, cg_states, i)  # (n_samples, n_train)
 
@@ -450,11 +453,13 @@ class CGGPModel(ExactGPModel):
                 y_pred_loc = self.predictive_mean(train_ds, test_ds, recompute=False)
                 zero_mean_posterior_samples = compute_posterior_samples_fn(alphas, f0_samples_test)
                 y_pred_scale = self.predictive_variance_samples(zero_mean_posterior_samples)
+                del zero_mean_posterior_samples
                 if "test_llh" in metrics_list:
                     aux_metrics['test_llh'] = LLH(
                         test_ds.y, y_pred_loc, y_pred_scale, mu=train_ds.mu_y, sigma=train_ds.sigma_y)
                 if "normalised_test_llh" in metrics_list:
                     aux_metrics['normalised_test_llh'] = LLH(test_ds.y, y_pred_loc, y_pred_scale)
+                del y_pred_loc, y_pred_scale
             if wandb.run is not None:
                 wandb.log({**process_vmapped_metrics(vmapped_eval_metrics),
                             **{'sample_step': i},
