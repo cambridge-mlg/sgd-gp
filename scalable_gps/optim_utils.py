@@ -6,21 +6,23 @@ import jax.random as jr
 import ml_collections
 import optax
 from chex import Array
+from tqdm import tqdm
+
 from scalable_gps.linear_model import (
     error_grad_sample,
     regularizer_grad_sample,
 )
 from scalable_gps.utils import TargetTuple
+from scalable_gps.optim_utils import get_idx_fn
 
 PyTree = Any
 
-def get_stochastic_gradient_fn(
-    x: Array,
-    kernel_fn: Callable,
-    noise_scale: float
-):
+
+def get_stochastic_gradient_fn(x: Array, kernel_fn: Callable, noise_scale: float):
     def _fn(params, idx, features, target_tuple):
-        error_grad = error_grad_sample(params, idx, x, target_tuple.error_target, kernel_fn)
+        error_grad = error_grad_sample(
+            params, idx, x, target_tuple.error_target, kernel_fn
+        )
         regularizer_grad = regularizer_grad_sample(
             params,
             features,
@@ -32,8 +34,9 @@ def get_stochastic_gradient_fn(
     return jax.jit(_fn)
 
 
-def get_update_fn(grad_fn: Callable, optimizer, polyak_step_size: float, vmap: bool = False):
-
+def get_update_fn(
+    grad_fn: Callable, optimizer, polyak_step_size: float, vmap: bool = False
+):
     def _fn(params, params_polyak, idx, features, opt_state, target_tuple):
         n_train = params.shape[0]
         grad = grad_fn(params, idx, features, target_tuple) / n_train
@@ -52,51 +55,63 @@ def get_update_fn(grad_fn: Callable, optimizer, polyak_step_size: float, vmap: b
 
 
 def get_target_tuples_fn(loss_objective: int):
-
     def _fn(f0_sample_train, eps0_sample):
         n_train = f0_sample_train.shape[0]
         if loss_objective == 1:
-            target_tuple = TargetTuple(error_target=f0_sample_train + eps0_sample, regularizer_target=jnp.zeros((n_train,)))
+            target_tuple = TargetTuple(
+                error_target=f0_sample_train + eps0_sample,
+                regularizer_target=jnp.zeros((n_train,)),
+            )
         elif loss_objective == 2:
-            target_tuple = TargetTuple(error_target=f0_sample_train, regularizer_target=eps0_sample)
+            target_tuple = TargetTuple(
+                error_target=f0_sample_train, regularizer_target=eps0_sample
+            )
         elif loss_objective == 3:
-            target_tuple = TargetTuple(error_target=jnp.zeros((n_train,)), regularizer_target=f0_sample_train + eps0_sample)
+            target_tuple = TargetTuple(
+                error_target=jnp.zeros((n_train,)),
+                regularizer_target=f0_sample_train + eps0_sample,
+            )
         else:
             raise ValueError("loss_type must be 1, 2 or 3")
-        
+
         return target_tuple
-    
+
     return jax.jit(jax.vmap(_fn))
 
 
 # TODO: rename vmap to share_idx
-def get_uniform_idx_fn(batch_size: int, n_train: int, vmap: bool = False):
-    
+def get_uniform_idx_fn(batch_size: int, n_train: int, share_idx: bool = False):
     def _fn(_, key):
         idx = jr.randint(key, shape=(batch_size,), minval=0, maxval=n_train)
-        
+
         return idx
 
-    if vmap:
+    if share_idx:
         return jax.jit(jax.vmap(_fn))
     return jax.jit(_fn)
 
 
+# TODO: implement dataset shuffle
 def get_iterative_idx_fn(batch_size: int, n_train: int):
-    
     def _fn(iter, _):
-        idx = jnp.arange(batch_size) + ((iter * batch_size) % n_train)
-        
+        idx = (jnp.arange(batch_size) + (iter * batch_size)) % n_train
+
         return idx
 
     return jax.jit(_fn)
 
 
-def get_idx_fn(batch_size: int, n_train: int, iterative_idx: bool = True, vmap: bool = False):
+def get_idx_fn(
+    batch_size: int, n_train: int, iterative_idx: bool = True, share_idx: bool = False
+):
+    # TODO: Should we assert that batch_size < n_train?
     if iterative_idx:
+        assert (
+            n_train % batch_size == 0
+        ), "non-random idx with batch_size non multiple n_train causes training instability"
         idx_fn = get_iterative_idx_fn(batch_size, n_train)
     else:
-        idx_fn = get_uniform_idx_fn(batch_size, n_train, vmap=vmap)
+        idx_fn = get_uniform_idx_fn(batch_size, n_train, share_idx=share_idx)
     return idx_fn
 
 
@@ -150,11 +165,16 @@ def get_lr_and_schedule(
 
         elif lr_schedule_name == "warmup_exponential_decay_schedule":
             # Check required configs are present
-            required_configs = ["init_value", "warmup_steps", "transition_steps",
-                                "decay_rate", "transition_begin",]
+            required_configs = [
+                "init_value",
+                "warmup_steps",
+                "transition_steps",
+                "decay_rate",
+                "transition_begin",
+            ]
             if not all(name in lr_schedule_config for name in required_configs):
                 raise ValueError(f"{lr_schedule_name} requires {required_configs}")
-            
+
             # Define RL Schedule
             lr = schedule(
                 init_value=lr_schedule_config.init_value,
@@ -162,7 +182,8 @@ def get_lr_and_schedule(
                 warmup_steps=lr_schedule_config.warmup_steps,
                 transition_steps=lr_schedule_config.transition_steps,
                 decay_rate=lr_schedule_config.decay_rate,
-                transition_begin=lr_schedule_config.transition_begin,)
+                transition_begin=lr_schedule_config.transition_begin,
+            )
 
         elif lr_schedule_name == "linear_schedule":
             # Check required configs are present
@@ -178,7 +199,7 @@ def get_lr_and_schedule(
             )
         else:
             raise ValueError("Scheduler not supported")
-    
+
     else:
         lr = optim_config.learning_rate
 
@@ -198,7 +219,6 @@ def get_lr_and_schedule(
             optimizer = optax.chain(
                 optimizer, optax.additive_weight_decay(weight_decay, model_mask)
             )
-        
 
     if optim_name == "adamw":
         # If adamw, weight_decay is a passable parameter.
@@ -210,11 +230,7 @@ def get_lr_and_schedule(
         optimizer = optimizer(learning_rate=lr)
 
     if absolute_clipping is not None and absolute_clipping > 0:
-        
-        optimizer = optax.chain(
-            optax.clip_by_global_norm(absolute_clipping),
-            optimizer
-        )
+        optimizer = optax.chain(optax.clip_by_global_norm(absolute_clipping), optimizer)
 
     return optimizer
 
@@ -231,5 +247,39 @@ def get_lr(opt_state):
                 for o_state2 in o_state:
                     if isinstance(o_state2, optax.InjectHyperparamsState):
                         lr_to_log = o_state2.hyperparams["learning_rate"]
-    
+
     return lr_to_log
+
+
+def select_dynamic_batch_size(idx_key, N, partial_update_fn, partial_get_idx_fn):
+    batch_size = 1
+    with tqdm(total=int(jnp.log2(N)) + 1) as pbar:
+        while batch_size < N:
+            try:
+                new_batch_size = min(batch_size * 2, N)
+                pbar.set_description(f"Trying batch size = {new_batch_size}")
+                idx_fn = partial_get_idx_fn(new_batch_size)
+                idx = idx_fn(0, idx_key)
+                partial_update_fn(idx)
+            except Exception:
+                break
+            else:
+                batch_size = new_batch_size
+                pbar.update()
+    return batch_size
+
+
+def select_dynamic_batch_size_cg(N, partial_KvP_fn):
+    batch_size = 1
+    with tqdm(total=int(jnp.log2(N)) + 1) as pbar:
+        while batch_size < N:
+            try:
+                new_batch_size = min(batch_size * 2, N)
+                pbar.set_description(f"Trying batch size = {new_batch_size}")
+                partial_KvP_fn(new_batch_size)
+            except Exception:
+                break
+            else:
+                batch_size = new_batch_size
+                pbar.update()
+    return batch_size

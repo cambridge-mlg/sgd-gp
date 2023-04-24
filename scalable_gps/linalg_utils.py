@@ -4,6 +4,8 @@ from typing import Callable
 import jax
 import jax.numpy as jnp
 from chex import Array
+
+from scalable_gps.kernels import Kernel
 from scalable_gps.utils import get_gpu_or_cpu_device
 
 Kernel_fn = Callable[[Array, Array], Array]
@@ -15,22 +17,17 @@ def solve_K_inv_v(K: Array, v: Array, noise_scale: float):
     return jax.scipy.linalg.solve(K + (noise_scale**2) * jnp.identity(v.shape[0]), v, assume_a='pos')
 
 
-def KvP(x1: Array, x2: Array, v: Array, kernel_fn: Kernel_fn, **kernel_kwargs):
+def KvP(x1: Array, x2: Array, v: Array, kernel_fn: Kernel_fn, batch_size=1, **kernel_kwargs):
     # TODO: Allocate memory smartly here maybe.
 
-    def _KvP(x1: Array, x2: Array, v: Array, kernel_fn: Kernel_fn, **kernel_kwargs):
-        """Calculates K(x_pred, x_train) @ v, with the kernel matrix between x_pred and x_train."""
-        return kernel_fn(x1, x2, **kernel_kwargs) @ v
+    def _KvP(carry, idx):
+        return carry, kernel_fn(x1[idx], x2, **kernel_kwargs) @ v
 
-    def _idx_KvP(carry, idx):
-        return carry, _KvP(x1[idx], x2, v, kernel_fn, **kernel_kwargs)
-
-    # idx_vec = jnp.array([jnp.arange(x1.shape[0])])
-    idx_vec = jnp.arange(x1.shape[0])
-    return jax.lax.scan(_idx_KvP, jnp.zeros(()), idx_vec)[1].squeeze()
+    xs = jnp.arange(0, x1.shape[0], batch_size)
+    return jax.lax.scan(_KvP, jnp.zeros(()), xs)[1].squeeze()
 
 
-def pivoted_cholesky(kernel, x, max_rank, diag_rtol=1e-3, jitter=1e-3, name=None):
+def pivoted_cholesky(kernel: Kernel, x: Array, max_rank: int, diag_rtol: float=1e-3, jitter: float=1e-3):
     n = x.shape[0]
     assert max_rank <= n
 

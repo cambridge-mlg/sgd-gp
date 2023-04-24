@@ -55,8 +55,8 @@ def get_config(config_string):
     config.train_config.iterations = 50000
     config.train_config.batch_size = 4096
     config.train_config.eval_every = 100
-    config.train_config.time_budget_in_seconds = None
-    config.train_config.eval_every_in_seconds = None
+    config.train_config.time_budget_in_seconds = 0.
+    config.train_config.eval_every_in_seconds = 0.
     # RFF Configs
     config.train_config.n_features_optim = 100
     config.train_config.recompute_features = True
@@ -66,6 +66,7 @@ def get_config(config_string):
     config.train_config.learning_rate = 5e-1
     config.train_config.momentum = 0.9
     config.train_config.nesterov = True
+    # TODO: Calculate polyak dynamically.
     config.train_config.polyak = 1e-3
 
     config.train_config.absolute_clipping = 0.1  # -1 to avoid clipping
