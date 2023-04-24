@@ -80,9 +80,9 @@ def main(config):
 
             mll = marginal_likelihood(train_ds.x, train_ds.y, exact_model.kernel.kernel_fn, hparams)
             print(f"test_rmse_exact = {test_rmse_exact}")
-            wandb.log({"test_rmse": test_rmse_exact,
-                    "normalised_test_rmse": normalised_test_rmse,
-                    "mll": mll / train_ds.N})
+            wandb.log({"exact_gp/test_rmse": test_rmse_exact,
+                    "exact_gp/normalised_test_rmse": normalised_test_rmse,
+                    "exact_gp/mll": mll / train_ds.N})
 
             # Define exact metrics that we will use later to compare with stochastic solution
             exact_metrics = ExactPredictionsTuple(
@@ -110,9 +110,9 @@ def main(config):
 
         mll = marginal_likelihood(train_ds.x, train_ds.y, cg_model.kernel.kernel_fn, hparams)
         print(f"test_rmse_cg = {test_rmse}")
-        wandb.log({"test_rmse": test_rmse,
-                   "normalised_test_rmse": normalised_test_rmse,
-                   "mll": mll / train_ds.N})
+        wandb.log({"cg_gp/test_rmse": test_rmse,
+                   "cg_gp/normalised_test_rmse": normalised_test_rmse,
+                   "cg_gp/mll": mll / train_ds.N})
         
         zero_mean_samples, alpha_samples = cg_model.compute_posterior_samples(
             sampling_key,

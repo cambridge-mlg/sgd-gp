@@ -18,13 +18,17 @@ def solve_K_inv_v(K: Array, v: Array, noise_scale: float):
 
 
 def KvP(x1: Array, x2: Array, v: Array, kernel_fn: Kernel_fn, batch_size=1, **kernel_kwargs):
-    # TODO: Allocate memory smartly here maybe.
+    def _KvP(_, idx):
+        return _, kernel_fn(x1[idx], x2, **kernel_kwargs) @ v
 
-    def _KvP(carry, idx):
-        return carry, kernel_fn(x1[idx], x2, **kernel_kwargs) @ v
+    n1, d1 = x1.shape
+    if (n1 % batch_size) > 0:
+        padding = batch_size - (n1 % batch_size)
+        x1 = jnp.concatenate([x1, jnp.zeros((padding, d1))], axis=0)
 
-    xs = jnp.arange(0, x1.shape[0], batch_size)
-    return jax.lax.scan(_KvP, jnp.zeros(()), xs)[1].squeeze()
+    xs = jnp.reshape(jnp.arange(0, x1.shape[0]), (-1, batch_size))
+    
+    return jax.lax.scan(_KvP, jnp.zeros(()), xs)[1].reshape(-1)[:n1]
 
 
 def pivoted_cholesky(kernel: Kernel, x: Array, max_rank: int, diag_rtol: float=1e-3, jitter: float=1e-3):

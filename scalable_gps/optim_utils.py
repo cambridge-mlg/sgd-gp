@@ -13,7 +13,6 @@ from scalable_gps.linear_model import (
     regularizer_grad_sample,
 )
 from scalable_gps.utils import TargetTuple
-from scalable_gps.optim_utils import get_idx_fn
 
 PyTree = Any
 

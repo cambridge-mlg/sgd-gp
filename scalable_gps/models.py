@@ -70,8 +70,10 @@ class SGDGPModel(GPModel):
         idx_key, feature_key = jr.split(key, 2)
         features = feature_fn(feature_key)
         if config.batch_size is None:
-            partial_update_fn = lambda idx: update_fn(alpha, alpha_polyak, idx, features, opt_state, target_tuple)
-            partial_get_idx_fn = lambda batch_size: optim_utils.get_idx_fn(batch_size, train_ds.N, config.iterative_idx, share_idx=False)
+            def partial_update_fn(idx):
+                return update_fn(alpha, alpha_polyak, idx, features, opt_state, target_tuple)
+            def partial_get_idx_fn(batch_size):
+                return optim_utils.get_idx_fn(batch_size, train_ds.N, config.iterative_idx, share_idx=False)
             config.batch_size = optim_utils.select_dynamic_batch_size(idx_key, train_ds.N, partial_update_fn, partial_get_idx_fn)
             print(f"Selected batch size: {config.batch_size}, (N = {train_ds.N}, D = {train_ds.D}, "
                   f"length_scale dims: {self.kernel.get_length_scale().shape[-1]})")
@@ -182,8 +184,10 @@ class SGDGPModel(GPModel):
         idx_key, feature_key = jr.split(key, 2)
         features = feature_fn(feature_key)
         if config.batch_size is None:
-            partial_update_fn = lambda idx: update_fn(alphas, alphas_polyak, idx, features, opt_states, target_tuples)
-            partial_get_idx_fn = lambda batch_size: optim_utils.get_idx_fn(batch_size, train_ds.N, config.iterative_idx, share_idx=False)
+            def partial_update_fn(idx):
+                return update_fn(alphas, alphas_polyak, idx, features, opt_states, target_tuples)
+            def partial_get_idx_fn(batch_size):
+                return optim_utils.get_idx_fn(batch_size, train_ds.N, config.iterative_idx, share_idx=False)
             config.batch_size = optim_utils.select_dynamic_batch_size(idx_key, train_ds.N, partial_update_fn, partial_get_idx_fn)
             print(f"Selected batch size: {config.batch_size}, (N = {train_ds.N}, D = {train_ds.D}, "
                   f"length_scale dims: {self.kernel.get_length_scale().shape[-1]})")
@@ -246,7 +250,7 @@ class CGGPModel(ExactGPModel):
     def get_cg_solve_fn(self, cg_closure_fn, tol, atol, M=None, vmap=False):
         
         def _fn(v, cg_state, maxiter):
-            return custom_cg(cg_closure_fn, v, cg_state=cg_state, tol=tol, atol=atol, maxiter=maxiter, M=M)[0]
+            return custom_cg(cg_closure_fn, v, tol=tol, atol=atol, maxiter=maxiter, M=M, cg_state=cg_state)
         
         if vmap:
             return jax.jit(jax.vmap(_fn, in_axes=(0, 0, None)))
@@ -288,12 +292,12 @@ class CGGPModel(ExactGPModel):
         """Compute representer weights alpha by solving a linear system using Conjugate Gradients."""
         
         if config.batch_size is None:
-            partial_KvP_fn = lambda batch_size: KvP(train_ds.x, train_ds.x, jnp.zeros((train_ds.N,)),
-                                                    kernel_fn=self.kernel.kernel_fn, batch_size=batch_size)
+            def partial_KvP_fn(batch_size):
+                return KvP(train_ds.x, train_ds.x, jnp.zeros((train_ds.N,)), kernel_fn=self.kernel.kernel_fn, batch_size=batch_size)
             config.batch_size = optim_utils.select_dynamic_batch_size_cg(train_ds.N, partial_KvP_fn)
             print(f"Selected batch size: {config.batch_size}, (N = {train_ds.N}, D = {train_ds.D}, "
                   f"length_scale dims: {self.kernel.get_length_scale().shape[-1]})")
-
+        print(f'batch_size: {config.batch_size}')
         cg_closure_fn = self.get_cg_closure_fn(self.noise_scale, train_ds, config.batch_size)
         
         eval_fn = eval_utils.get_eval_fn(
@@ -328,7 +332,6 @@ class CGGPModel(ExactGPModel):
 
         for i in tqdm(range(0, config.maxiter, config.eval_every)):
             alpha, cg_state = cg_fn(train_ds.y, cg_state, i)
-            
             eval_metrics = eval_fn(alpha, i, None, None)
 
             if wandb.run is not None:
@@ -367,8 +370,10 @@ class CGGPModel(ExactGPModel):
                 chol_eps=chol_eps)
         
         if config.batch_size is None:
-            partial_vmap_KvP_fn = lambda params, batch_size: KvP(train_ds.x, train_ds.x, params, kernel_fn=self.kernel.kernel_fn, batch_size=batch_size)
-            partial_KvP_fn = lambda batch_size: jax.vmap(partial_vmap_KvP_fn, in_axes=(0, None))(jnp.zeros((n_samples, train_ds.N)), batch_size)
+            def partial_vmap_KvP_fn(params, batch_size):
+                return KvP(train_ds.x, train_ds.x, params, kernel_fn=self.kernel.kernel_fn, batch_size=batch_size)
+            def partial_KvP_fn(batch_size):
+                return jax.vmap(partial_vmap_KvP_fn, in_axes=(0, None))(jnp.zeros((n_samples, train_ds.N)), batch_size)
             config.batch_size = optim_utils.select_dynamic_batch_size_cg(train_ds.N, partial_KvP_fn)
             print(f"Selected batch size: {config.batch_size}, (N = {train_ds.N}, D = {train_ds.D}, "
                   f"length_scale dims: {self.kernel.get_length_scale().shape[-1]})")

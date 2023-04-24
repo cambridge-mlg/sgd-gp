@@ -1,12 +1,11 @@
-from functools import partial
 import operator
-import numpy as np
-import jax.numpy as jnp
-import jax
-from jax import device_put
-from jax import lax
-from jax.tree_util import tree_leaves, tree_map, tree_structure, Partial
+from functools import partial
 
+import jax
+import jax.numpy as jnp
+import numpy as np
+from jax import device_put, lax
+from jax.tree_util import Partial, tree_leaves, tree_map, tree_structure
 
 _dot = partial(jnp.dot, precision=lax.Precision.HIGHEST)
 _vdot = partial(jnp.vdot, precision=lax.Precision.HIGHEST)
@@ -96,6 +95,7 @@ def _cg_solve(A, b, x0=None, cg_state=None, *, maxiter, tol=1e-5, atol=0.0, M=_i
 
     if cg_state is not None:
         x0, r0, gamma0, p0, k0 = cg_state
+        dtype = jnp.result_type(*tree_leaves(p0))
     else:
         r0 = _sub(b, A(x0))
         p0 = z0 = M(r0)
@@ -109,7 +109,7 @@ def _cg_solve(A, b, x0=None, cg_state=None, *, maxiter, tol=1e-5, atol=0.0, M=_i
     return x, (x, r, gamma, p, k)
 
 
-def _isolve(_isolve_solve, A, b, x0=None, cg_state=None, *, tol=1e-5, atol=0.0,
+def _isolve(_isolve_solve, A, b, x0=None, *, cg_state=None, tol=1e-5, atol=0.0,
             maxiter=None, M=None, check_symmetric=False):
     if x0 is None:
         x0 = tree_map(jnp.zeros_like, b)
@@ -130,10 +130,10 @@ def _isolve(_isolve_solve, A, b, x0=None, cg_state=None, *, tol=1e-5, atol=0.0,
             'x0 and b must have matching tree structure: '
             f'{tree_structure(x0)} vs {tree_structure(b)}')
 
-    if _shapes(x0) != _shapes(b):
-        raise ValueError(
-            'arrays in x0 and b must have matching shapes: '
-            f'{_shapes(x0)} vs {_shapes(b)}')
+    # if _shapes(x0) != _shapes(b):
+    #     raise ValueError(
+    #         'arrays in x0 and b must have matching shapes: '
+    #         f'{_shapes(x0)} vs {_shapes(b)}')
 
     isolve_solve = partial(
         _isolve_solve, x0=x0, cg_state=cg_state, tol=tol, atol=atol, maxiter=maxiter, M=M)
@@ -143,14 +143,14 @@ def _isolve(_isolve_solve, A, b, x0=None, cg_state=None, *, tol=1e-5, atol=0.0,
         return not issubclass(x.dtype.type, np.complexfloating)
     symmetric = all(map(real_valued, tree_leaves(b))) \
         if check_symmetric else False
-    x = lax.custom_linear_solve(
+    x, cg_state = lax.custom_linear_solve(
         A, b, solve=isolve_solve, transpose_solve=isolve_solve,
-        symmetric=symmetric)
-    info = None
-    return x, info
+        symmetric=symmetric, has_aux=True)
+
+    return x, cg_state
 
 
-def custom_cg(A, b, x0=None, cg_state=None, *, tol=1e-5, atol=0.0, maxiter=None, M=None):
+def custom_cg(A, b, x0=None, *, cg_state=None, tol=1e-5, atol=0.0, maxiter=None, M=None):
     """Use Conjugate Gradient iteration to solve ``Ax = b``.
 
     The numerics of JAX's ``cg`` should exact match SciPy's ``cg`` (up to
