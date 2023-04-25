@@ -245,11 +245,11 @@ class CGGPModel(ExactGPModel):
         super().__init__(noise_scale=noise_scale, kernel=kernel, **kwargs)
         
         self.pivoted_chol = None
-    
+    from jax._src.ad_checkpoint import _optimization_barrier
     def get_cg_closure_fn(self, noise_std, train_ds, batch_size):
         # (K(x, x) + noise_std**2 * I) * params = y # (n_train)
         def _fn(params):
-            return KvP(train_ds.x, train_ds.x, params, kernel_fn=self.kernel.kernel_fn, batch_size=batch_size) + params * noise_std**2
+            return KvP(_optimization_barrier(train_ds.x), train_ds.x, params, kernel_fn=self.kernel.kernel_fn, batch_size=batch_size) + params * noise_std**2
 
         return jax.jit(_fn)
 
