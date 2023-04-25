@@ -249,7 +249,7 @@ class CGGPModel(ExactGPModel):
     def get_cg_closure_fn(self, noise_std, train_ds, batch_size):
         # (K(x, x) + noise_std**2 * I) * params = y # (n_train)
         def _fn(params):
-            return KvP(_optimization_barrier(train_ds.x), train_ds.x, params, kernel_fn=self.kernel.kernel_fn, batch_size=batch_size) + params * noise_std**2
+            return KvP(train_ds.x, train_ds.x, params, kernel_fn=self.kernel.kernel_fn, batch_size=batch_size) + params * noise_std**2
 
         return jax.jit(_fn)
 

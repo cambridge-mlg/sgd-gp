@@ -116,7 +116,7 @@ def get_config(config_string):
 
     config.cg_config = ml_collections.ConfigDict()
     config.cg_config.batch_size = 0
-    config.cg_config.tol = 1e-3
+    config.cg_config.tol = 1e-2
     config.cg_config.maxiter = 2000
     config.cg_config.atol = 0.
     config.cg_config.eval_every = 10
