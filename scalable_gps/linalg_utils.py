@@ -43,7 +43,6 @@ def pivoted_cholesky(kernel: Kernel, x: Array, max_rank: int, diag_rtol: float=1
     pchol = jnp.zeros((max_rank, n))
     perm = jnp.arange(n)
     
-    @partial(jax.jit, static_argnums=(0))
     def _body_fn(m, pchol, perm, matrix_diag):
         maxi = jnp.argmax(matrix_diag[perm[m:]]) + m
         maxval = matrix_diag[perm][maxi]
