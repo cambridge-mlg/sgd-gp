@@ -70,7 +70,7 @@ class SGDGPModel(GPModel):
 
         idx_key, feature_key = jr.split(key, 2)
         features = feature_fn(feature_key)
-        if config.batch_size is None:
+        if config.batch_size == 0:
             def partial_fn(batch_size):
                 idx_fn = optim_utils.get_idx_fn(batch_size, train_ds.N, config.iterative_idx, share_idx=False)
                 idx = idx_fn(0, idx_key)
@@ -78,6 +78,7 @@ class SGDGPModel(GPModel):
             config.batch_size = optim_utils.select_dynamic_batch_size(train_ds.N, partial_fn)
             print(f"Selected batch size: {config.batch_size}, (N = {train_ds.N}, D = {train_ds.D}, "
                   f"length_scale dims: {self.kernel.get_length_scale().shape[-1]})")
+        assert config.batch_size > 0
         idx_fn = optim_utils.get_idx_fn(config.batch_size, train_ds.N, config.iterative_idx, share_idx=False)
         
         # force JIT by running a single step
@@ -186,7 +187,7 @@ class SGDGPModel(GPModel):
         
         idx_key, feature_key = jr.split(key, 2)
         features = feature_fn(feature_key)
-        if config.batch_size is None:
+        if config.batch_size == 0:
             def partial_fn(batch_size):
                 idx_fn = optim_utils.get_idx_fn(batch_size, train_ds.N, config.iterative_idx, share_idx=False)
                 idx = idx_fn(0, idx_key)
@@ -194,6 +195,7 @@ class SGDGPModel(GPModel):
             config.batch_size = optim_utils.select_dynamic_batch_size(train_ds.N, partial_fn)
             print(f"Selected batch size: {config.batch_size}, (N = {train_ds.N}, D = {train_ds.D}, "
                   f"length_scale dims: {self.kernel.get_length_scale().shape[-1]})")
+        assert config.batch_size > 0
         idx_fn = optim_utils.get_idx_fn(config.batch_size, train_ds.N, config.iterative_idx, share_idx=False)
 
         # force JIT
@@ -323,7 +325,7 @@ class CGGPModel(ExactGPModel):
             pivoted_solve_fn = None
             precond_time = 0.
 
-        if config.batch_size is None:
+        if config.batch_size == 0:
             def partial_fn(batch_size):
                 cg_closure_fn = self.get_cg_closure_fn(self.noise_scale, train_ds, batch_size)
                 cg_fn = self.get_cg_solve_fn(cg_closure_fn, tol=config.tol, atol=config.atol, M=pivoted_solve_fn)
@@ -332,7 +334,7 @@ class CGGPModel(ExactGPModel):
             config.batch_size = optim_utils.select_dynamic_batch_size(train_ds.N, partial_fn)
             print(f"Selected batch size: {config.batch_size}, (N = {train_ds.N}, D = {train_ds.D}, "
                   f"length_scale dims: {self.kernel.get_length_scale().shape[-1]})")
-        print(f'batch_size: {config.batch_size}')
+        assert config.batch_size > 0
         cg_closure_fn = self.get_cg_closure_fn(self.noise_scale, train_ds, config.batch_size)
         cg_fn = self.get_cg_solve_fn(cg_closure_fn, tol=config.tol, atol=config.atol, M=pivoted_solve_fn)
 
@@ -432,7 +434,7 @@ class CGGPModel(ExactGPModel):
         else:
             pivoted_solve_fn = None
 
-        if config.batch_size is None:
+        if config.batch_size == 0:
             def partial_fn(batch_size):
                 cg_closure_fn = self.get_cg_closure_fn(self.noise_scale, train_ds, batch_size)
                 cg_fn = self.get_cg_solve_fn(cg_closure_fn, tol=config.tol, atol=config.atol, M=pivoted_solve_fn, vmap=True)
@@ -441,7 +443,7 @@ class CGGPModel(ExactGPModel):
             config.batch_size = optim_utils.select_dynamic_batch_size(train_ds.N, partial_fn)
             print(f"Selected batch size: {config.batch_size}, (N = {train_ds.N}, D = {train_ds.D}, "
                   f"length_scale dims: {self.kernel.get_length_scale().shape[-1]})")
-
+        assert config.batch_size > 0
         cg_closure_fn = self.get_cg_closure_fn(self.noise_scale, train_ds, config.batch_size)
         cg_fn = self.get_cg_solve_fn(cg_closure_fn, tol=config.tol, atol=config.atol, M=pivoted_solve_fn, vmap=True)
         

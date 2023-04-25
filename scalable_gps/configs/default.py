@@ -90,7 +90,7 @@ def get_config(config_string):
     config.sampling_config.momentum = 0.9
     config.sampling_config.polyak = 1e-3
     config.sampling_config.iterations = 50000
-    config.sampling_config.batch_size = None
+    config.sampling_config.batch_size = 0
     config.sampling_config.eval_every = 100
     # RFF Configs
     config.sampling_config.n_features_prior_sample = 2000
@@ -127,7 +127,7 @@ def get_config(config_string):
     config.cg_config.loss_objective = 2
 
     config.cg_sampling_config = ml_collections.ConfigDict()
-    config.cg_sampling_config.batch_size = None
+    config.cg_sampling_config.batch_size = 0
     config.cg_sampling_config.n_features_prior_sample = 2000
     config.cg_sampling_config.n_samples = 10
     config.cg_sampling_config.tol = 1e-3
