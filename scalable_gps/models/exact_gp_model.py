@@ -11,11 +11,11 @@ from chex import Array
 from tqdm import tqdm
 
 from scalable_gps import sampling_utils
-from scalable_gps.baselines.base_gp_model import GPModel
 from scalable_gps.data import Dataset
 from scalable_gps.eval_utils import RMSE
 from scalable_gps.linalg_utils import KvP, solve_K_inv_v
 from scalable_gps.linear_model import marginal_likelihood
+from scalable_gps.models.base_gp_model import GPModel
 from scalable_gps.utils import (
     HparamsTuple,
     get_gpu_or_cpu_device,

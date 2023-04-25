@@ -6,11 +6,11 @@ import wandb
 from absl import app, flags
 
 from scalable_gps import kernels
-from scalable_gps.baselines.exact_gp_model import ExactGPModel
 from scalable_gps.data import get_dataset
 from scalable_gps.eval_utils import RMSE
 from scalable_gps.linear_model import marginal_likelihood
-from scalable_gps.models import CGGPModel
+from scalable_gps.models.cg_gp_model import CGGPModel
+from scalable_gps.models.exact_gp_model import ExactGPModel
 from scalable_gps.utils import (
     ExactPredictionsTuple,
     HparamsTuple,
