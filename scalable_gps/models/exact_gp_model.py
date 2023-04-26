@@ -76,7 +76,7 @@ class ExactGPModel(GPModel):
         L: Optional[Array] = None, 
         zero_mean: bool = True):
         """Computes n_samples posterior samples, and returns posterior_samples along with alpha_samples."""
-        prior_covariance_key, prior_samples_key, samples_optim_key = jr.split(key, 3)
+        prior_covariance_key, prior_samples_key, _ = jr.split(key, 3)
     
         if L is None:
             L = sampling_utils.compute_prior_covariance_factor(
@@ -190,3 +190,4 @@ class ExactGPModel(GPModel):
         print("Final hyperparameters: ", hparams)
         
         return hparams
+    

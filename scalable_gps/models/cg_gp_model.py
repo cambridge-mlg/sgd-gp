@@ -151,22 +151,24 @@ class CGGPModel(ExactGPModel):
         use_rff: bool = True,
         n_features: int = 0,
         chol_eps: float = 1e-5,
+        L: Optional[Array] = None, 
         zero_mean: bool = True,
         metrics_list: list = [],
         metrics_prefix: str = "",
         compare_exact: bool = False):
         
         prior_covariance_key, prior_samples_key, _ = jr.split(key, 3)
-    
-        L = sampling_utils.compute_prior_covariance_factor(
-                prior_covariance_key, 
-                train_ds, 
-                test_ds, 
-                self.kernel.kernel_fn, 
-                self.kernel.feature_fn,
-                use_rff=use_rff, 
-                n_features=n_features, 
-                chol_eps=chol_eps)
+        
+        if L is None:
+            L = sampling_utils.compute_prior_covariance_factor(
+                    prior_covariance_key, 
+                    train_ds, 
+                    test_ds, 
+                    self.kernel.kernel_fn, 
+                    self.kernel.feature_fn,
+                    use_rff=use_rff, 
+                    n_features=n_features, 
+                    chol_eps=chol_eps)
 
         # Get vmapped functions for sampling from the prior and computing the posterior.
         compute_prior_samples_fn = self.get_prior_samples_fn(train_ds.N, L, use_rff)

@@ -1,8 +1,8 @@
 import jax
 import jax.numpy as jnp
 import jax.random as jr
-from chex import Array
-from typing import Callable
+from chex import Array, PRNGKey
+from typing import Callable, Optional
 
 from scalable_gps.kernels import Kernel
 from scalable_gps.data import Dataset
@@ -33,13 +33,11 @@ def init(
 
     @jax.jit
     def feature_fn(x):
-        L = signal_scale * jnp.sqrt(2.0 / n_features) * jnp.cos((x / length_scale) @ omega + phi)
-        return L
+        return signal_scale * jnp.sqrt(2.0 / n_features) * jnp.cos((x / length_scale) @ omega + phi)
 
     @jax.jit
     def objective_fn(x):
-        L = feature_fn(x)
-        return L @ w
+        return feature_fn(x) @ w
 
     x_init = jr.uniform(data_key, shape=(n_data_init, D), minval=minval, maxval=maxval)
     y_init = objective_fn(x_init)
@@ -59,6 +57,23 @@ def add_batch(ds: Dataset, x_batch: Array, objective_fn: Callable):
     y = jnp.concatenate([ds.y, y_batch], axis=0)
     N = ds.N + x_batch.shape[0]
     return Dataset(x, y, N, ds.D)
+
+
+def find_friends(
+        key: PRNGKey,
+        ds: Dataset,
+        n_friends: int,
+        strategy: str = 'uniform',
+        minval: float = -1.0,
+        maxval: float = 1.0):
+    
+    if strategy == 'uniform':
+        friends = jr.uniform(key, shape=(n_friends, ds.D), minval=minval, maxval=maxval)
+    else:
+        # TODO: implement other strategies
+        raise NotImplementedError(f"Strategy '{strategy}' to find friends is not implemented.")
+    
+    return friends
 
 
 def get_posterior_sample_fn(w, alpha_sample, feature_fn, kernel_fn, ds, alpha_map, batch_size=1):
