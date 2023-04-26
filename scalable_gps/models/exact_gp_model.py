@@ -95,7 +95,7 @@ class ExactGPModel(GPModel):
         compute_posterior_samples_fn = self.get_posterior_samples_fn(train_ds, test_ds, zero_mean)
 
         # Call the vmapped functions
-        f0_samples_train, f0_samples_test, eps0_samples = compute_prior_samples_fn(
+        f0_samples_train, f0_samples_test, eps0_samples, w_samples = compute_prior_samples_fn(
             jr.split(prior_samples_key, n_samples))  # (n_samples, n_train), (n_samples, n_test), (n_samples, n_train)
 
         alpha_samples = compute_alpha_samples_fn(f0_samples_train, eps0_samples)  # (n_samples, n_train)
@@ -105,7 +105,7 @@ class ExactGPModel(GPModel):
         chex.assert_shape(posterior_samples, (n_samples, test_ds.N))
         chex.assert_shape(alpha_samples, (n_samples, train_ds.N))
 
-        return posterior_samples, alpha_samples
+        return posterior_samples, alpha_samples, w_samples
 
     def get_mll_loss_fn(self, train_ds: Dataset, kernel_fn: Callable, transform: Optional[Callable] = None):
         """Factory function that wraps mll_loss_fn so that it is jittable."""

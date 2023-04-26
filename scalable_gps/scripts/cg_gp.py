@@ -114,7 +114,7 @@ def main(config):
                    "cg_gp/normalised_test_rmse": normalised_test_rmse,
                    "cg_gp/mll": mll / train_ds.N})
         
-        zero_mean_samples, alpha_samples = cg_model.compute_posterior_samples(
+        zero_mean_samples, alpha_samples, _ = cg_model.compute_posterior_samples(
             sampling_key,
             n_samples=config.cg_sampling_config.n_samples,
             train_ds=train_ds,

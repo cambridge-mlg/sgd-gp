@@ -48,12 +48,12 @@ class GPModel:
         # fn(keys) -> prior_samples
         def _fn(key):
             prior_sample_key, sample_key = jr.split(key)
-            f0_sample_train, f0_sample_test = sampling_utils.draw_f0_sample(
+            f0_sample_train, f0_sample_test, w_sample = sampling_utils.draw_f0_sample(
                     prior_sample_key, n_train, L, use_rff=use_rff)
             eps0_sample = sampling_utils.draw_eps0_sample(
                 sample_key, n_train, noise_scale=self.noise_scale)
 
-            return f0_sample_train, f0_sample_test, eps0_sample
+            return f0_sample_train, f0_sample_test, eps0_sample, w_sample
 
         return jax.jit(jax.vmap(_fn))
 

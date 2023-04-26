@@ -174,7 +174,7 @@ class CGGPModel(ExactGPModel):
         compute_target_tuples_fn = optim_utils.get_target_tuples_fn(config.loss_objective)
 
         # Call the vmapped functions
-        f0_samples_train, f0_samples_test, eps0_samples = compute_prior_samples_fn(
+        f0_samples_train, f0_samples_test, eps0_samples, w_samples = compute_prior_samples_fn(
             jr.split(prior_samples_key, n_samples))  # (n_samples, n_train), (n_samples, n_test), (n_samples, n_train)
         
         exact_samples_tuple = None
@@ -264,4 +264,4 @@ class CGGPModel(ExactGPModel):
         
         posterior_samples = compute_posterior_samples_fn(alphas, f0_samples_test)  # (n_samples, n_test)
         
-        return posterior_samples, alphas
+        return posterior_samples, alphas, w_samples

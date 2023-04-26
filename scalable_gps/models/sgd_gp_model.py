@@ -147,7 +147,7 @@ class SGDGPModel(GPModel):
         feature_fn = self.get_feature_fn(train_ds, config.n_features_optim, config.recompute_features)
  
         # Call the vmapped functions
-        f0_samples_train, f0_samples_test, eps0_samples = compute_prior_samples_fn(
+        f0_samples_train, f0_samples_test, eps0_samples, w_samples = compute_prior_samples_fn(
             jr.split(prior_samples_key, n_samples))  # (n_samples, n_train), (n_samples, n_test), (n_samples, n_train)
 
         exact_samples_tuple = None
@@ -236,4 +236,4 @@ class SGDGPModel(GPModel):
         
         posterior_samples = compute_posterior_samples_fn(alphas_polyak, f0_samples_test)  # (n_samples, n_test)
         
-        return posterior_samples, alphas_polyak, aux
+        return posterior_samples, alphas_polyak, w_samples, aux

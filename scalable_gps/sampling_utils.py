@@ -16,17 +16,17 @@ def draw_f0_sample(
     """Given L as either chol(K) or RFF Features, computes a sample from the prior function f_0."""
     if use_rff:
         M = L.shape[-1]
-        eps = jr.normal(key, (M,))
+        w_sample = jr.normal(key, (M,))
     else:
         N_full = L.shape[0]
-        eps = jr.normal(key, (N_full,))
+        w_sample = jr.normal(key, (N_full,))
     
-    f0_sample = L @ eps
+    f0_sample = L @ w_sample
 
     f0_sample_train = f0_sample[:N]
     f0_sample_test = f0_sample[N:]
 
-    return f0_sample_train, f0_sample_test
+    return f0_sample_train, f0_sample_test, w_sample
     
 
 def draw_eps0_sample(prior_noise_key, N, noise_scale):
