@@ -5,33 +5,37 @@ import jax
 import jax.numpy as jnp
 import jax.random as jr
 from chex import Array
-from data import Dataset
-from linalg_utils import KvP
-from linear_model import loss_fn
-from utils import ExactPredictionsTuple, ExactSamplesTuple, revert_z_score
+
+from scalable_gps.data import Dataset
+from scalable_gps.linalg_utils import KvP
+from scalable_gps.linear_model import loss_fn
+from scalable_gps.utils import ExactPredictionsTuple, ExactSamplesTuple, TargetTuple, revert_z_score
+from scalable_gps.optim_utils import get_uniform_idx_fn
 
 
 def grad_var_fn(
     params: Array,
     grad_fn: Callable,
-    batch_size: int,
-    train_ds: Dataset,
-    feature_fn: Callable, 
+    idx: Array,
+    features: Array,
+    target_tuple: TargetTuple,
     num_evals: int = 100,
     key: chex.PRNGKey = jr.PRNGKey(12345),
 ):
-    # TODO (jandylin): Rewrite this to work with our new grad_fn and idx formulation?
-    B, N = batch_size, train_ds.N
+    batch_size = idx.shape[0]
+    n_train = params.shape[0]
+    idx_fn = get_uniform_idx_fn(batch_size, n_train)
+
     @jax.jit
-    def _compute_grad(single_key):
-        idx_key, feature_key = jr.split(single_key)
-        idx = jr.randint(idx_key, shape=(B,), minval=0, maxval=N)
-        features = feature_fn(key=feature_key)
-        grad_val = grad_fn(params, idx, features)
+    @jax.vmap
+    def batch_grad_fn(key):
+        idx = idx_fn(0, key)
+        grad_val = grad_fn(params, idx, features, target_tuple)
 
         return grad_val
+    
     grad_var_key = jr.split(key, num_evals)
-    grad_samples = jax.vmap(_compute_grad)(grad_var_key)
+    grad_samples = batch_grad_fn(grad_var_key)
     grad_var = jnp.var(grad_samples, axis=0).mean()
 
     return grad_var
@@ -65,17 +69,15 @@ def get_eval_fn(
     metrics_list: List[str],
     train_ds: Dataset,
     test_ds: Dataset,
-    grad_fn: Callable,
     kernel_fn: Callable,
-    feature_fn: Callable,
     noise_scale: float,
+    grad_fn: Optional[Callable] = None,
     metrics_prefix: str = "",
     exact_metrics: Optional[ExactPredictionsTuple] = None,
     exact_samples: Optional[ExactSamplesTuple] = None,
     vmap: bool = False,
 ):
     def _fn(params, idx, features, target_tuple):
-        idx.shape[0]
         # Calculate all quantities of interest here, and each metric_fn gets passed all quantities.
         
         if exact_metrics is not None:
@@ -97,7 +99,7 @@ def get_eval_fn(
             print(f'alpha_exact.shape: {alpha_exact.shape}')
         else:
             y_pred_loc_sgd = KvP(test_ds.x, train_ds.x, params, kernel_fn=kernel_fn)
-
+        # TODO: Add normalised_test_rmse_Diff and test_rmse_Diff
         # Define all metric function calls here for now, refactor later.
         def _get_metric(metric):
             if metric == "loss":
@@ -106,9 +108,8 @@ def get_eval_fn(
                 return loss_fn(params, idx, train_ds.x, features, target_tuple, kernel_fn, noise_scale)[1]
             elif metric == "reg":
                 return loss_fn(params, idx, train_ds.x, features, target_tuple, kernel_fn, noise_scale)[2]
-            # TODO (jandylin): Can you rewrite this to match our new grad_fn etc. API?
-            # elif metric == "grad_var":
-            #     return grad_var_fn(params, grad_fn, B, train_ds, feature_fn)
+            elif metric == "grad_var":
+                return grad_var_fn(params, grad_fn, idx, features, target_tuple)
             elif metric == "test_rmse":
                 return RMSE(test_ds.y, y_pred_loc_sgd, mu=train_ds.mu_y, sigma=train_ds.sigma_y)
             elif metric == "normalised_test_rmse":

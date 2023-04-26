@@ -6,7 +6,7 @@ import jax
 import jax.numpy as jnp
 import jax.random as jr
 from chex import Array
-from utils import HparamsTuple, TargetTuple
+from scalable_gps.utils import HparamsTuple, TargetTuple
 
 
 def error(params: Array, idx: Array, x: Array, target: Array, kernel_fn: Callable):

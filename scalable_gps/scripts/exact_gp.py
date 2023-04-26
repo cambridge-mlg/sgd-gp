@@ -1,15 +1,16 @@
 
 import jax
 import jax.numpy as jnp
-import kernels
 import ml_collections.config_flags
 import wandb
 from absl import app, flags
-from data import get_dataset
-from eval_utils import RMSE
-from linear_model import marginal_likelihood
-from models import ExactGPModel
-from utils import HparamsTuple, flatten_nested_dict, setup_training, update_config_dict
+
+from scalable_gps import kernels
+from scalable_gps.data import get_dataset
+from scalable_gps.eval_utils import RMSE
+from scalable_gps.linear_model import marginal_likelihood
+from scalable_gps.models.exact_gp_model import ExactGPModel
+from scalable_gps.utils import HparamsTuple, flatten_nested_dict, get_tuned_hparams, setup_training, update_config_dict
 
 ml_collections.config_flags.DEFINE_config_file(
     "config",
@@ -41,10 +42,15 @@ def main(config):
         print(f"train_ds.x.shape: {train_ds.x.shape}")
         print(f"train_ds.y.shape: {train_ds.y.shape}")
 
-        hparams = HparamsTuple(
-            length_scale=jnp.array(config.kernel_config.length_scale),
-            signal_scale=config.kernel_config.signal_scale,
-            noise_scale=config.dataset_config.noise_scale,)
+        try:
+            hparams = get_tuned_hparams(config.dataset_name, config.dataset_config.split)
+        except wandb.CommError:
+            print("Could not fetch hparams from wandb. Using default values.")
+        
+            hparams = HparamsTuple(
+                length_scale=jnp.array(config.kernel_config.length_scale),
+                signal_scale=config.kernel_config.signal_scale,
+                noise_scale=config.dataset_config.noise_scale,)
         
         print(hparams)
         
@@ -54,13 +60,13 @@ def main(config):
         exact_model = ExactGPModel(hparams.noise_scale, kernel)
 
         exact_model.compute_representer_weights(train_ds)
-        y_pred_exact = exact_model.predictive_mean(train_ds, test_ds)
-        test_rmse_exact = RMSE(test_ds.y, y_pred_exact, mu=train_ds.mu_y, sigma=train_ds.sigma_y)
-        normalised_test_rmse = RMSE(test_ds.y, y_pred_exact)
+        y_pred = exact_model.predictive_mean(train_ds, test_ds)
+        test_rmse = RMSE(test_ds.y, y_pred, mu=train_ds.mu_y, sigma=train_ds.sigma_y)
+        normalised_test_rmse = RMSE(test_ds.y, y_pred)
 
         mll = marginal_likelihood(train_ds.x, train_ds.y, exact_model.kernel.kernel_fn, hparams)
-        print(f"test_rmse_exact = {test_rmse_exact}")
-        wandb.log({"test_rmse": test_rmse_exact,
+        print(f"test_rmse_exact = {test_rmse}")
+        wandb.log({"test_rmse": test_rmse,
                    "normalised_test_rmse": normalised_test_rmse,
                    "mll": mll / train_ds.N})
 

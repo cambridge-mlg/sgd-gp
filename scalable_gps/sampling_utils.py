@@ -4,8 +4,8 @@ import chex
 import jax.numpy as jnp
 import jax.random as jr
 from chex import Array
-from data import Dataset
-from linalg_utils import KvP
+from scalable_gps.data import Dataset
+from scalable_gps.linalg_utils import KvP
 
 
 def draw_f0_sample(

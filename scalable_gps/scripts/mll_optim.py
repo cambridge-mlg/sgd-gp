@@ -4,13 +4,14 @@ import pickle
 import jax
 import jax.numpy as jnp
 import jax.random as jr
-import kernels
 import ml_collections.config_flags
 import wandb
 from absl import app, flags
-from data import get_dataset, subsample
-from models import ExactGPModel
-from utils import HparamsTuple, flatten_nested_dict, setup_training, update_config_dict
+
+from scalable_gps import kernels
+from scalable_gps.baselines.exact_gp_model import ExactGPModel
+from scalable_gps.data import get_dataset, subsample
+from scalable_gps.utils import HparamsTuple, flatten_nested_dict, setup_training, update_config_dict
 
 ml_collections.config_flags.DEFINE_config_file(
     "config",

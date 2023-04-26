@@ -1,16 +1,19 @@
-
 import jax
+import jax.numpy as jnp
 import jax.random as jr
-import kernels
 import ml_collections.config_flags
 import wandb
 from absl import app, flags
-from data import get_dataset
-from eval_utils import RMSE
-from linear_model import marginal_likelihood
-from models import ExactGPModel, SGDGPModel
-from utils import (
+
+from scalable_gps import kernels
+from scalable_gps.data import get_dataset
+from scalable_gps.eval_utils import RMSE
+from scalable_gps.linear_model import marginal_likelihood
+from scalable_gps.models.exact_gp_model import ExactGPModel
+from scalable_gps.models.sgd_gp_model import SGDGPModel
+from scalable_gps.utils import (
     ExactPredictionsTuple,
+    HparamsTuple,
     flatten_nested_dict,
     get_tuned_hparams,
     setup_training,
@@ -44,7 +47,15 @@ def main(config):
         print(config)
         train_ds, test_ds = get_dataset(config.dataset_name, **config.dataset_config)
 
-        hparams = get_tuned_hparams(config.dataset_name, config.dataset_config.split)
+        try:
+            hparams = get_tuned_hparams(config.dataset_name, config.dataset_config.split)
+        except wandb.CommError:
+            print("Could not fetch hparams from wandb. Using default values.")
+        
+            hparams = HparamsTuple(
+                length_scale=jnp.array(config.kernel_config.length_scale),
+                signal_scale=config.kernel_config.signal_scale,
+                noise_scale=config.dataset_config.noise_scale,)
         
         print(hparams)
         
@@ -81,7 +92,7 @@ def main(config):
 
         metrics_list = ["loss", "test_rmse", "err", "reg", "normalised_test_rmse"]
         if config.compute_exact_soln:
-            metrics_list.extend(["alpha_diff", "y_pred_diff", "test_rmse_diff", "alpha_rkhs_diff"])
+            metrics_list.extend(["alpha_diff", "y_pred_diff", "alpha_rkhs_diff"])
 
         # Compute the SGD MAP solution for representer weights.
         model.compute_representer_weights(
@@ -94,22 +105,21 @@ def main(config):
             exact_metrics=exact_metrics if config.compute_exact_soln else None,
         )
         
-        return None
-        # zero_mean_samples, alpha_samples = model.compute_posterior_samples(
-        #     sampling_key,
-        #     n_samples=config.sampling_config.n_samples,
-        #     train_ds=train_ds,
-        #     test_ds=test_ds,
-        #     config=config.sampling_config,
-        #     use_rff=False,
-        #     n_features=config.sampling_config.n_features_optim,
-        #     zero_mean=True,
-        #     metrics_list=metrics_list,
-        #     metrics_prefix="sampling",
-        #     compare_exact=True
-        # )
+        zero_mean_samples, alpha_samples, _ = model.compute_posterior_samples(
+            sampling_key,
+            n_samples=config.sampling_config.n_samples,
+            train_ds=train_ds,
+            test_ds=test_ds,
+            config=config.sampling_config,
+            use_rff=False,
+            n_features=config.sampling_config.n_features_prior_sample,
+            zero_mean=True,
+            metrics_list=metrics_list,
+            metrics_prefix="sampling",
+            compare_exact=True
+        )
 
-        # return zero_mean_samples, alpha_samples
+        return zero_mean_samples, alpha_samples
 
 
 if __name__ == "__main__":

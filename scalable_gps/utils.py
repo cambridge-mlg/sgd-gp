@@ -108,6 +108,7 @@ def get_tuned_hparams(d_name: str, split: int):
     noise_scales = []
     signal_scales = []
     length_scales = []
+    
     for i in range(n_seeds):
         hparams_artifact_name = f"hparams_{d_name}_{split}_{i}"
         
@@ -123,6 +124,17 @@ def get_tuned_hparams(d_name: str, split: int):
         length_scale=jnp.mean(jnp.array(length_scales), axis=0))
     
     return mean_hparams
+
+
+def process_vmapped_metrics(vmapped_metrics):
+    mean_metrics, std_metrics = {}, {}
+    for k, v in vmapped_metrics.items():
+        vmapped_metrics[k] = wandb.Histogram(v)
+        mean_metrics[f'{k}_mean'] = jnp.mean(v)
+        std_metrics[f'{k}_std'] = jnp.std(v)
+        
+    return {**vmapped_metrics, **mean_metrics, **std_metrics}
+    
     
     
 if __name__ == '__main__':
