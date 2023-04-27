@@ -6,10 +6,10 @@ import wandb
 from absl import app, flags
 
 from scalable_gps import kernels
-from scalable_gps.baselines.exact_gp_model import ExactGPModel
 from scalable_gps.data import get_dataset
 from scalable_gps.eval_utils import RMSE
 from scalable_gps.linear_model import marginal_likelihood
+from scalable_gps.models.exact_gp_model import ExactGPModel
 from scalable_gps.utils import HparamsTuple, flatten_nested_dict, get_tuned_hparams, setup_training, update_config_dict
 
 ml_collections.config_flags.DEFINE_config_file(

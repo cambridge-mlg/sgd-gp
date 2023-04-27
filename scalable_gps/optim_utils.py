@@ -6,6 +6,7 @@ import jax.random as jr
 import ml_collections
 import optax
 from chex import Array
+from tqdm import tqdm
 
 from scalable_gps.linear_model import (
     error_grad_sample,
@@ -77,38 +78,38 @@ def get_target_tuples_fn(loss_objective: int):
     return jax.jit(jax.vmap(_fn))
 
 
-# TODO: rename vmap to share_idx
-def get_uniform_idx_fn(batch_size: int, n_train: int, vmap: bool = False):
+def get_uniform_idx_fn(batch_size: int, n_train: int, share_idx: bool = False):
     def _fn(_, key):
         idx = jr.randint(key, shape=(batch_size,), minval=0, maxval=n_train)
 
         return idx
 
-    if vmap:
+    if share_idx:
         return jax.jit(jax.vmap(_fn))
     return jax.jit(_fn)
 
 
+# TODO: implement dataset shuffle
 def get_iterative_idx_fn(batch_size: int, n_train: int):
+    n_steps_per_epoch = n_train // batch_size
     def _fn(iter, _):
-        idx = jnp.arange(batch_size) + ((iter * batch_size) % n_train)
-
+        epoch_id = iter // n_steps_per_epoch
+        epoch_key = jr.PRNGKey(epoch_id)
+        idx = (jnp.arange(batch_size) + (iter * batch_size)) % n_train
+        idx = jr.permutation(epoch_key, n_train)[idx]
         return idx
 
     return jax.jit(_fn)
 
 
 def get_idx_fn(
-    batch_size: int, n_train: int, iterative_idx: bool = True, vmap: bool = False
+    batch_size: int, n_train: int, iterative_idx: bool = True, share_idx: bool = False
 ):
     # TODO: Should we assert that batch_size < n_train?
     if iterative_idx:
-        assert (
-            n_train % batch_size == 0
-        ), "non-random idx with batch_size non multiple n_train causes training instability"
         idx_fn = get_iterative_idx_fn(batch_size, n_train)
     else:
-        idx_fn = get_uniform_idx_fn(batch_size, n_train, vmap=vmap)
+        idx_fn = get_uniform_idx_fn(batch_size, n_train, share_idx=share_idx)
     return idx_fn
 
 
@@ -246,3 +247,19 @@ def get_lr(opt_state):
                         lr_to_log = o_state2.hyperparams["learning_rate"]
 
     return lr_to_log
+
+
+def select_dynamic_batch_size(N, partial_fn):
+    batch_size = 1
+    with tqdm(total=int(jnp.log2(N)) + 1) as pbar:
+        while batch_size < N:
+            try:
+                new_batch_size = min(batch_size * 2, N)
+                pbar.set_description(f"Trying batch size = {new_batch_size}")
+                partial_fn(new_batch_size)
+            except Exception:
+                break
+            else:
+                batch_size = new_batch_size
+                pbar.update()
+    return batch_size
