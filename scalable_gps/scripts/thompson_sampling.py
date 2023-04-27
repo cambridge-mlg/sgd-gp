@@ -53,7 +53,7 @@ def main(config):
 
         start_time = time.time()
         for i in tqdm(range(config.iterations)):
-            alpha_map = model.compute_representer_weights(state.ds, force_recompute=True) # TODO: must force ExactGP to recompute kernel matrix K
+            alpha_map = model.compute_representer_weights(state.ds, recompute=True)
 
             key, friends_key, samples_key = jr.split(key, 3)
             ds_friends = thompson_utils.find_friends(friends_key, state, config.n_friends, method=config.find_friends_method)
