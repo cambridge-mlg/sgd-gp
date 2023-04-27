@@ -24,11 +24,12 @@ from scalable_gps.utils import (
 
 class ExactGPModel(GPModel):
 
-    def compute_representer_weights(self, train_ds: Dataset) -> Array:
+    def compute_representer_weights(self, train_ds: Dataset, force_recompute: bool = False) -> Array:
         """Compute the representer weights alpha by solving alpha = (K + sigma^2 I)^{-1} y"""
 
         # Compute Kernel exactly
-        self.K = self.kernel.kernel_fn(train_ds.x, train_ds.x) if self.K is None else self.K
+        if force_recompute or self.K is None:
+            self.K = self.kernel.kernel_fn(train_ds.x, train_ds.x)
 
         # Compute the representer weights by solving alpha = (K + sigma^2 I)^{-1} y
         self.alpha = solve_K_inv_v(self.K, train_ds.y, noise_scale=self.noise_scale)

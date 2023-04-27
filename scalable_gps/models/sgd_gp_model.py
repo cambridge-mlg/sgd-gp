@@ -84,7 +84,7 @@ class SGDGPModel(GPModel):
         idx = idx_fn(0, idx_key)
         update_fn(alpha, alpha_polyak, idx, features, opt_state, target_tuple)
 
-        wallclock_time = time.time()
+        wall_clock_time = time.time()
         aux = []
         for i in tqdm(range(config.iterations)):
             start_time = time.time()
@@ -94,7 +94,7 @@ class SGDGPModel(GPModel):
 
             alpha, alpha_polyak, opt_state = update_fn(alpha, alpha_polyak, idx, features, opt_state, target_tuple)
             end_time = time.time()
-            wallclock_time += end_time - start_time
+            wall_clock_time += end_time - start_time
             if i % config.eval_every == 0:
                 eval_metrics = eval_fn(alpha_polyak, idx, features, target_tuple)
 
@@ -102,7 +102,7 @@ class SGDGPModel(GPModel):
 
                 if wandb.run is not None:
                     wandb.log({**eval_metrics, 
-                               **{'train_step': i, 'lr': lr_to_log, 'wall_clock_time': wallclock_time}})
+                               **{'train_step': i, 'lr': lr_to_log, 'wall_clock_time': wall_clock_time}})
                 aux.append(eval_metrics)
 
         self.alpha = alpha_polyak

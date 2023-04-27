@@ -140,6 +140,25 @@ def get_config(config_string):
     config.cg_sampling_config.pivoted_jitter = 1
     config.cg_sampling_config.loss_objective = 2
 
+    config.thompson_config = ml_collections.ConfigDict()
+    config.thompson_config.seed = 1337
+    config.thompson_config.D = 8
+    config.thompson_config.kernel_name = "Matern32Kernel"
+    config.thompson_config.signal_scale = 1.0
+    config.thompson_config.length_scale = [0.1]
+    config.thompson_config.noise_scale = 1e-3
+    config.thompson_config.n_features = 10000
+    config.thompson_config.n_init = 10000
+    config.thompson_config.n_homies = 100
+    config.thompson_config.n_besties = 1
+    config.thompson_config.n_samples = 100
+    config.thompson_config.n_friends = 100000
+    config.thompson_config.find_friends_method = 'uniform'
+    config.thompson_config.optim_lr = 1e-3
+    config.thompson_config.optim_iters = 100
+    config.thompson_config.iterations = 100
+
+
     # Wandb Configs
     config.wandb = ml_collections.ConfigDict()
     config.wandb.log = False
