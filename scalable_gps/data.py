@@ -82,6 +82,37 @@ def get_concentrating_toy_sin_dataset(
     return train_ds, test_ds
 
 
+def get_split_toy_sin_dataset(
+    seed: int,
+    n: int,
+    noise_scale: float,
+    n_test: int,
+    x_std: float = 1.0,
+    separation: float = 0.0,
+    **kwargs: KwArgs,
+) -> Tuple[Dataset, Dataset]:
+    key = jr.PRNGKey(seed)  # Required because configdict can't pass jr.PRNGKey as seed
+    k1, k2, key = jr.split(key, 3)
+
+    x = jr.normal(k1, shape=(n, 1)) * x_std
+    x = x.at[n // 2 :].set(x[n // 2 :] + separation / 2)
+    x = x.at[: n // 2].set(x[: n // 2] - separation / 2)
+
+    def f(x):
+        return jnp.squeeze(jnp.sin(2 * x) + jnp.cos(5 * x))
+
+    signal = f(x)
+    y = signal + jr.normal(k2, shape=signal.shape) * noise_scale
+
+    x_test = jnp.linspace(-10.1, 10.1, n_test).reshape(-1, 1)
+    y_test = f(x_test)
+
+    train_ds = Dataset(x, y, n, 1)
+    test_ds = Dataset(x_test, y_test, n_test, 1)
+
+    return train_ds, test_ds
+
+
 def get_expanding_toy_sin_dataset(
     seed: int,
     n: int,
