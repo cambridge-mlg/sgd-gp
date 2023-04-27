@@ -64,6 +64,8 @@ def regression_SVGP(
         max_val = train_dataset.x.max(axis=0, keepdims=True)
         min_val = train_dataset.x.min(axis=0, keepdims=True)
         z = z * (max_val - min_val) + min_val
+    else:
+        raise ValueError('inducing_init options are [kmeans, equidistant, uniform]')
 
     q = gpx.VariationalGaussian(prior=prior, inducing_inputs=z)
     svgp = gpx.StochasticVI(posterior=p, variational_family=q)
