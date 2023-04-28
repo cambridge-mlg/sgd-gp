@@ -4,9 +4,10 @@ from typing import List, Optional
 import chex
 import jax.numpy as jnp
 import jax.random as jr
-import ml_collections
 import optax
 import wandb
+from chex import Array
+from ml_collections import ConfigDict
 from tqdm import tqdm
 
 from scalable_gps import eval_utils, optim_utils, sampling_utils
@@ -32,7 +33,7 @@ class SGDGPModel(GPModel):
         key: chex.PRNGKey,
         train_ds: Dataset,
         test_ds: Dataset,
-        config: ml_collections.ConfigDict,
+        config: ConfigDict,
         metrics_list: List[str],
         metrics_prefix: str = "",
         exact_metrics: Optional[ExactPredictionsTuple] = None,
@@ -83,7 +84,7 @@ class SGDGPModel(GPModel):
         idx = idx_fn(0, idx_key)
         update_fn(alpha, alpha_polyak, idx, features, opt_state, target_tuple)
 
-        wallclock_time = time.time()
+        wall_clock_time = time.time()
         aux = []
         for i in tqdm(range(config.iterations)):
             start_time = time.time()
@@ -93,7 +94,7 @@ class SGDGPModel(GPModel):
 
             alpha, alpha_polyak, opt_state = update_fn(alpha, alpha_polyak, idx, features, opt_state, target_tuple)
             end_time = time.time()
-            wallclock_time += end_time - start_time
+            wall_clock_time += end_time - start_time
             if i % config.eval_every == 0:
                 eval_metrics = eval_fn(alpha_polyak, idx, features, target_tuple)
 
@@ -101,7 +102,7 @@ class SGDGPModel(GPModel):
 
                 if wandb.run is not None:
                     wandb.log({**eval_metrics, 
-                               **{'train_step': i, 'lr': lr_to_log, 'wall_clock_time': wallclock_time}})
+                               **{'train_step': i, 'lr': lr_to_log, 'wall_clock_time': wall_clock_time}})
                 aux.append(eval_metrics)
 
         self.alpha = alpha_polyak
@@ -114,26 +115,28 @@ class SGDGPModel(GPModel):
         n_samples: int,
         train_ds: Dataset, 
         test_ds: Dataset, 
-        config: ml_collections.ConfigDict,
+        config: ConfigDict,
         use_rff: bool = True,
         n_features: int = 0,
         chol_eps: float = 1e-5,
+        L: Optional[Array] = None, 
         zero_mean: bool = True,
         metrics_list=[],
         metrics_prefix="",
         compare_exact=False):
         
         prior_covariance_key, prior_samples_key, optim_key = jr.split(key, 3)
-    
-        L = sampling_utils.compute_prior_covariance_factor(
-                prior_covariance_key, 
-                train_ds, 
-                test_ds, 
-                self.kernel.kernel_fn, 
-                self.kernel.feature_fn,
-                use_rff=use_rff, 
-                n_features=n_features, 
-                chol_eps=chol_eps)
+
+        if L is None:
+            L = sampling_utils.compute_prior_covariance_factor(
+                    prior_covariance_key, 
+                    train_ds, 
+                    test_ds, 
+                    self.kernel.kernel_fn, 
+                    self.kernel.feature_fn,
+                    use_rff=use_rff, 
+                    n_features=n_features, 
+                    chol_eps=chol_eps)
         
         # Get vmapped functions for sampling from the prior and computing the posterior.
         compute_prior_samples_fn = self.get_prior_samples_fn(train_ds.N, L, use_rff)
@@ -147,7 +150,7 @@ class SGDGPModel(GPModel):
         feature_fn = self.get_feature_fn(train_ds, config.n_features_optim, config.recompute_features)
  
         # Call the vmapped functions
-        f0_samples_train, f0_samples_test, eps0_samples = compute_prior_samples_fn(
+        f0_samples_train, f0_samples_test, eps0_samples, w_samples = compute_prior_samples_fn(
             jr.split(prior_samples_key, n_samples))  # (n_samples, n_train), (n_samples, n_test), (n_samples, n_train)
 
         exact_samples_tuple = None
@@ -236,4 +239,4 @@ class SGDGPModel(GPModel):
         
         posterior_samples = compute_posterior_samples_fn(alphas_polyak, f0_samples_test)  # (n_samples, n_test)
         
-        return posterior_samples, alphas_polyak, aux
+        return posterior_samples, alphas_polyak, w_samples, aux

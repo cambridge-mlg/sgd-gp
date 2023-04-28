@@ -4,10 +4,10 @@ import chex
 import jax
 import jax.numpy as jnp
 import jax.random as jr
-import ml_collections
 import optax
 import wandb
 from chex import Array
+from ml_collections import ConfigDict
 from tqdm import tqdm
 
 from scalable_gps import sampling_utils
@@ -24,11 +24,12 @@ from scalable_gps.utils import (
 
 class ExactGPModel(GPModel):
 
-    def compute_representer_weights(self, train_ds: Dataset) -> Array:
+    def compute_representer_weights(self, train_ds: Dataset, recompute: bool = False) -> Array:
         """Compute the representer weights alpha by solving alpha = (K + sigma^2 I)^{-1} y"""
 
         # Compute Kernel exactly
-        self.K = self.kernel.kernel_fn(train_ds.x, train_ds.x) if self.K is None else self.K
+        if recompute or self.K is None:
+            self.K = self.kernel.kernel_fn(train_ds.x, train_ds.x)
 
         # Compute the representer weights by solving alpha = (K + sigma^2 I)^{-1} y
         self.alpha = solve_K_inv_v(self.K, train_ds.y, noise_scale=self.noise_scale)
@@ -76,7 +77,7 @@ class ExactGPModel(GPModel):
         L: Optional[Array] = None, 
         zero_mean: bool = True):
         """Computes n_samples posterior samples, and returns posterior_samples along with alpha_samples."""
-        prior_covariance_key, prior_samples_key, samples_optim_key = jr.split(key, 3)
+        prior_covariance_key, prior_samples_key, _ = jr.split(key, 3)
     
         if L is None:
             L = sampling_utils.compute_prior_covariance_factor(
@@ -95,7 +96,7 @@ class ExactGPModel(GPModel):
         compute_posterior_samples_fn = self.get_posterior_samples_fn(train_ds, test_ds, zero_mean)
 
         # Call the vmapped functions
-        f0_samples_train, f0_samples_test, eps0_samples = compute_prior_samples_fn(
+        f0_samples_train, f0_samples_test, eps0_samples, w_samples = compute_prior_samples_fn(
             jr.split(prior_samples_key, n_samples))  # (n_samples, n_train), (n_samples, n_test), (n_samples, n_train)
 
         alpha_samples = compute_alpha_samples_fn(f0_samples_train, eps0_samples)  # (n_samples, n_train)
@@ -105,7 +106,7 @@ class ExactGPModel(GPModel):
         chex.assert_shape(posterior_samples, (n_samples, test_ds.N))
         chex.assert_shape(alpha_samples, (n_samples, train_ds.N))
 
-        return posterior_samples, alpha_samples
+        return posterior_samples, alpha_samples, w_samples
 
     def get_mll_loss_fn(self, train_ds: Dataset, kernel_fn: Callable, transform: Optional[Callable] = None):
         """Factory function that wraps mll_loss_fn so that it is jittable."""
@@ -129,7 +130,7 @@ class ExactGPModel(GPModel):
         self, 
         init_hparams: HparamsTuple, 
         train_ds: Dataset, 
-        config: ml_collections.ConfigDict, 
+        config: ConfigDict, 
         test_ds,
         full_train_ds: Optional[Dataset] = None, 
         transform: Optional[Callable] = None, 
@@ -190,3 +191,4 @@ class ExactGPModel(GPModel):
         print("Final hyperparameters: ", hparams)
         
         return hparams
+    
