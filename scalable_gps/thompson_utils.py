@@ -111,9 +111,9 @@ def get_step_fn(config: ConfigDict, model: GPModel):
                 model.compute_posterior_samples(samples_key, config.n_samples, state.ds, ds_friends,
                                                 use_rff=True, L=L, zero_mean=False)
             
-            acquisition_fn, acquisition_grad = get_acquisition_fn(state, alpha_map, alpha_samples, w_samples)
-            
             x_homies = find_homies(ds_friends, config.n_homies)
+
+            acquisition_fn, acquisition_grad = get_acquisition_fn(state, alpha_map, alpha_samples, w_samples)
             x_besties, _ = find_besties(x_homies, acquisition_fn, acquisition_grad,
                                         learning_rate=config.optim_lr,
                                         iterations=config.optim_iters,
