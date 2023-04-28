@@ -65,13 +65,12 @@ class Kernel:
 
         signal_scale, length_scale = self.get_signal_scale(kwargs), self.get_length_scale(kwargs)
         if recompute or self.omega is None or self.phi is None:
-            # compute single random Fourier feature for RBF kernel
             omega_key, phi_key = jr.split(key, 2)
-            omega = self.omega_fn(omega_key, D, M)
-            phi = self.phi_fn(phi_key, M)
-        else:
-            omega, phi = self.omega, self.phi
+            self.omega = self.omega_fn(omega_key, D, M)
+            self.phi = self.phi_fn(phi_key, M)
+        omega, phi = self.omega, self.phi
 
+        # cos = jax.jit(jnp.cos, backend='cpu')
         return signal_scale * jnp.sqrt(2.0 / M) * jnp.cos((x / length_scale) @ omega + phi)
 
 
@@ -131,4 +130,4 @@ class Matern52Kernel(MaternKernel):
         return 5.0
     
     def _normaliser(self, dist: Array, sq_dist: Array):
-        return jnp.sqrt(5.0) * dist + (5.0 / 3.0) * sq_dist + 1.0 
+        return jnp.sqrt(5.0) * dist + (5.0 / 3.0) * sq_dist + 1.0

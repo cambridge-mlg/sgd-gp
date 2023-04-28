@@ -6,7 +6,8 @@ def get_config():
     config.use_tpu = True
 
     config.seed = 1337
-    config.D = 4
+    config.D = 2
+    config.model_name = "ExactGP"
     config.kernel_name = "Matern32Kernel"
     config.signal_scale = 1.0
     config.length_scale = [0.25]

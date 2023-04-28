@@ -4,10 +4,10 @@ import chex
 import jax
 import jax.numpy as jnp
 import jax.random as jr
-import ml_collections
 import optax
 import wandb
 from chex import Array
+from ml_collections import ConfigDict
 from tqdm import tqdm
 
 from scalable_gps import sampling_utils
@@ -130,7 +130,7 @@ class ExactGPModel(GPModel):
         self, 
         init_hparams: HparamsTuple, 
         train_ds: Dataset, 
-        config: ml_collections.ConfigDict, 
+        config: ConfigDict, 
         test_ds,
         full_train_ds: Optional[Dataset] = None, 
         transform: Optional[Callable] = None, 

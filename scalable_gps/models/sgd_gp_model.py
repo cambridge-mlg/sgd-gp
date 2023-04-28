@@ -4,10 +4,10 @@ from typing import List, Optional
 import chex
 import jax.numpy as jnp
 import jax.random as jr
-import ml_collections
 import optax
 import wandb
 from chex import Array
+from ml_collections import ConfigDict
 from tqdm import tqdm
 
 from scalable_gps import eval_utils, optim_utils, sampling_utils
@@ -33,7 +33,7 @@ class SGDGPModel(GPModel):
         key: chex.PRNGKey,
         train_ds: Dataset,
         test_ds: Dataset,
-        config: ml_collections.ConfigDict,
+        config: ConfigDict,
         metrics_list: List[str],
         metrics_prefix: str = "",
         exact_metrics: Optional[ExactPredictionsTuple] = None,
@@ -115,7 +115,7 @@ class SGDGPModel(GPModel):
         n_samples: int,
         train_ds: Dataset, 
         test_ds: Dataset, 
-        config: ml_collections.ConfigDict,
+        config: ConfigDict,
         use_rff: bool = True,
         n_features: int = 0,
         chol_eps: float = 1e-5,

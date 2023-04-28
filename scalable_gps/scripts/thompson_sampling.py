@@ -37,7 +37,7 @@ def main(config):
         # If there are any config values dependent on sweep values, recompute them here.
         computed_configs = {}
         update_config_dict(config, run, computed_configs)
-        
+    
         print("Initialising kernel and model...")
         kernel_init_fn = getattr(kernels, config.kernel_name)
         kernel = kernel_init_fn({'signal_scale': config.signal_scale, 'length_scale': jnp.array(config.length_scale)})
@@ -48,30 +48,27 @@ def main(config):
         print("Constructing initial state of Thompson sampling")
         state = thompson_utils.init(init_key, config.D, kernel, config.n_features, config.n_init)
         print(f"Initial max_fn_value = {state.max_fn_value}")
+        print(f"Initial argmax = {state.argmax}")
+
         if wandb.run is not None:
             wandb.log({'train_step': 0, 'max_fn_value': state.max_fn_value, 'wall_clock_time': 0.0})
+        
+        max_fn_value, argmax = thompson_utils.grid_search(state)
+        print(f"Grid max_fn_value = {max_fn_value}")
+        print(f"Grid argmax = {argmax}")
+
+        step_fn = thompson_utils.get_step_fn(config, model)
 
         start_time = time.time()
         for i in tqdm(range(config.iterations)):
-            alpha_map = model.compute_representer_weights(state.ds, recompute=True)
-
-            key, friends_key, samples_key = jr.split(key, 3)
-            ds_friends = thompson_utils.find_friends(friends_key, state, config.n_friends, method=config.find_friends_method)
-            L = thompson_utils.add_features(state.L, ds_friends.x, state.feature_fn)
-
-            ds_friends.y, alpha_samples, w_samples = model.compute_posterior_samples(samples_key, config.n_samples, state.ds, ds_friends, use_rff=True, L=L, zero_mean=False)
-            
-            acquisition_fn = thompson_utils.get_acquisition_fn(state, alpha_map, alpha_samples, w_samples, kernel.kernel_fn)
-            
-            x_homies = thompson_utils.find_homies(ds_friends, config.n_homies)
-            x_besties, _ = thompson_utils.find_besties(x_homies, acquisition_fn, learning_rate=config.optim_lr, iterations=config.optim_iters, n_besties=config.n_besties)
-            
-            state = thompson_utils.update_state(state, x_besties)
+            key, step_key = jr.split(key)
+            state = step_fn(step_key, state)
             
             if wandb.run is not None:
                 wandb.log({'train_step': i + 1, 'max_fn_value': state.max_fn_value, 'wall_clock_time': time.time() - start_time})
 
         print(f"Final max_fn_value = {state.max_fn_value}")
+        print(f"Final argmax = {state.argmax}")
 
 
 if __name__ == "__main__":

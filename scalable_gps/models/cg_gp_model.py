@@ -5,9 +5,9 @@ import chex
 import jax
 import jax.numpy as jnp
 import jax.random as jr
-import ml_collections
 import wandb
 from chex import Array
+from ml_collections import ConfigDict
 from tqdm import tqdm
 
 from scalable_gps import eval_utils, optim_utils, sampling_utils
@@ -75,7 +75,7 @@ class CGGPModel(ExactGPModel):
         self, 
         train_ds: Dataset, 
         test_ds: Dataset,
-        config: ml_collections.ConfigDict,
+        config: ConfigDict,
         metrics_list: List[str],
         metrics_prefix: str="",
         exact_metrics: Optional[ExactPredictionsTuple] = None) -> Array:
@@ -147,7 +147,7 @@ class CGGPModel(ExactGPModel):
         n_samples: int,
         train_ds: Dataset, 
         test_ds: Dataset, 
-        config: ml_collections.ConfigDict,
+        config: ConfigDict,
         use_rff: bool = True,
         n_features: int = 0,
         chol_eps: float = 1e-5,
