@@ -31,6 +31,7 @@ def get_config(config_string):
     config.compute_exact_soln = True
     config.use_tpu = True
 
+    config.model_name = "sgd"
     # Data Configs
     config.dataset_name = d_name
 
@@ -49,10 +50,17 @@ def get_config(config_string):
     length_scale_dim = config.dataset_config.input_dim if config.kernel_config.use_ard else 1
     config.kernel_config.length_scale = length_scale_dim * [1.]
 
+    config.vi_config = ml_collections.ConfigDict()
+    config.vi_config.iterations = 10000
+    config.vi_config.batch_size = 100
+    config.vi_config.num_inducing_points = 1024
+    config.vi_config.inducing_init = "kmeans"
+    config.vi_config.learning_rate = 1e-3
+    config.vi_config.absolute_clipping = 0.1
     config.train_config = ml_collections.ConfigDict()
 
     # Full-batch training configs that get passed
-    config.train_config.iterations = 50000
+    config.train_config.iterations = 100000
     config.train_config.batch_size = 0
     config.train_config.eval_every = 100
     config.train_config.time_budget_in_seconds = 0.
@@ -67,8 +75,7 @@ def get_config(config_string):
     config.train_config.momentum = 0.9
     config.train_config.nesterov = True
     # TODO: Calculate polyak dynamically.
-    config.train_config.polyak = 1e-3
-
+    config.train_config.polyak = 100 / config.train_config.iterations
     config.train_config.absolute_clipping = 0.1  # -1 to avoid clipping
 
     config.train_config.lr_schedule_name = None # "linear_schedule"
@@ -117,9 +124,9 @@ def get_config(config_string):
     config.cg_config = ml_collections.ConfigDict()
     config.cg_config.batch_size = 0
     config.cg_config.tol = 1e-2
-    config.cg_config.maxiter = 2000
+    config.cg_config.maxiter = 100
     config.cg_config.atol = 0.
-    config.cg_config.eval_every = 10
+    config.cg_config.eval_every = 1
     config.cg_config.preconditioner = True
     config.cg_config.pivoted_chol_rank = 100
     config.cg_config.pivoted_diag_rtol = 1e-3

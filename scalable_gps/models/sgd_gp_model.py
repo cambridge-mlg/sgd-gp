@@ -84,7 +84,7 @@ class SGDGPModel(GPModel):
         idx = idx_fn(0, idx_key)
         update_fn(alpha, alpha_polyak, idx, features, opt_state, target_tuple)
 
-        wall_clock_time = time.time()
+        wall_clock_time = 0.
         aux = []
         for i in tqdm(range(config.iterations)):
             start_time = time.time()

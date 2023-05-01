@@ -72,7 +72,8 @@ class CGGPModel(ExactGPModel):
         
     
     def compute_representer_weights(
-        self, 
+        self,
+        key: chex.PRNGKey, 
         train_ds: Dataset, 
         test_ds: Dataset,
         config: ConfigDict,
@@ -81,6 +82,9 @@ class CGGPModel(ExactGPModel):
         exact_metrics: Optional[ExactPredictionsTuple] = None) -> Array:
         """Compute representer weights alpha by solving a linear system using Conjugate Gradients."""
         
+        # To match the API.
+        del key
+
         eval_fn = eval_utils.get_eval_fn(
             metrics_list,
             train_ds,
