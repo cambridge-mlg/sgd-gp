@@ -122,11 +122,11 @@ def get_config(config_string):
     config.mll_config.n_subsample = 10000
 
     config.cg_config = ml_collections.ConfigDict()
-    config.cg_config.batch_size = 0
+    config.cg_config.batch_size = 8192
     config.cg_config.tol = 1e-2
-    config.cg_config.maxiter = 100
+    config.cg_config.maxiter = 1000
     config.cg_config.atol = 0.
-    config.cg_config.eval_every = 1
+    config.cg_config.eval_every = 10
     config.cg_config.preconditioner = True
     config.cg_config.pivoted_chol_rank = 100
     config.cg_config.pivoted_diag_rtol = 1e-3

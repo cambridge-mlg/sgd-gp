@@ -97,6 +97,7 @@ def main(config):
             metrics_list.extend(["alpha_diff", "y_pred_diff", "alpha_rkhs_diff"])
 
         cg_model.compute_representer_weights(
+            key,
             train_ds, 
             test_ds, 
             config.cg_config, 
