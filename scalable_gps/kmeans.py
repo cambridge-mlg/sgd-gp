@@ -100,3 +100,22 @@ def kmeans(
         initial_val,
     )
     return centroids, distortion
+
+
+@jax.jit
+def centroids_counts(points: chex.Array, centroids:chex.Array) -> chex.Array:
+    """Returns [num_centroids,] array containing number of points assigned to each centroid"""
+    chex.assert_rank(points, 2)
+    chex.assert_rank(centroids, 2)
+    chex.assert_equal_shape_suffix([points, centroids], 1)
+
+    k = centroids.shape[0]
+
+    assignment, _ = vector_quantize(points, centroids)  # [k,] integers
+
+    counts = (
+        (assignment[jnp.newaxis, :] == jnp.arange(k)[:, jnp.newaxis])
+        .sum(axis=1, keepdims=True)
+    )   #  [k,] integers
+
+    return counts

@@ -51,20 +51,25 @@ def main(config):
         print(f"train_ds.y.shape: {train_ds.y.shape}")
 
         try:
-            hparams = get_tuned_hparams(config.dataset_name, config.dataset_config.split)
+            hparams = get_tuned_hparams(
+                config.dataset_name, config.dataset_config.split
+            )
         except wandb.CommError:
             print("Could not fetch hparams from wandb. Using default values.")
-        
+
             hparams = HparamsTuple(
                 length_scale=jnp.array(config.kernel_config.length_scale),
                 signal_scale=config.kernel_config.signal_scale,
-                noise_scale=config.dataset_config.noise_scale,)
-        
+                noise_scale=config.dataset_config.noise_scale,
+            )
+
         print(hparams)
-        
+
         kernel_init_fn = getattr(kernels, config.kernel_name)
-        kernel = kernel_init_fn({'signal_scale': hparams.signal_scale, 'length_scale': hparams.length_scale})
-        
+        kernel = kernel_init_fn(
+            {"signal_scale": hparams.signal_scale, "length_scale": hparams.length_scale}
+        )
+
         key = jr.PRNGKey(config.seed)
         _, sampling_key, key = jr.split(key, 3)
 
@@ -75,21 +80,28 @@ def main(config):
 
             exact_model.compute_representer_weights(train_ds)
             y_pred_exact = exact_model.predictive_mean(train_ds, test_ds)
-            test_rmse_exact = RMSE(test_ds.y, y_pred_exact, mu=train_ds.mu_y, sigma=train_ds.sigma_y)
+            test_rmse_exact = RMSE(
+                test_ds.y, y_pred_exact, mu=train_ds.mu_y, sigma=train_ds.sigma_y
+            )
             normalised_test_rmse = RMSE(test_ds.y, y_pred_exact)
 
-            mll = marginal_likelihood(train_ds.x, train_ds.y, exact_model.kernel.kernel_fn, hparams)
+            mll = marginal_likelihood(
+                train_ds.x, train_ds.y, exact_model.kernel.kernel_fn, hparams
+            )
             print(f"test_rmse_exact = {test_rmse_exact}")
-            wandb.log({"exact_gp/test_rmse": test_rmse_exact,
+            wandb.log(
+                {
+                    "exact_gp/test_rmse": test_rmse_exact,
                     "exact_gp/normalised_test_rmse": normalised_test_rmse,
-                    "exact_gp/mll": mll / train_ds.N})
+                    "exact_gp/mll": mll / train_ds.N,
+                }
+            )
 
             # Define exact metrics that we will use later to compare with stochastic solution
             exact_metrics = ExactPredictionsTuple(
-                alpha=exact_model.alpha,
-                y_pred_loc=y_pred_exact
+                alpha=exact_model.alpha, y_pred_loc=y_pred_exact
             )
-        
+
         cg_model = CGGPModel(hparams.noise_scale, kernel)
 
         metrics_list = ["test_rmse", "normalised_test_rmse"]
@@ -98,23 +110,30 @@ def main(config):
 
         cg_model.compute_representer_weights(
             key,
-            train_ds, 
-            test_ds, 
-            config.cg_config, 
-            metrics_list, 
-            metrics_prefix="train", 
-            exact_metrics=exact_metrics if config.compute_exact_soln else None)
+            train_ds,
+            test_ds,
+            config.cg_config,
+            metrics_list,
+            metrics_prefix="train",
+            exact_metrics=exact_metrics if config.compute_exact_soln else None,
+        )
 
         y_pred = cg_model.predictive_mean(train_ds, test_ds)
         test_rmse = RMSE(test_ds.y, y_pred, mu=train_ds.mu_y, sigma=train_ds.sigma_y)
         normalised_test_rmse = RMSE(test_ds.y, y_pred)
 
-        mll = marginal_likelihood(train_ds.x, train_ds.y, cg_model.kernel.kernel_fn, hparams)
+        mll = marginal_likelihood(
+            train_ds.x, train_ds.y, cg_model.kernel.kernel_fn, hparams
+        )
         print(f"test_rmse_cg = {test_rmse}")
-        wandb.log({"cg_gp/test_rmse": test_rmse,
-                   "cg_gp/normalised_test_rmse": normalised_test_rmse,
-                   "cg_gp/mll": mll / train_ds.N})
-        
+        wandb.log(
+            {
+                "cg_gp/test_rmse": test_rmse,
+                "cg_gp/normalised_test_rmse": normalised_test_rmse,
+                "cg_gp/mll": mll / train_ds.N,
+            }
+        )
+
         zero_mean_samples, alpha_samples, _ = cg_model.compute_posterior_samples(
             sampling_key,
             n_samples=config.cg_sampling_config.n_samples,
@@ -126,7 +145,7 @@ def main(config):
             zero_mean=True,
             metrics_list=metrics_list,
             metrics_prefix="sampling",
-            compare_exact=True
+            compare_exact=True,
         )
 
         return zero_mean_samples, alpha_samples
