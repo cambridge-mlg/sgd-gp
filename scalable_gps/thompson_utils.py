@@ -157,7 +157,7 @@ def get_thompson_step_fn(
             test_ds = fake_dataset_like(state.ds)
 
             # get posterior samples
-            _ = model.compute_representer_weights(
+            alpha_map = model.compute_representer_weights(
                 key=representer_key,
                 train_ds=state.ds,
                 test_ds=test_ds,
