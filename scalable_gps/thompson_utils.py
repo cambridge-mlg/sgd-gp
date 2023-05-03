@@ -4,7 +4,7 @@ import jax.random as jr
 import optax
 from chex import Array, PRNGKey
 from ml_collections import ConfigDict
-from typing import Callable, NamedTuple
+from typing import Callable, NamedTuple, Optional
 
 from scalable_gps.kernels import Kernel, FeatureParams, featurise
 from scalable_gps.data import Dataset
@@ -155,13 +155,9 @@ def get_thompson_step_fn(
 
             # API compatibility dummy test set and features
             test_ds = fake_dataset_like(state.ds)
-            # n_features = state.L.shape[-1]
-            L_test = featurise(test_ds.x, state.feature_params)
-            L_train = featurise(state.ds.x, state.feature_params)
-            L = jnp.concatenate([L_train, L_test], axis=0)
 
             # get posterior samples
-            alpha_map = model.compute_representer_weights(
+            _ = model.compute_representer_weights(
                 key=representer_key,
                 train_ds=state.ds,
                 test_ds=test_ds,
@@ -171,6 +167,22 @@ def get_thompson_step_fn(
                 exact_metrics=None,
                 recompute=True,
             )
+
+            if thompson_config.model_name == "SVGP":
+                inducing_inputs = model.vi_params["variational_family"][
+                    "inducing_inputs"
+                ]
+                L_train = featurise(
+                    inducing_inputs,
+                    state.feature_params,
+                )
+                alpha_map = jnp.zeros(inducing_inputs.shape[0])
+            else:
+                L_train = featurise(state.ds.x, state.feature_params)
+                inducing_inputs = None
+
+            L_test = featurise(test_ds.x, state.feature_params)
+            L = jnp.concatenate([L_train, L_test], axis=0)
 
             (
                 _,
@@ -194,6 +206,7 @@ def get_thompson_step_fn(
                 alpha_map=alpha_map,
                 zero_mean_alpha_samples=zero_mean_alpha_samples,
                 w_samples=w_samples,
+                inducing_inputs=inducing_inputs,
             )
 
             return update_state(noise_key, state, x_besties)
@@ -207,11 +220,12 @@ def gp_sample_argmax(
     alpha_map: Array,
     zero_mean_alpha_samples: Array,
     w_samples: Array,
+    inducing_inputs: Optional[Array],
     config: ConfigDict,
     kernel: Kernel,
 ) -> Array:
     acquisition_fn_sharex, acquisition_fn, acquisition_grad = get_acquisition_fn(
-        state, kernel, alpha_map, zero_mean_alpha_samples, w_samples
+        state, kernel, alpha_map, zero_mean_alpha_samples, w_samples, inducing_inputs
     )
 
     # initial random search
@@ -348,6 +362,7 @@ def get_acquisition_fn(
     alpha_map: Array,  # (n_train,)
     alpha_samples: Array,  # (n_samples, n_train)
     w_samples: Array,  # (n_samples, n_features)
+    inducing_inputs: Optional[Array] = None,
     **kernel_kwargs,
 ):
     """Construct single acquisition function which is vmapped over samples and inputs,
@@ -364,7 +379,11 @@ def get_acquisition_fn(
         # w_sample: (n_features,)
         # return: ()
         L = featurise(x, state.feature_params)
-        K = kernel.kernel_fn(x, state.ds.x, **kernel_kwargs)
+        if inducing_inputs is None:
+            K = kernel.kernel_fn(x, state.ds.x, **kernel_kwargs)
+        else:
+            K = kernel.kernel_fn(x, inducing_inputs, **kernel_kwargs)
+
         return (L @ w_sample + K @ (alpha_map - alpha_sample)).squeeze()
 
     @jax.jit
