@@ -122,7 +122,7 @@ def get_config(config_string):
     config.mll_config.n_subsample = 10000
 
     config.cg_config = ml_collections.ConfigDict()
-    config.cg_config.batch_size = 8192
+    config.cg_config.batch_size = 1
     config.cg_config.tol = 1e-2
     config.cg_config.maxiter = 1000
     config.cg_config.atol = 0.

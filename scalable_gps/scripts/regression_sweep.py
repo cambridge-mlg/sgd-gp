@@ -121,6 +121,14 @@ def main(config):
 
 
 if __name__ == "__main__":
+    import os
+    import sys
+
+    if sys.argv:
+        # pass wandb API as argv[1] and set environment variable
+        # 'python mll_optim.py MY_API_KEY'
+        os.environ["WANDB_API_KEY"] = sys.argv[1]
+        
     # Adds jax flags to the program.
     jax.config.config_with_absl()
 
