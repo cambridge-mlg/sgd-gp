@@ -134,7 +134,7 @@ dependencies:
       - dm-tree==0.1.8
       - jax==0.4.8
       - jaxlib==0.4.7
-      - ml-collections==0.1.1
+      - ml-collections==0.1.0
       - ml-dtypes==0.0.4
       - optax==0.1.4
       - toolz==0.12.0
