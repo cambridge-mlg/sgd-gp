@@ -1,10 +1,9 @@
+import itertools
 import subprocess
 from concurrent.futures import ThreadPoolExecutor
 
 
-def run_experiment(seed):
-    dataset_name = 'yacht'
-    method_name = 'sgd'
+def run_experiment(seed, dataset_name, method_name):
     tpu_name = f"tpu-{dataset_name}-{method_name}-{seed}"
 
     # Create the TPU
@@ -50,7 +49,11 @@ def run_experiment(seed):
 
 
 seeds = [0, 1]
+datasets = ['3droad']
+methods = ['sgd', 'cg']
 
 # Run the experiments in parallel using a ThreadPoolExecutor
 with ThreadPoolExecutor() as executor:
-    executor.map(run_experiment, seeds)
+
+    tasks = itertools.product(seeds, datasets, methods)
+    executor.map(lambda task: run_experiment(*task), tasks)
