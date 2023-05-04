@@ -21,7 +21,7 @@ def freeze_non_variational_params(parameter_state):
     return parameter_state
 
 
-from scalable_gps.kmeans import kmeans
+from scalable_gps.kmeans import kmeans, centroids_counts
 
 
 def regression_SVGP(
@@ -54,6 +54,10 @@ def regression_SVGP(
 
     if inducing_init == "kmeans":
         z, _ = kmeans(key, train_dataset.x, k=num_inducing, thresh=1e-3)
+        raw_counts = centroids_counts(train_dataset.x, z)
+        z = z[raw_counts > 0]
+
+        # TODO: delete unsued centroids
     elif inducing_init == "equidistant":
         chex.assert_axis_dimension(D.X, axis=1, expected=1)
         z = jnp.linspace(D.X.min(), D.X.max(), num_inducing).reshape(-1, 1)
@@ -65,7 +69,7 @@ def regression_SVGP(
         min_val = train_dataset.x.min(axis=0, keepdims=True)
         z = z * (max_val - min_val) + min_val
     else:
-        raise ValueError('inducing_init options are [kmeans, equidistant, uniform]')
+        raise ValueError("inducing_init options are [kmeans, equidistant, uniform]")
 
     q = gpx.VariationalGaussian(prior=prior, inducing_inputs=z)
     svgp = gpx.StochasticVI(posterior=p, variational_family=q)
@@ -101,7 +105,7 @@ def sample_from_qu(key: chex.PRNGKey, learned_params: chex.ArrayTree, num_sample
     mu = learned_params["variational_family"]["moments"]["variational_mean"]
     L = learned_params["variational_family"]["moments"]["variational_root_covariance"]
     eps = random.normal(key, shape=(mu.shape[0], num_samples))
-    return mu + L @ eps
+    return mu + L @ eps  # (NUM_INDUCING, NUM_SAMPLES)
 
 
 # NOTE: sampling optimisable functions for Thompson sampling can be done with the pathwwise
