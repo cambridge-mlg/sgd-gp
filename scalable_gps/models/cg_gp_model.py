@@ -140,7 +140,7 @@ class CGGPModel(ExactGPModel):
 
             if wandb.run is not None:
                 wandb.log({**eval_metrics, **{'train_step': i, 
-                                                'wall_clock_time': wall_clock_time + precond_time}})
+                                              'wall_clock_time': wall_clock_time + precond_time}})
             aux.append(eval_metrics)
         
         self.alpha = alpha
