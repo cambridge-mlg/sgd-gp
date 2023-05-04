@@ -133,15 +133,17 @@ class CGGPModel(ExactGPModel):
         for i in tqdm(range(0, config.maxiter, config.eval_every)):
             start_time = time.time()
             alpha, cg_state = cg_fn(train_ds.y, cg_state, i)
+            alpha.block_until_ready()
             end_time = time.time()
             eval_metrics = eval_fn(alpha, i, None, None)
             wall_clock_time += end_time - start_time
 
             if wandb.run is not None:
-                wandb.log({**eval_metrics, **{'train_step': i, 'wall_clock_time': wall_clock_time + precond_time}})
+                wandb.log({**eval_metrics, **{'train_step': i, 
+                                                'wall_clock_time': wall_clock_time + precond_time}})
             aux.append(eval_metrics)
         
-            self.alpha = alpha
+        self.alpha = alpha
     
         return self.alpha
 

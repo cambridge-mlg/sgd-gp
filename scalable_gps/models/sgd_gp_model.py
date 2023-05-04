@@ -87,11 +87,11 @@ class SGDGPModel(GPModel):
         wall_clock_time = 0.
         aux = []
         for i in tqdm(range(config.iterations)):
-            start_time = time.time()
+            
             key, idx_key, feature_key = jr.split(key, 3)
             features = feature_fn(feature_key)
             idx = idx_fn(i, idx_key)
-
+            start_time = time.time()
             alpha, alpha_polyak, opt_state = update_fn(alpha, alpha_polyak, idx, features, opt_state, target_tuple)
             end_time = time.time()
             wall_clock_time += end_time - start_time
