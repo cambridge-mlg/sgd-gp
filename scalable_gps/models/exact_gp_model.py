@@ -130,7 +130,6 @@ class ExactGPModel(GPModel):
         alpha_samples = compute_alpha_samples_fn(
             f0_samples_train, eps0_samples
         )  # (n_samples, n_train)
-
         posterior_samples = compute_posterior_samples_fn(
             alpha_samples, f0_samples_test
         )  # (n_samples, n_test)

@@ -176,13 +176,14 @@ def get_thompson_step_fn(
                     inducing_inputs,
                     state.feature_params,
                 )
+                L = L_train
                 alpha_map = jnp.zeros(inducing_inputs.shape[0])
             else:
                 L_train = featurise(state.ds.x, state.feature_params)
                 inducing_inputs = None
 
-            L_test = featurise(test_ds.x, state.feature_params)
-            L = jnp.concatenate([L_train, L_test], axis=0)
+                L_test = featurise(test_ds.x, state.feature_params)
+                L = jnp.concatenate([L_train, L_test], axis=0)
 
             (
                 _,

@@ -14,6 +14,7 @@ from scalable_gps.SVGP import regression_SVGP, sample_from_qu
 from scalable_gps.models.exact_gp_model import ExactGPModel
 import chex
 from scalable_gps.linalg_utils import KvP, solve_K_inv_v
+from functools import partial
 
 
 class SVGPModel:
@@ -58,8 +59,10 @@ class SVGPModel:
             optax.zero_nans(), optax.clip_by_global_norm(absolute_clipping), optimizer
         )
 
+        init_key, fit_key = jax.random.split(key, 2)
+
         negative_elbo, init_state, D, self.get_predictive = self.regression_fn(
-            train_ds, key
+            train_ds, init_key
         )
 
         optimised_state = gpx.fit_batches(
@@ -68,7 +71,7 @@ class SVGPModel:
             train_data=D,
             optax_optim=optimizer,
             num_iters=config.iterations,
-            key=key,
+            key=fit_key,
             batch_size=config.batch_size,
         )
 
@@ -168,8 +171,6 @@ class SVGPThompsonInterface(SVGPModel):
         self.function_dist = None
         self.predictive_dist = None
 
-        self.exact_gp = ExactGPModel(noise_scale=self.noise_scale, kernel=self.kernel)
-
     def compute_posterior_samples(
         self,
         key: chex.PRNGKey,
@@ -187,7 +188,10 @@ class SVGPThompsonInterface(SVGPModel):
         compare_exact=False,
     ):
         del (
+            train_ds,
+            test_ds,
             config,
+            use_rff,
             n_features,
             chol_eps,
             zero_mean,
@@ -195,65 +199,31 @@ class SVGPThompsonInterface(SVGPModel):
             metrics_prefix,
             compare_exact,
         )
+        # L is (num_inducing, num_features)
 
         if self.vi_params is None:
             raise ValueError(
                 "Cannot compute posterior samples without first computing the variational parameters."
             )
 
-        u_key, sample_key = jax.random.split(key)
+        u_key, w_sample_key = jax.random.split(key)
 
         u_locations = self.vi_params["variational_family"]["inducing_inputs"]  # (M, D)
         u_samples = sample_from_qu(
             u_key, self.vi_params, n_samples
+        )  # (num_inducing, num_samples)
+
+        K = self.kernel.kernel_fn(u_locations, u_locations)
+
+        jit_solve = jax.jit(partial(jax.scipy.linalg.solve, assume_a="pos"))
+
+        alpha_means = jit_solve(K, u_samples)  # (num_inducing, num_samples)
+
+        w_samples = jax.random.normal(w_sample_key, shape=(n_samples, L.shape[1]))
+        f0_samples = L @ w_samples.T  # (num_inducing, n_samples)
+        alpha_samples = jit_solve(K, f0_samples)  # (num_inducing, num_samples)
+
+        pseudo_representer_weights = -(
+            alpha_means - alpha_samples
         ).T  # (num_samples, num_inducing)
-
-        K = self.exact_gp.kernel.kernel_fn(u_locations, u_locations)
-        self.exact_gp.K = K
-
-        @jax.jit
-        def solve(y):
-            return jax.vmap(solve_K_inv_v, in_axes=(None, 0, None))(
-                K, y, self.exact_gp.noise_scale
-            )
-
-        alpha_means = solve(u_samples)  # (num_samples, num_inducing)
-
-        # TODO: bespoke vmap implementation
-        w_sample_list = []
-        alpha_sample_list = []
-        for i in range(n_samples):
-            train_ds = Dataset(
-                x=u_locations,
-                y=u_samples[i],
-                N=len(u_samples[i]),
-                D=u_locations.shape[1],
-            )
-            sample_key, _ = jax.random.split(sample_key)
-
-            (
-                _,
-                zero_mean_alpha_samples,  # (1, num_inducing)
-                w_samples,  #  (1, num_features)
-            ) = self.exact_gp.compute_posterior_samples(
-                key=sample_key,
-                n_samples=1,
-                train_ds=train_ds,
-                test_ds=test_ds,
-                config=None,
-                use_rff=use_rff,
-                L=L,
-                zero_mean=True,
-            )
-            alpha_sample_list.append(zero_mean_alpha_samples)
-            w_sample_list.append(w_samples)
-
-        alpha_sample_list = jnp.concatenate(
-            alpha_sample_list, axis=0
-        )  # (num_samples, num_inducing)
-        w_sample_list = jnp.concatenate(
-            w_sample_list, axis=0
-        )  # (num_samples, num_features)
-
-        pseudo_representer_weights = -(alpha_means - alpha_sample_list)
-        return None, pseudo_representer_weights, w_sample_list
+        return None, pseudo_representer_weights, w_samples
