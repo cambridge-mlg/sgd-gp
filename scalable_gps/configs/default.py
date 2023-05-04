@@ -154,5 +154,6 @@ def get_config(config_string):
     config.wandb.entity = "shreyaspadhy"
     config.wandb.code_dir = "/home/shreyaspadhy_gmail_com/scalable-gaussian-processes"
     config.wandb.name = ""
+    config.wandb.log_artifact = False
     
     return config

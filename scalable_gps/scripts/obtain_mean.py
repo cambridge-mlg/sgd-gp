@@ -102,6 +102,11 @@ def main(config):
         elif config.model_name == "cg":
             model = CGGPModel(hparams.noise_scale, kernel)
             train_config = config.cg_config
+            train_config.preconditioner = False
+        elif config.model_name == "precondcg":
+            model = CGGPModel(hparams.noise_scale, kernel)
+            train_config = config.cg_config
+            train_config.preconditioner = True
         elif config.model_name == "vi":
             train_config = config.vi_config
             model = SVGPModel(hparams.noise_scale, kernel, train_config, train_config.kernel_config)
@@ -121,16 +126,18 @@ def main(config):
             exact_metrics=exact_metrics if config.compute_exact_soln else None,
         )
         
-        # Use wandb artifacts to save model hparams for a given dataset split and subsample_idx.
-        alpha_artifact = wandb.Artifact(
-            f"alphamap_{config.dataset_name}_{config.method_name}_{config.dataset_config.split}", type="alphamap",
-            description=f"Alpha MAP for {config.dataset_name} dataset with method {config.method_name} on split {config.dataset_config.split}.",
-            metadata={**{"dataset_name": config.dataset_name, "method_name": config.method_name, "split": config.dataset_config.split}},)
-        
-        with alpha_artifact.new_file("alphamap.pkl", "wb") as f:
-            pickle.dump(alpha, f)
+        if config.wandb.log_artifact:
+            # Use wandb artifacts to save model hparams for a given dataset split and subsample_idx.
+            alpha_artifact = wandb.Artifact(
+                f"alphamap_{config.dataset_name}_{config.method_name}_{config.dataset_config.split}", type="alphamap",
+                description=f"Alpha MAP for {config.dataset_name} dataset with method {config.method_name} on split {config.dataset_config.split}.",
+                metadata={**{"dataset_name": config.dataset_name, "method_name": config.method_name, "split": config.dataset_config.split}},)
             
-        wandb.log_artifact(alpha_artifact)
+            with alpha_artifact.new_file("alphamap.pkl", "wb") as f:
+                pickle.dump(alpha, f)
+                
+            wandb.log_artifact(alpha_artifact)
+
         return
 
 
