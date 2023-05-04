@@ -12,6 +12,7 @@ from scalable_gps.linear_model import marginal_likelihood
 from scalable_gps.models.cg_gp_model import CGGPModel
 from scalable_gps.models.exact_gp_model import ExactGPModel
 from scalable_gps.models.sgd_gp_model import SGDGPModel
+from scalable_gps.models.vi_gp_model import SVGPModel
 from scalable_gps.utils import (
     ExactPredictionsTuple,
     HparamsTuple,
@@ -27,6 +28,8 @@ ml_collections.config_flags.DEFINE_config_file(
     "Training configuration.",
     lock_config=True,
 )
+
+import pickle
 
 FLAGS = flags.FLAGS
 
@@ -63,11 +66,9 @@ def main(config):
         
         print(hparams)
         
-        
         # Initialise Kernel
         kernel_init_fn = getattr(kernels, config.kernel_name)
         kernel = kernel_init_fn({'signal_scale': hparams.signal_scale, 'length_scale': hparams.length_scale})
-
 
         key = jr.PRNGKey(config.seed)
         optim_key, sampling_key, key = jr.split(key, 3)
@@ -101,13 +102,16 @@ def main(config):
         elif config.model_name == "cg":
             model = CGGPModel(hparams.noise_scale, kernel)
             train_config = config.cg_config
+        elif config.model_name == "vi":
+            train_config = config.vi_config
+            model = SVGPModel(hparams.noise_scale, kernel, train_config, train_config.kernel_config)
 
         metrics_list = ["loss", "err", "reg", "normalised_test_rmse", "test_rmse"]
         if config.compute_exact_soln:
             metrics_list.extend(["alpha_diff", "y_pred_diff", "alpha_rkhs_diff"])
 
         # Compute the SGD MAP solution for representer weights.
-        model.compute_representer_weights(
+        alpha = model.compute_representer_weights(
             optim_key,
             train_ds,
             test_ds,
@@ -117,6 +121,16 @@ def main(config):
             exact_metrics=exact_metrics if config.compute_exact_soln else None,
         )
         
+        # Use wandb artifacts to save model hparams for a given dataset split and subsample_idx.
+        alpha_artifact = wandb.Artifact(
+            f"alphamap_{config.dataset_name}_{config.method_name}_{config.dataset_config.split}", type="alphamap",
+            description=f"Alpha MAP for {config.dataset_name} dataset with method {config.method_name} on split {config.dataset_config.split}.",
+            metadata={**{"dataset_name": config.dataset_name, "method_name": config.method_name, "split": config.dataset_config.split}},)
+        
+        with alpha_artifact.new_file("alphamap.pkl", "wb") as f:
+            pickle.dump(alpha, f)
+            
+        wandb.log_artifact(alpha_artifact)
         return
 
 
