@@ -85,6 +85,9 @@ class CGGPModel(ExactGPModel):
         # To match the API.
         del key
 
+        for metric in ['loss', 'err', 'reg']:
+            if metric in metrics_list:
+                metrics_list.remove(metric)
         eval_fn = eval_utils.get_eval_fn(
             metrics_list,
             train_ds,
