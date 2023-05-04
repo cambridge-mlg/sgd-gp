@@ -4,7 +4,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 
 def run_experiment(seed, dataset_name, method_name):
-    tpu_name = f"tpu-{dataset_name}-{method_name}-{seed}"
+    tpu_name = f"debug-tpu-{dataset_name}-{method_name}-{seed}"
 
     try:
         # Create the TPU
