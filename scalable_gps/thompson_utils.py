@@ -11,6 +11,7 @@ from scalable_gps.data import Dataset
 from scalable_gps.models.base_gp_model import GPModel
 import chex
 from functools import partial
+import wandb
 
 
 class ThompsonState(NamedTuple):
@@ -132,7 +133,7 @@ def get_thompson_step_fn(
 ):
     if thompson_config.model_name == "RandomSearch":
 
-        def _fn(key: PRNGKey, state: ThompsonState):
+        def _fn(key: PRNGKey, state: ThompsonState, i: Optional[int] = None):
             friends_key, noise_key = jr.split(key, 2)
             x_friends = find_friends(
                 friends_key,
@@ -150,7 +151,7 @@ def get_thompson_step_fn(
         )
 
         # TODO: implement shared API for GPModels to make this work with any GP model -- VI compatibility?
-        def _fn(key: PRNGKey, state: ThompsonState):
+        def _fn(key: PRNGKey, state: ThompsonState, i: Optional[int] = None):
             representer_key, noise_key, friends_key, samples_key = jr.split(key, 4)
 
             # API compatibility dummy test set and features
@@ -162,8 +163,8 @@ def get_thompson_step_fn(
                 train_ds=state.ds,
                 test_ds=test_ds,
                 config=inference_config_representer,
-                metrics_list=[],
-                metrics_prefix="",
+                metrics_list=['loss', 'err', 'reg'],
+                metrics_prefix=f"Thompson_{i}/alpha_MAP",
                 exact_metrics=None,
                 recompute=True,
             )
@@ -197,6 +198,8 @@ def get_thompson_step_fn(
                 use_rff=True,
                 L=L,
                 zero_mean=False,
+                metrics_list=['loss', 'err', 'reg'],
+                metrics_prefix=f"Thompson_{i}/alpha_samples"
             )
 
             # function optimisation starts here
@@ -207,6 +210,7 @@ def get_thompson_step_fn(
                 zero_mean_alpha_samples=zero_mean_alpha_samples,
                 w_samples=w_samples,
                 inducing_inputs=inducing_inputs,
+                i=i
             )
 
             return update_state(noise_key, state, x_besties)
@@ -221,6 +225,7 @@ def gp_sample_argmax(
     zero_mean_alpha_samples: Array,
     w_samples: Array,
     inducing_inputs: Optional[Array],
+    i : Optional[int],
     config: ConfigDict,
     kernel: Kernel,
 ) -> Array:
@@ -255,6 +260,7 @@ def gp_sample_argmax(
         optim_trace=False,
         minval=config.minval,
         maxval=config.maxval,
+        i = i,
     )
 
     return x_besties.reshape(-1, x_besties.shape[-1])
@@ -299,6 +305,7 @@ def find_besties(
     optim_trace: bool = False,
     minval: float = -1.0,
     maxval: float = 1.0,
+    i: Optional[int] = None
 ):
     """For every sample, independently maximise the acqusition function value of 'n_homies' exploration points.
     Return the 'n_besties' x for each sample with highest acquisition function value
@@ -320,6 +327,7 @@ def find_besties(
 
     opt_state = optimiser.init(x_homies)
 
+    # TODO: will this work for (num_samples) y_homies?
     trace = []
     if optim_trace:
         y_homies = acquisition_fn(x_homies)
@@ -327,7 +335,7 @@ def find_besties(
 
     scan_idx = jnp.arange(iterations)
 
-    def scan_fn(scan_state, i):
+    def scan_fn(scan_state, ii):
         x_homies, opt_state, trace = scan_state
         x_homies, opt_state = update(x_homies, opt_state)
         if optim_trace:
@@ -337,6 +345,15 @@ def find_besties(
 
     scan_state = jax.lax.scan(scan_fn, (x_homies, opt_state, trace), scan_idx)[0]
     x_homies, _, trace = scan_state
+
+    if wandb.run is not None and optim_trace:
+        for ii, step_data in enumerate(trace):
+            _, y_homies = step_data
+            wandb.log(
+                {   **{f'Thompson_{i}/bestie_y' : y_homies}
+                    **{f"Thompson_{i}/bestie_step": ii},
+                }
+            )
 
     @jax.vmap
     def top_args(x, y):
