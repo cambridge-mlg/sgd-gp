@@ -33,7 +33,7 @@ def run_experiment(seed, dataset_name, method_name):
                         "pip install -e .; "
                         "cd scalable_gps/; "
                         f'export PYTHONPATH="/path/to/scalable_gaussian_processes:$PYTHONPATH"; '
-                        f"python scripts/obtain_mean.py 9835d6db89010f73306f92bb9a080c9751b25d28 --config configs/default.py:{dataset_name} --config.model_name {method_name} --config.dataset_config.split {seed} --config.wandb.log --config.wandb.name {dataset_name}_{method_name}_{seed}",
+                        f"python scripts/obtain_mean.py 9835d6db89010f73306f92bb9a080c9751b25d28 --config configs/default.py:{dataset_name} --config.model_name {method_name} --config.dataset_config.split {seed} --config.wandb.log --config.wandb.name {dataset_name}_{method_name}_{seed} --config.wandb.log_artifact",
             "--", "-t"
         ]
         with open(f"logs/run_experiment_{dataset_name}_{method_name}_{seed}.log", "w") as run_experiment_log_file:
