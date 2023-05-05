@@ -62,8 +62,13 @@ def main(config):
             hparams = HparamsTuple(
                 length_scale=jnp.array(config.kernel_config.length_scale),
                 signal_scale=config.kernel_config.signal_scale,
-                noise_scale=config.dataset_config.noise_scale,)
-        
+                noise_scale=config.dataset_config.noise_scale,
+                )
+        if config.override_noise_scale > 0.:
+            hparams = HparamsTuple(
+                length_scale=hparams.length_scale,
+                signal_scale=hparams.signal_scale,
+                noise_scale=config.override_noise_scale)
         print(hparams)
         
         # Initialise Kernel
@@ -109,14 +114,15 @@ def main(config):
             train_config.preconditioner = True
         elif config.model_name == "vi":
             train_config = config.vi_config
-            model = SVGPModel(hparams.noise_scale, kernel, train_config, train_config.kernel_config)
+            kernel_config = {'signal_scale': hparams.signal_scale, 'length_scale': hparams.length_scale}
+            model = SVGPModel(hparams.noise_scale, kernel, config, kernel_config)
 
         metrics_list = ["loss", "err", "reg", "normalised_test_rmse", "test_rmse"]
         if config.compute_exact_soln:
             metrics_list.extend(["alpha_diff", "y_pred_diff", "alpha_rkhs_diff"])
 
         # Compute the SGD MAP solution for representer weights.
-        alpha = model.compute_representer_weights(
+        model.compute_representer_weights(
             optim_key,
             train_ds,
             test_ds,
@@ -126,17 +132,23 @@ def main(config):
             exact_metrics=exact_metrics if config.compute_exact_soln else None,
         )
         
+        y_pred = model.predictive_mean(train_ds, test_ds)
+        test_rmse = RMSE(test_ds.y, y_pred, mu=train_ds.mu_y, sigma=train_ds.sigma_y)
+        normalised_test_rmse = RMSE(test_ds.y, y_pred)
+
+        wandb.log({"test_rmse": test_rmse,
+                   "normalised_test_rmse": normalised_test_rmse})
         if config.wandb.log_artifact:
             # Use wandb artifacts to save model hparams for a given dataset split and subsample_idx.
-            alpha_artifact = wandb.Artifact(
-                f"alphamap_{config.dataset_name}_{config.model_name}_{config.dataset_config.split}", type="alphamap",
-                description=f"Alpha MAP for {config.dataset_name} dataset with method {config.model_name} on split {config.dataset_config.split}.",
+            model_artifact = wandb.Artifact(
+                f"model_{config.dataset_name}_{config.model_name}_{config.dataset_config.split}", type="model",
+                description=f"Saved Model class for {config.dataset_name} dataset with method {config.model_name} on split {config.dataset_config.split}.",
                 metadata={**{"dataset_name": config.dataset_name, "model_name": config.model_name, "split": config.dataset_config.split}},)
             
-            with alpha_artifact.new_file("alphamap.pkl", "wb") as f:
-                pickle.dump(alpha, f)
+            with model_artifact.new_file("model_map.pkl", "wb") as f:
+                pickle.dump(model, f)
                 
-            wandb.log_artifact(alpha_artifact)
+            wandb.log_artifact(model_artifact)
 
         return
 

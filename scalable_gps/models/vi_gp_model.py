@@ -1,4 +1,7 @@
 
+import time
+from typing import Optional
+
 import gpjax as gpx
 import jax.numpy as jnp
 import ml_collections
@@ -28,7 +31,17 @@ class SVGPModel:
             key=key, 
             inducing_init=config.vi_config.inducing_init,)
 
-    def compute_representer_weights(self, key, train_ds, test_ds, config: ml_collections.ConfigDict):
+    def compute_representer_weights(
+        self, 
+        key, 
+        train_ds, 
+        test_ds, 
+        config: ml_collections.ConfigDict,
+        metrics_list: Optional[list]=None,
+        metrics_prefix: Optional[str]=None,
+        exact_metrics: Optional[list]=None,):
+        
+        del metrics_list, metrics_prefix, exact_metrics
         
         optimizer = optax.adam(learning_rate=config.learning_rate)
         absolute_clipping = config.absolute_clipping
@@ -36,6 +49,7 @@ class SVGPModel:
 
         negative_elbo, init_state, D, self.get_predictive = self.regression_fn(train_ds, key)
         
+        start_time = time.time()
         optimised_state = gpx.fit_batches(
             objective=negative_elbo,
             parameter_state=init_state,
@@ -51,11 +65,13 @@ class SVGPModel:
         self.concentrate_function_dist, self.concentrate_predictive_dist = self.get_predictive(
             self.vi_params, test_ds.x)
         
+        end_time = time.time()
         if wandb.run is not None:
             for loss_val in loss:
                 wandb.log({"loss": loss_val})
+            wandb.log({"wall_clock_time": end_time - start_time})
         
-
+        return self.vi_params
         
 
     def predictive_mean(self, train_ds: Dataset, test_ds: Dataset, recompute: bool = True) -> Array:
