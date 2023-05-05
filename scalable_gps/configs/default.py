@@ -30,6 +30,7 @@ def get_config(config_string):
 
     config.compute_exact_soln = True
     config.use_tpu = True
+    config.override_noise_scale = -1.
 
     config.model_name = "sgd"
     # Data Configs
@@ -61,7 +62,7 @@ def get_config(config_string):
 
     # Full-batch training configs that get passed
     config.train_config.iterations = 100000
-    config.train_config.batch_size = 0
+    config.train_config.batch_size = 512
     config.train_config.eval_every = 100
     config.train_config.time_budget_in_seconds = 0.
     config.train_config.eval_every_in_seconds = 0.
