@@ -28,6 +28,7 @@ def get_config():
 
     config.thompson.n_features = 5000
 
+    # Could scan this [10k, 20k, 30k, 50k, 100k]
     config.thompson.n_init = 20000
 
     config.thompson.friends_iterations = 100

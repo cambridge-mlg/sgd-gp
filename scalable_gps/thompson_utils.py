@@ -149,8 +149,6 @@ def get_thompson_step_fn(
         gp_sample_argmax_f = jax.jit(
             partial(gp_sample_argmax, config=thompson_config, kernel=model.kernel)
         )
-
-        # TODO: implement shared API for GPModels to make this work with any GP model -- VI compatibility?
         def _fn(key: PRNGKey, state: ThompsonState, i: Optional[int] = None):
             representer_key, noise_key, friends_key, samples_key = jr.split(key, 4)
 
@@ -307,15 +305,16 @@ def find_friends(
         x_friends_uniform = jr.uniform(
             key_uniform, shape=(num_explore, ndims), minval=minval, maxval=maxval
         )
+        # TODO: consider making this uniform between - lengthscale[None, :] / 4 and lengthscale[None, :] / 4
         x_friends_localised_noise = jr.normal(key_nearby, shape=(num_exploit, ndims))
         x_friends_localised_noise = x_friends_localised_noise * lengthscale[None, :] / 2
 
-        scores = state.ds.y + state.ds.y.min()
+        scores = state.ds.y + state.ds.y.min() + 1e-6
         scores = scores / scores.sum()
         indices = jax.random.choice(
             key_selector, len(scores), shape=(num_exploit,), replace=True, p=scores
         )
-        x_friends_localised = state.ds.x[indices] + x_friends_localised_noise
+        x_friends_localised = state.ds.x[indices] + x_friends_localised_noise # num_exploit, ndims
         x_friends = jnp.concatenate([x_friends_uniform, x_friends_localised], axis=0)
         x_friends = jnp.clip(x_friends, a_min=minval, a_max=maxval)
     else:
