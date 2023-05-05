@@ -1,33 +1,123 @@
 import ml_collections
 
+
 def get_config():
-
     config = ml_collections.ConfigDict()
-    config.use_tpu = True
+    config.use_tpu = False
 
-    config.seed = 1337
-    config.D = 2
-    config.model_name = "ExactGP"
-    config.kernel_name = "Matern32Kernel"
-    config.signal_scale = 1.0
-    config.length_scale = [0.25]
-    config.noise_scale = 1e-2
-    config.n_features = 2000
-    config.n_init = 100
-    config.n_friends = 1000
-    config.n_homies = 30
-    config.n_besties = 1
-    config.n_samples = 10
-    config.find_friends_method = 'uniform'
-    config.optim_lr = 1e-3
-    config.optim_iters = 100
-    config.iterations = 50
+    config.thompson = ml_collections.ConfigDict()
+    config.thompson.use_tpu = False
 
+    config.thompson.seed = 1337
+    config.thompson.D = 512  # try 128, 256, 1024
+    # config.thompson.model_name = "RandomSearch"
+    config.thompson.model_name = "CGGP"
+    config.thompson.kernel_name = "Matern32Kernel"  # try 5/2
+    config.thompson.signal_scale = 1.0
+    config.thompson.length_scale = [0.75] * (
+        config.thompson.D
+    )  # try 0.5, 0.75, 1., 1.5
+    assert config.thompson.D == len(config.thompson.length_scale)
+
+    config.thompson.noise_scale = 1e-2
+
+    config.thompson.iterations = 100
+
+    config.thompson.n_features = 5000
+
+    config.thompson.n_init = 1000
+
+    config.thompson.friends_iterations = 100
+    config.thompson.n_friends = 100000  # set to 1M
+    config.thompson.n_homies = 100 // config.thompson.friends_iterations
+    config.thompson.n_besties = 1
+
+    config.thompson.n_samples = 100
+
+    config.thompson.find_friends_method = "nearby"  # uniform
+
+    config.thompson.optim_lr = 1e-3  # try cosine annealing
+    config.thompson.optim_iters = 100
+
+    config.thompson.grid_search = config.thompson.D == 2
+    config.thompson.grid_search_dim = 400
+
+    config.thompson.minval = 0.0
+    config.thompson.maxval = 1.0
+
+    ####### CG #
+
+    config.cg_config = ml_collections.ConfigDict()
+    config.cg_config.tol = 1e-2
+    config.cg_config.maxiter = max(1000, config.thompson.n_init // 100)
+    config.cg_config.atol = 0.0
+    config.cg_config.eval_every = 1
+    config.cg_config.preconditioner = False
+    config.cg_config.pivoted_chol_rank = 100
+    config.cg_config.pivoted_diag_rtol = 1e-3
+    config.cg_config.pivoted_jitter = 1
+    config.cg_config.loss_objective = 2
+
+    config.cg_config.batch_size = 1
+
+    ### SGD #
+
+    config.train_config = ml_collections.ConfigDict()
+
+    config.train_config.iterations = 100000
+    config.train_config.batch_size = 500
+    config.train_config.eval_every = 100
+
+    # RFF Configs
+    config.train_config.n_features_optim = 100
+    config.train_config.recompute_features = True
+    # Optimisation Configs
+    config.train_config.iterative_idx = True
+    config.train_config.learning_rate = 1e-1
+    config.train_config.momentum = 0.9
+    config.train_config.nesterov = True
+    config.train_config.time_budget_in_seconds = -1
+    config.train_config.eval_every_in_seconds = None
+    polyak_k = 100
+    polyak_step = polyak_k / config.train_config.iterations
+    config.train_config.polyak = polyak_step
+    config.train_config.absolute_clipping = 0.1  # -1 to avoid clipping
+    config.train_config.lr_schedule_name = None  # "linear_schedule"
+    config.train_config.lr_schedule_config = ml_collections.ConfigDict()
+
+    # sampling
+
+    config.sampling_config = ml_collections.ConfigDict()
+
+    config.sampling_config = config.train_config.copy_and_resolve_references()
+    # Full-batch training configs that get passed
+    config.sampling_config.iterative_idx = True
+    config.sampling_config.learning_rate = 3e-4
+    config.sampling_config.batch_size = 500
+    config.sampling_config.eval_every = 100  # eval every how many number of steps
+
+    config.sampling_config.loss_objective = 2
+
+    # VI
+
+    config.vi_config = ml_collections.ConfigDict()
+    config.vi_config = config.thompson.copy_and_resolve_references()
+
+    config.vi_config.iterations = 10000
+    config.vi_config.batch_size = 1000
+    config.vi_config.num_inducing_points = 512
+    config.vi_config.inducing_init = "kmeans"
+    config.vi_config.learning_rate = 1e-3
+    config.vi_config.absolute_clipping = 0.1
+    config.kernel_name = config.thompson.kernel_name
+
+    # WANDB
     config.wandb = ml_collections.ConfigDict()
     config.wandb.log = False
     config.wandb.project = "scalable-gps"
     config.wandb.entity = "shreyaspadhy"
+    # TODO: change this to HPC dir
     config.wandb.code_dir = "/home/shreyaspadhy_gmail_com/scalable-gaussian-processes"
     config.wandb.name = ""
-    
+
     return config

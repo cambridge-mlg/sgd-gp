@@ -103,6 +103,10 @@ class CGGPModel(ExactGPModel):
         # To match the API.
         del key
 
+        # If loss, err, reg in metrics list, delete them
+        for metric in ["loss", "err", "reg"]:
+            if metric in metrics_list:
+                metrics_list.remove(metric)
         eval_fn = eval_utils.get_eval_fn(
             metrics_list,
             train_ds,
@@ -260,6 +264,10 @@ class CGGPModel(ExactGPModel):
                 alpha_samples_exact, posterior_samples_exact, f0_samples_test
             )
 
+        # If loss, err, reg in metrics list, delete them
+        for metric in ["loss", "err", "reg"]:
+            if metric in metrics_list:
+                metrics_list.remove(metric)
         eval_fn = eval_utils.get_eval_fn(
             metrics_list,
             train_ds,

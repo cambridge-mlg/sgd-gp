@@ -93,8 +93,10 @@ class ExactGPModel(GPModel):
         chol_eps: float = 1e-5,
         L: Optional[Array] = None,
         zero_mean: bool = True,
+        metrics_list: Optional[list] = None,
+        metrics_prefix: Optional[str] = None,
     ):
-        del config
+        del config, metrics_list, metrics_prefix
         """Computes n_samples posterior samples, and returns posterior_samples along with alpha_samples."""
         prior_covariance_key, prior_samples_key, _ = jr.split(key, 3)
 

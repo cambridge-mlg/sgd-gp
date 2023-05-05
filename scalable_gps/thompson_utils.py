@@ -163,7 +163,7 @@ def get_thompson_step_fn(
                 train_ds=state.ds,
                 test_ds=test_ds,
                 config=inference_config_representer,
-                metrics_list=['loss', 'err', 'reg'],
+                metrics_list=["loss", "err", "reg"],
                 metrics_prefix=f"Thompson_{i}/alpha_MAP",
                 exact_metrics=None,
                 recompute=True,
@@ -199,8 +199,8 @@ def get_thompson_step_fn(
                 use_rff=True,
                 L=L,
                 zero_mean=False,
-                metrics_list=['loss', 'err', 'reg'],
-                metrics_prefix=f"Thompson_{i}/alpha_samples"
+                metrics_list=["loss", "err", "reg"],
+                metrics_prefix=f"Thompson_{i}/alpha_samples",
             )
 
             # function optimisation starts here
@@ -211,7 +211,7 @@ def get_thompson_step_fn(
                 zero_mean_alpha_samples=zero_mean_alpha_samples,
                 w_samples=w_samples,
                 inducing_inputs=inducing_inputs,
-                i=i
+                i=i,
             )
 
             return update_state(noise_key, state, x_besties)
@@ -226,7 +226,7 @@ def gp_sample_argmax(
     zero_mean_alpha_samples: Array,
     w_samples: Array,
     inducing_inputs: Optional[Array],
-    i : Optional[int],
+    i: Optional[int],
     config: ConfigDict,
     kernel: Kernel,
 ) -> Array:
@@ -236,20 +236,36 @@ def gp_sample_argmax(
 
     # initial random search
 
-    x_friends = find_friends(
-        key,
-        config.D,
-        config.n_friends,
-        method=config.find_friends_method,
-        minval=config.minval,
-        maxval=config.maxval,
-    )  #  ( config.n_friends, state.ds.D)
+    def scan_fn(key, ii):
+        key, next_key = jax.random.split(key)
+        x_friends = find_friends(
+            key,
+            config.D,
+            config.n_friends,
+            method=config.find_friends_method,
+            minval=config.minval,
+            maxval=config.maxval,
+            state=state,
+            lengthscale=kernel.kernel_config["length_scale"],
+        )  #  ( config.n_friends, state.ds.D)
 
-    y_friends = acquisition_fn_sharex(x_friends)  # (num_samples, config.n_friends)
+        y_friends = acquisition_fn_sharex(x_friends)  # (num_samples, config.n_friends)
 
-    # select top random points
-    x_homies = find_homies(x_friends, y_friends, config.n_homies)
-    #  [n_samples, n_homies, D]
+        # select top random points
+        x_homies = find_homies(x_friends, y_friends, config.n_homies)
+        #  [n_samples, n_homies, D]
+        return next_key, x_homies
+
+    friend_idx = jnp.arange(config.friends_iterations)
+    _, x_homies = jax.lax.scan(
+        scan_fn, key, friend_idx
+    )  # (friends_iterations, samples, n_friends, D)
+
+    x_homies = (
+        x_homies.transpose(0, 2, 1, 3)
+        .reshape(-1, x_homies.shape[1], x_homies.shape[3])
+        .transpose(1, 0, 2)  # (friends_iterations*n_friends, samples, D)
+    )
 
     x_besties, _ = find_besties(
         x_homies,
@@ -261,7 +277,7 @@ def gp_sample_argmax(
         optim_trace=False,
         minval=config.minval,
         maxval=config.maxval,
-        i = i,
+        i=i,
     )
 
     return x_besties.reshape(-1, x_besties.shape[-1])
@@ -274,6 +290,8 @@ def find_friends(
     method: str = "uniform",
     minval: float = -1.0,
     maxval: float = 1.0,
+    state: Optional[ThompsonState] = None,
+    lengthscale: Optional[Array] = None,
 ) -> Array:
     """Given the current state, choose the next batch of exploration points."""
 
@@ -281,6 +299,25 @@ def find_friends(
         x_friends = jr.uniform(
             key, shape=(n_friends, ndims), minval=minval, maxval=maxval
         )
+    elif method == "nearby":
+        num_explore = n_friends // 10
+        num_exploit = 9 * n_friends // 10
+
+        key_uniform, key_nearby, key_selector = jax.random.split(key, 3)
+        x_friends_uniform = jr.uniform(
+            key_uniform, shape=(num_explore, ndims), minval=minval, maxval=maxval
+        )
+        x_friends_localised_noise = jr.normal(key_nearby, shape=(num_exploit, ndims))
+        x_friends_localised_noise = x_friends_localised_noise * lengthscale[None, :] / 2
+
+        scores = state.ds.y + state.ds.y.min()
+        scores = scores / scores.sum()
+        indices = jax.random.choice(
+            key_selector, len(scores), shape=(num_exploit,), replace=True, p=scores
+        )
+        x_friends_localised = state.ds.x[indices] + x_friends_localised_noise
+        x_friends = jnp.concatenate([x_friends_uniform, x_friends_localised], axis=0)
+        x_friends = jnp.clip(x_friends, a_min=minval, a_max=maxval)
     else:
         # TODO: implement other strategies
         raise NotImplementedError(
@@ -306,7 +343,7 @@ def find_besties(
     optim_trace: bool = False,
     minval: float = -1.0,
     maxval: float = 1.0,
-    i: Optional[int] = None
+    i: Optional[int] = None,
 ):
     """For every sample, independently maximise the acqusition function value of 'n_homies' exploration points.
     Return the 'n_besties' x for each sample with highest acquisition function value
@@ -351,8 +388,9 @@ def find_besties(
         for ii, step_data in enumerate(trace):
             _, y_homies = step_data
             wandb.log(
-                {   **{f'Thompson_{i}/bestie_y' : y_homies}
-                    **{f"Thompson_{i}/bestie_step": ii},
+                {
+                    **{f"Thompson_{i}/bestie_y": y_homies}
+                    ** {f"Thompson_{i}/bestie_step": ii},
                 }
             )
 
