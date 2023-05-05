@@ -9,23 +9,26 @@ def get_config():
     config.thompson.use_tpu = False
 
     config.thompson.seed = 1337
-    config.thompson.D = 512  # try 128, 256, 1024
+    config.thompson.D = 1024  # try 128, 256, 1024
     # config.thompson.model_name = "RandomSearch"
-    config.thompson.model_name = "CGGP"
+
+    # TODO: Gaussian init to create ill-possedness and make random worse 
+
+    config.thompson.model_name = "RandomSearch"
     config.thompson.kernel_name = "Matern32Kernel"  # try 5/2
     config.thompson.signal_scale = 1.0
-    config.thompson.length_scale = [0.75] * (
+    config.thompson.length_scale = [1.] * (
         config.thompson.D
     )  # try 0.5, 0.75, 1., 1.5
     assert config.thompson.D == len(config.thompson.length_scale)
 
     config.thompson.noise_scale = 1e-2
 
-    config.thompson.iterations = 100
+    config.thompson.iterations = 5
 
     config.thompson.n_features = 5000
 
-    config.thompson.n_init = 1000
+    config.thompson.n_init = 20000
 
     config.thompson.friends_iterations = 100
     config.thompson.n_friends = 100000  # set to 1M

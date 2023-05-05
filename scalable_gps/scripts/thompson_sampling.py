@@ -65,7 +65,7 @@ def main(config):
             maxval=config.thompson.maxval,
         )
         print(f"Initial max_fn_value = {state.max_fn_value}")
-        print(f"Initial argmax = {state.argmax}")
+        # print(f"Initial argmax = {state.argmax}")
 
         if config.thompson.grid_search:
             grid_max_fn_value, grid_argmax = thompson_utils.grid_search(
@@ -131,7 +131,7 @@ def main(config):
                 )
 
         print(f"Final max_fn_value = {state.max_fn_value}")
-        print(f"Final argmax = {state.argmax}")
+        # print(f"Final argmax = {state.argmax}")
 
 
 if __name__ == "__main__":
