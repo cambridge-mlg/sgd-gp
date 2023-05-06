@@ -137,7 +137,7 @@ def main(config):
         normalised_test_rmse = RMSE(test_ds.y, y_pred)
 
         wandb.log({"test_rmse": test_rmse,
-                   "normalised_test_rmse": normalised_test_rmse})
+                   "normalised_test_rmse": normalised_test_rmse,})
         if config.wandb.log_artifact:
             # Use wandb artifacts to save model hparams for a given dataset split and subsample_idx.
             model_artifact = wandb.Artifact(

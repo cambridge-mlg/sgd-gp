@@ -81,18 +81,18 @@ class SGDGPModel(GPModel):
         # force JIT by running a single step
         # TODO: Wrap this in something we can call outside this function potentially. When we run 10 steps to calculate
         # num_iterations per budget, this will have to be called once there.
+        wall_clock_time = 0.
         idx = idx_fn(0, idx_key)
         update_fn(alpha, alpha_polyak, idx, features, opt_state, target_tuple)
 
-        wall_clock_time = 0.
         aux = []
         for i in tqdm(range(config.iterations)):
-            
             key, idx_key, feature_key = jr.split(key, 3)
             features = feature_fn(feature_key)
             idx = idx_fn(i, idx_key)
             start_time = time.time()
             alpha, alpha_polyak, opt_state = update_fn(alpha, alpha_polyak, idx, features, opt_state, target_tuple)
+            alpha.block_until_ready()
             end_time = time.time()
             wall_clock_time += end_time - start_time
             if i % config.eval_every == 0:
