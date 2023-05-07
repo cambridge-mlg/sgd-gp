@@ -3,7 +3,7 @@ import subprocess
 methods = ['sgd', 'cg']
 splits = list(range(1))
 datasets = ['kin40k', 'protein', 'keggdirected']
-low_noise = False
+low_noise = True
 
 for dataset in datasets:
     for method in methods:
