@@ -31,11 +31,12 @@ def init(
     noise_scale: float,
     n_features: int = 1000,
     n_init: int = 1000,
-    minval: float = -1.0,
+    minval: float = 0.0,
     maxval: float = 1.0,
+    init_method: str = "uniform"
 ):
     """
-    Initialise thompson sampling in unit hypercube [-1, 1]^D
+    Initialise thompson sampling in the hypercube [minval, maxval]^D
     by constructing the kernel and sampling a function from the GP prior
     """
     (
@@ -44,8 +45,13 @@ def init(
         w_key,
         noise_key,
     ) = jr.split(key, 4)
-
-    x_init = jr.uniform(data_key, shape=(n_init, D), minval=minval, maxval=maxval)
+    
+    if init_method == "uniform":
+        x_init = jr.uniform(data_key, shape=(n_init, D), minval=minval, maxval=maxval)
+    elif init_method == "trunc_normal":
+        x_init = jr.truncated_normal(data_key, lower=minval, upper=maxval, shape=(n_init, D))
+    else:
+        raise NotImplementedError(f"Thompson sampling init_method '{init_method}' is not implemented.")
     params = kernel.feature_params(feature_key, n_features, x_init, recompute=True)
 
     w = jr.normal(w_key, shape=(n_features,))
@@ -273,7 +279,7 @@ def find_friends(
     ndims,
     n_friends: int,
     method: str = "uniform",
-    minval: float = -1.0,
+    minval: float = 0.0,
     maxval: float = 1.0,
     state: Optional[ThompsonState] = None,
     lengthscale: Optional[Array] = None,
@@ -327,7 +333,7 @@ def find_besties(
     iterations: int = 100,
     n_besties: int = 1,
     optim_trace: bool = False,
-    minval: float = -1.0,
+    minval: float = 0.0,
     maxval: float = 1.0,
     i: Optional[int] = None,
 ):
@@ -359,7 +365,7 @@ def find_besties(
 
     scan_idx = jnp.arange(iterations)
 
-    def scan_fn(scan_state, ii):
+    def scan_fn(scan_state, _):
         x_homies, opt_state, trace = scan_state
         x_homies, opt_state = update(x_homies, opt_state)
         if optim_trace:
@@ -474,7 +480,7 @@ def get_acquisition_fn(
         3,
     ],
 )
-def grid_search(state: ThompsonState, minval=-1.0, maxval=1.0, grid_dim: int = 500):
+def grid_search(state: ThompsonState, minval=0.0, maxval=1.0, grid_dim: int = 500):
     chex.assert_axis_dimension(state.ds.x, axis=1, expected=2)
 
     r = jnp.linspace(minval, maxval, num=grid_dim)

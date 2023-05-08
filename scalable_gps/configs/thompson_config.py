@@ -9,38 +9,32 @@ def get_config():
     config.thompson.use_tpu = False
 
     config.thompson.seed = 1337
-    config.thompson.D = 1024  # try 128, 256, 1024
-    # config.thompson.model_name = "RandomSearch"
+    config.thompson.D = 16  # try 2, 4, 8, 16, 32, 64
 
-    # TODO: Gaussian init to create ill-possedness and make random worse 
-
-    config.thompson.model_name = "RandomSearch"
+    config.thompson.model_name = "CGGP"
     config.thompson.kernel_name = "Matern32Kernel"  # try 5/2
     config.thompson.signal_scale = 1.0
-    config.thompson.length_scale = [1.] * (
-        config.thompson.D
-    )  # try 0.5, 0.75, 1., 1.5
-    assert config.thompson.D == len(config.thompson.length_scale)
+    config.thompson.length_scale = [1.0] # try 0.25, 0.5, 0.75, 1., 1.25, 1.5
 
-    config.thompson.noise_scale = 1e-2
+    config.thompson.noise_scale = 1e-3
 
-    config.thompson.iterations = 5
+    config.thompson.iterations = 100
 
     config.thompson.n_features = 5000
 
-    # Could scan this [10k, 20k, 30k, 50k, 100k]
-    config.thompson.n_init = 20000
+    config.thompson.n_init = 10000
+    config.thompson.init_method = "uniform" # try "trunc_normal"
 
-    config.thompson.friends_iterations = 100
-    config.thompson.n_friends = 100000  # set to 1M
+    config.thompson.friends_iterations = 10
+    config.thompson.n_friends = 100000
     config.thompson.n_homies = 100 // config.thompson.friends_iterations
     config.thompson.n_besties = 1
 
     config.thompson.n_samples = 100
 
-    config.thompson.find_friends_method = "nearby"  # uniform
+    config.thompson.find_friends_method = "nearby" # uniform
 
-    config.thompson.optim_lr = 1e-3  # try cosine annealing
+    config.thompson.optim_lr = 1e-3 # try cosine annealing
     config.thompson.optim_iters = 100
 
     config.thompson.grid_search = config.thompson.D == 2
@@ -53,7 +47,7 @@ def get_config():
 
     config.cg_config = ml_collections.ConfigDict()
     config.cg_config.tol = 1e-2
-    config.cg_config.maxiter = max(1000, config.thompson.n_init // 100)
+    config.cg_config.maxiter = 500 #max(1000, config.thompson.n_init // 100)
     config.cg_config.atol = 0.0
     config.cg_config.eval_every = 1
     config.cg_config.preconditioner = False
@@ -121,7 +115,7 @@ def get_config():
     config.wandb.project = "scalable-gps"
     config.wandb.entity = "shreyaspadhy"
     # TODO: change this to HPC dir
-    config.wandb.code_dir = "/home/shreyaspadhy_gmail_com/scalable-gaussian-processes"
+    config.wandb.code_dir = "/Users/lin/Code/scalable-gaussian-processes/"
     config.wandb.name = ""
 
     return config

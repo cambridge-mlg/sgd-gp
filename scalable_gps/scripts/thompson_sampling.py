@@ -63,6 +63,7 @@ def main(config):
             n_init=config.thompson.n_init,
             minval=config.thompson.minval,
             maxval=config.thompson.maxval,
+            init_method=config.thompson.init_method
         )
         print(f"Initial max_fn_value = {state.max_fn_value}")
         # print(f"Initial argmax = {state.argmax}")
