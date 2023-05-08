@@ -122,7 +122,7 @@ def main(config):
             metrics_list.extend(["alpha_diff", "y_pred_diff", "alpha_rkhs_diff"])
 
         # Compute the SGD MAP solution for representer weights.
-        model.compute_representer_weights(
+        alpha, aux = model.compute_representer_weights(
             optim_key,
             train_ds,
             test_ds,
@@ -140,18 +140,20 @@ def main(config):
         print('normalised_test_rmse = ', normalised_test_rmse)
         wandb.log({"test_rmse": test_rmse,
                    "normalised_test_rmse": normalised_test_rmse})
+
         if config.wandb.log_artifact:
             # Use wandb artifacts to save model hparams for a given dataset split and subsample_idx.
-            artifact_name = f"model_{config.dataset_name}_{config.model_name}_{config.dataset_config.split}"
-            if config.override_noise > 0.:
+            artifact_name = f"alpha_{config.dataset_name}_{config.model_name}_{config.dataset_config.split}"
+            if config.override_noise_scale > 0.:
                 artifact_name += f"_noise_{config.override_noise_scale}"
             model_artifact = wandb.Artifact(
-                artifact_name, type="model",
-                description=f"Saved Model class for {config.dataset_name} dataset with method {config.model_name} on split {config.dataset_config.split}.",
+                artifact_name, type="alpha",
+                description=f"Saved alpha for {config.dataset_name} dataset with method {config.model_name} on split {config.dataset_config.split}.",
                 metadata={**{"dataset_name": config.dataset_name, "model_name": config.model_name, "split": config.dataset_config.split}},)
             
-            with model_artifact.new_file("model_map.pkl", "wb") as f:
-                pickle.dump(model, f)
+            with model_artifact.new_file("alpha_map.pkl", "wb") as f:
+                pickle.dump({'alpha': alpha, 'aux': aux}, f)
+            
                 
             wandb.log_artifact(model_artifact)
 

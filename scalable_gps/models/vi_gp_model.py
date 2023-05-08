@@ -21,15 +21,31 @@ class SVGPModel:
         self.K = None
         self.kernel = kernel
         self.noise_scale = noise_scale
-        self.regression_fn = lambda ds, key: regression_SVGP(
-            ds, 
+        
+        self.regression_fn = self.get_regression_fn(
             num_inducing=config.vi_config.num_inducing_points, 
-            kernel_name = config.kernel_name, 
+            kernel_name=config.kernel_name, 
             kernel_config=kernel_config, 
-            ARD=config.kernel_config.use_ard,
+            ARD=config.kernel_config.use_ard, 
             noise_scale=noise_scale, 
-            key=key, 
             inducing_init=config.vi_config.inducing_init,)
+    
+
+    def get_regression_fn(self, num_inducing, kernel_name, kernel_config, ARD, noise_scale, inducing_init):
+        
+        def _fn(ds, key):
+            return regression_SVGP(
+                ds,
+                num_inducing=num_inducing,
+                kernel_name=kernel_name,
+                kernel_config=kernel_config,
+                ARD=ARD,
+                noise_scale=noise_scale,
+                key=key,
+                inducing_init=inducing_init,)
+
+        return _fn
+
 
     def compute_representer_weights(
         self, 
@@ -73,7 +89,7 @@ class SVGPModel:
                 wandb.log({"loss": loss_val})
             wandb.log({"wall_clock_time": end_time - start_time})
         
-        return self.vi_params
+        return self.vi_params, (self.function_dist, self.predictive_dist)
         
 
     def predictive_mean(self, train_ds: Dataset, test_ds: Dataset, recompute: bool = True) -> Array:

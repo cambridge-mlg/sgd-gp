@@ -148,7 +148,7 @@ class CGGPModel(ExactGPModel):
         
         self.alpha = alpha
     
-        return self.alpha
+        return self.alpha, aux
 
     def compute_posterior_samples( 
         self, 
