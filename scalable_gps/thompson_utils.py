@@ -16,8 +16,6 @@ import wandb
 
 class ThompsonState(NamedTuple):
     ds: Dataset
-    # kernel: Kernel  # TODO: remove, we shouldnt carry around a non jittable kernel object
-    # L: Array  # (N_points, n_features)
     feature_params: FeatureParams
     true_w: Array
     max_fn_value: float
@@ -78,13 +76,6 @@ def update_state(key: PRNGKey, state: ThompsonState, x_besties: Array):
     - adding features for 'x_besties' to L
     - replacing current 'argmax' and 'max_fn_value' if a new maximum has been found
     """
-    # x_besties (n_samples, D)
-    # x_besties = jnp.reshape(
-    #     x_besties, (x_besties.shape[0] * x_besties.shape[1], state.ds.D)
-    # )
-    # n_features = state.L.shape[-1]
-    # L_besties = state.kernel.feature_fn(None, n_features, x_besties, recompute=False)
-    # evaluate objective function at 'x_besties'
     y_besties = featurise(x_besties, state.feature_params) @ state.true_w
     y_besties = y_besties + jr.normal(key, shape=y_besties.shape) * state.noise_scale
 
@@ -94,9 +85,6 @@ def update_state(key: PRNGKey, state: ThompsonState, x_besties: Array):
     N = state.ds.N + x_besties.shape[0]
     # construct updated state dataset
     ds = Dataset(x, y, N, state.ds.D)
-
-    # add features of besties to state
-    # L = jnp.concatenate([state.L, L_besties], axis=0)
 
     # find maximum of besties
     idx = jnp.argmax(y_besties)
@@ -111,7 +99,6 @@ def update_state(key: PRNGKey, state: ThompsonState, x_besties: Array):
     # construct and return updated state
     updated_state = ThompsonState(
         ds=ds,
-        # kernel=state.kernel,
         feature_params=state.feature_params,
         true_w=state.true_w,
         max_fn_value=max_fn_value,
