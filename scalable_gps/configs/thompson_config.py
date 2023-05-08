@@ -22,7 +22,7 @@ def get_config():
 
     config.thompson.n_features = 5000
 
-    config.thompson.n_init = 10000
+    config.thompson.n_init = 100000
     config.thompson.init_method = "uniform" # try "trunc_normal"
 
     config.thompson.friends_iterations = 10
