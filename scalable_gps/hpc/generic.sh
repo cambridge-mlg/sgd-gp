@@ -18,11 +18,11 @@
 #SBATCH --mail-type=FAIL
 
 #! Do not change:
-#SBATCH -p pascal
+#SBATCH -p ampere
 
 #! Specify the number of GPUs per node (between 1 and 4; must be 4 if nodes>1).
 #! Note that the job submission script will enforce no more than 3 cpus per GPU
-#!SBATCH --cpus-per-task=3
+#!SBATCH --cpus-per-task=2
 #!SBATCH --gres=gpu:1
 
 #! Estimated maximum memory needed (job is force-stopped if exceeded):
@@ -35,13 +35,14 @@
 #! Optionally modify the environment seen by the application
 #! (note that SLURM reproduces the environment at submission irrespective of ~/.bashrc):
 . /etc/profile.d/modules.sh                # Leave this line (enables the module command)
-module purge                               # Removes all modules still loaded
-module load rhel7/default-gpu              # REQUIRED - loads the basic environment
+# module purge                               # Removes all modules still loaded
+# module load rhel7/default-gpu              # REQUIRED - loads the basic environment
 
 # My custom modules
 source ~/.bashrc
-module load cuda/10.2
-module load cudnn/7.6_cuda-10.2
+# module load cuda/10.2
+# module load cudnn/7.6_cuda-10.2
+conda activate jax
 
 #! Work directory (i.e. where the job will run):
 workdir="$SLURM_SUBMIT_DIR"  # The value of SLURM_SUBMIT_DIR sets workdir to the directory
@@ -91,6 +92,6 @@ else
 fi
 
 # Submit the job
-CMD="python $JOB_CMD"
+CMD="srun python $JOB_CMD"
 echo $CMD
-$CMD
+eval $CMD

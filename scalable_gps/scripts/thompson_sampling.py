@@ -80,10 +80,10 @@ def main(config):
         if wandb.run is not None:
             wandb.log(
                 {
-                    "train_step": -1,
+                    "thompson_step": 0,
                     "max_fn_value": state.max_fn_value,
                     # "argmax": state.argmax,
-                    "wall_clock_time": 0.0,
+                    "thompson_time": 0.0,
                     "n_observed": state.ds.x.shape[0],
                     "grid_max_fn_value": grid_max_fn_value,
                     "grid_argmax": grid_argmax,
@@ -115,19 +115,19 @@ def main(config):
             key, step_key = jr.split(key)
             state = step_fn(step_key, state, i)
 
-            print(f"train_step {i + 1} ")
+            print(f"thompson_step {i + 1} ")
             print(f"n_observed {state.ds.x.shape[0]} ")
             print(f"max_fn_value {state.max_fn_value} ")
             # print(f"max_location {state.argmax} ")
-            print(f"wall_clock_time {time.time() - start_time} ")
+            print(f"thompson_time {time.time() - start_time} ")
 
             if wandb.run is not None:
                 wandb.log(
                     {
                         "n_observed": state.ds.x.shape[0],
-                        "train_step": i + 1,
+                        "thompson_step": i + 1,
                         "max_fn_value": state.max_fn_value,
-                        "wall_clock_time": time.time() - start_time,
+                        "thompson_time": time.time() - start_time,
                     }
                 )
 

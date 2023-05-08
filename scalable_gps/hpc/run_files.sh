@@ -6,7 +6,7 @@
 
 # Set number of GPUs and CPUs
 gpus=1      # NOTE: batch size will be divided by number of GPUs
-cpus=$((3 * $gpus))
+cpus=$((2 * $gpus))
 
 # Check if provided directory exists
 if [ ! -d "$1" ]
@@ -44,13 +44,9 @@ for FILE in $1*; do
     log_dir="logs/$NAME"
     mkdir -p $log_dir
     log_file="$log_dir/%x_%A_%a.out"
+    err_file="$log_dir/%x_%A_%a.err"
 
-    cmd="sbatch --array=1-${n_jobs}%${jobs_in_parallel} --time $TIME --job-name $NAME --gres=gpu:$gpus --cpus-per-task=$cpus -o $log_file -e $log_file $(dirname "$0")/generic.sh "$FILE""
+    cmd="sbatch --array=1-${n_jobs}%${jobs_in_parallel} --time $TIME --job-name $NAME --gres=gpu:$gpus --cpus-per-task=$cpus -o $log_file -e $err_file $(dirname "$0")/generic.sh "$FILE""
     echo $cmd
     eval $cmd
 done
-
-
-#./slurm/run_files.sh imagenet/si_eval_jobs_imagenet_ll_top-k-leverage/
-
-#python -m pip install torch==1.6.0 torchvision==0.7.0
