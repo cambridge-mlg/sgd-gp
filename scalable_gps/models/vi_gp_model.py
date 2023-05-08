@@ -58,14 +58,16 @@ class SVGPModel:
             num_iters=config.iterations,
             key=key,
             batch_size=config.batch_size,
+            verbose=False
         )
         
         self.vi_params, loss = optimised_state.unpack()
         
-        self.concentrate_function_dist, self.concentrate_predictive_dist = self.get_predictive(
+        self.function_dist, self.predictive_dist = self.get_predictive(
             self.vi_params, test_ds.x)
         
         end_time = time.time()
+        
         if wandb.run is not None:
             for loss_val in loss:
                 wandb.log({"loss": loss_val})
@@ -75,29 +77,29 @@ class SVGPModel:
         
 
     def predictive_mean(self, train_ds: Dataset, test_ds: Dataset, recompute: bool = True) -> Array:
-        if self.concentrate_predictive_dist is None or self.concentrate_function_dist is None and not recompute:
+        if self.predictive_dist is None or self.function_dist is None and not recompute:
             raise ValueError("vi_params is None. Please call compute_representer_weights() first.")
         
         if recompute:
-            self.concentrate_function_dist, self.concentrate_predictive_dist = self.get_predictive(
+            self.function_dist, self.predictive_dist = self.get_predictive(
                 self.vi_params, test_ds.x)
         
         
-        self.y_pred = self.concentrate_predictive_dist.mean()
+        self.y_pred = self.predictive_dist.mean()
 
         return self.y_pred  # (N_test, 1)
 
     def predictive_variance(
         self, train_ds: Dataset, test_ds: Dataset, return_marginal_variance: bool = True, recompute: bool=False) -> Array:
         """Compute the posterior variance of the test points."""
-        if self.concentrate_predictive_dist is None or self.concentrate_function_dist is None and not recompute:
+        if self.predictive_dist is None or self.function_dist is None and not recompute:
             raise ValueError("vi_params is None. Please call compute_representer_weights() first.")
         
         if recompute:
-            self.concentrate_function_dist, self.concentrate_predictive_dist = self.get_predictive(
+            self.function_dist, self.predictive_dist = self.get_predictive(
                 self.vi_params, test_ds.x)
         
-        variance  = self.concentrate_predictive_dist.variance()
+        variance  = self.predictive_dist.variance()
         
         # TODO: is this correct?
         if return_marginal_variance:
@@ -106,9 +108,9 @@ class SVGPModel:
             return variance
 
     def compute_posterior_samples(self, key, num_samples):
-        posterior_samples = self.concentrate_function_dist.sample(seed=key, sample_shape=(num_samples, ))
+        posterior_samples = self.function_dist.sample(seed=key, sample_shape=(num_samples, ))
         
-        zero_mean_posterior_samples = posterior_samples - self.concentrate_predictive_dist.mean()
+        zero_mean_posterior_samples = posterior_samples - self.predictive_dist.mean()
         
         return zero_mean_posterior_samples
 
@@ -118,7 +120,7 @@ class SVGPModel:
     def predictive_variance_samples(
         self, zero_mean_posterior_samples: Array, return_marginal_variance: bool = True) -> Array:
         """Compute MC estimate of posterior variance of the test points using zero mean samples from posterior."""
-        if self.concentrate_predictive_dist is None or self.concentrate_function_dist is None and not recompute:
+        if self.predictive_dist is None or self.function_dist is None and not recompute:
             raise ValueError("vi_params is None. Please call compute_representer_weights() first.")
         
         if return_marginal_variance:

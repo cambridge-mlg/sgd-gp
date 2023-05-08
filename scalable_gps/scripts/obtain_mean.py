@@ -136,8 +136,10 @@ def main(config):
         test_rmse = RMSE(test_ds.y, y_pred, mu=train_ds.mu_y, sigma=train_ds.sigma_y)
         normalised_test_rmse = RMSE(test_ds.y, y_pred)
 
+        print('test_rmse = ', test_rmse)
+        print('normalised_test_rmse = ', normalised_test_rmse)
         wandb.log({"test_rmse": test_rmse,
-                   "normalised_test_rmse": normalised_test_rmse,})
+                   "normalised_test_rmse": normalised_test_rmse})
         if config.wandb.log_artifact:
             # Use wandb artifacts to save model hparams for a given dataset split and subsample_idx.
             artifact_name = f"model_{config.dataset_name}_{config.model_name}_{config.dataset_config.split}"
