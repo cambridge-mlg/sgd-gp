@@ -5,7 +5,7 @@ import subprocess
 methods = ["vi"]
 splits = list(range(10))
 datasets = ['pol', 'elevators', 'bike', 'kin40k', 'protein', 'keggdirected']
-low_noise = False
+low_noise = True
 for dataset in datasets:
     for method in methods:
         for split in splits:
