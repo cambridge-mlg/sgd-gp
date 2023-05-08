@@ -82,7 +82,7 @@ def main(config):
                 {
                     "train_step": -1,
                     "max_fn_value": state.max_fn_value,
-                    "argmax": state.argmax,
+                    # "argmax": state.argmax,
                     "wall_clock_time": 0.0,
                     "n_observed": state.ds.x.shape[0],
                     "grid_max_fn_value": grid_max_fn_value,
@@ -141,7 +141,7 @@ if __name__ == "__main__":
 
     if sys.argv:
         # pass wandb API as argv[1] and set environment variable
-        # 'python mll_optim.py MY_API_KEY'
+        # 'python thompson_sampling.py MY_API_KEY'
         os.environ["WANDB_API_KEY"] = sys.argv[1]
 
     # Adds jax flags to the program.
