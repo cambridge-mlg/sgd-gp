@@ -5,7 +5,7 @@ methods = ['sgd', 'cg']
 splits = list(range(10))
 # datasets = ['pol', 'elevators', 'bike']
 datasets = ['kin40k', 'protein', 'keggdirected']
-low_noise = False
+low_noise = True
 for dataset in datasets:
     for method in methods:
         for split in splits:
