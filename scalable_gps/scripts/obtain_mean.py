@@ -144,7 +144,7 @@ def main(config):
             # Use wandb artifacts to save model hparams for a given dataset split and subsample_idx.
             artifact_name = f"model_{config.dataset_name}_{config.model_name}_{config.dataset_config.split}"
             if config.override_noise > 0.:
-                artifact_name += f"_noise_{config.override_noise}"
+                artifact_name += f"_noise_{config.override_noise_scale}"
             model_artifact = wandb.Artifact(
                 artifact_name, type="model",
                 description=f"Saved Model class for {config.dataset_name} dataset with method {config.model_name} on split {config.dataset_config.split}.",

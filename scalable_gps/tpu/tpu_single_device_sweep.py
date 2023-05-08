@@ -4,8 +4,7 @@ import subprocess
 # methods = ['sgd', 'cg']
 methods = ["vi"]
 splits = list(range(10))
-datasets = ['pol', 'elevators', 'bike']
-# datasets = ['kin40k', 'protein', 'keggdirected']
+datasets = ['pol', 'elevators', 'bike', 'kin40k', 'protein', 'keggdirected']
 low_noise = False
 for dataset in datasets:
     for method in methods:
