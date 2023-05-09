@@ -9,20 +9,20 @@ def get_config():
     config.thompson.use_tpu = False
 
     config.thompson.seed = 1337
-    config.thompson.D = 64 # try 32, 64, 128, 256
+    config.thompson.D = 8 # try 8, 16
 
     config.thompson.model_name = "CGGP"
     config.thompson.kernel_name = "Matern32Kernel" # try 5/2
     config.thompson.signal_scale = 1.0
-    config.thompson.length_scale = (1.0,) # try 0.25, 0.5, 0.75, 1., 1.25, 1.5
+    config.thompson.length_scale = (0.5,) # try 0.5, 1.0
 
     config.thompson.noise_scale = 1e-3
 
-    config.thompson.iterations = 20
+    config.thompson.iterations = 25
 
     config.thompson.n_features = 5000
 
-    config.thompson.n_init = 50000
+    config.thompson.n_init = 25000
     config.thompson.init_method = "uniform" # try "trunc_normal"
 
     config.thompson.friends_iterations = 10
@@ -30,7 +30,7 @@ def get_config():
     config.thompson.n_homies = 10 // config.thompson.friends_iterations
     config.thompson.n_besties = 1
 
-    config.thompson.n_samples = 500
+    config.thompson.n_samples = 1000
 
     config.thompson.find_friends_method = "nearby" # uniform
 
@@ -71,7 +71,7 @@ def get_config():
 
     # Optimisation Configs
 
-    config.train_config.iterations = 50000
+    config.train_config.iterations = 10000
     config.train_config.batch_size = 500
     config.train_config.eval_every = 100
     config.train_config.time_budget_in_seconds = 0.
