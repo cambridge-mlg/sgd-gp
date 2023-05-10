@@ -258,14 +258,14 @@ class CGGPModel(ExactGPModel):
             if "test_llh" in metrics_list or "normalised_test_llh" in metrics_list:
                 y_pred_loc = self.predictive_mean(train_ds, test_ds, recompute=False)
                 zero_mean_posterior_samples = compute_posterior_samples_fn(alphas, f0_samples_test)
-                y_pred_scale = self.predictive_variance_samples(zero_mean_posterior_samples, add_likelihood_noise=True)
+                y_pred_variance = self.predictive_variance_samples(zero_mean_posterior_samples, add_likelihood_noise=True)
                 del zero_mean_posterior_samples
                 if "test_llh" in metrics_list:
                     aux_metrics['test_llh'] = mean_LLH(
-                        test_ds.y, y_pred_loc, y_pred_scale, mu=train_ds.mu_y, sigma=train_ds.sigma_y)
+                        test_ds.y, y_pred_loc, y_pred_variance, mu=train_ds.mu_y, sigma=train_ds.sigma_y)
                 if "normalised_test_llh" in metrics_list:
-                    aux_metrics['normalised_test_llh'] = mean_LLH(test_ds.y, y_pred_loc, y_pred_scale)
-                del y_pred_loc, y_pred_scale
+                    aux_metrics['normalised_test_llh'] = mean_LLH(test_ds.y, y_pred_loc, y_pred_variance)
+                del y_pred_loc, y_pred_variance
             if wandb.run is not None:
                 wandb.log({**process_pmapped_and_vmapped_metrics(vmapped_eval_metrics),
                             **{'sample_step': i},
@@ -275,4 +275,4 @@ class CGGPModel(ExactGPModel):
         
         posterior_samples = compute_posterior_samples_fn(alphas, f0_samples_test)  # (n_samples, n_test)
         
-        return posterior_samples, alphas, w_samples
+        return posterior_samples, alphas, w_samples, aux

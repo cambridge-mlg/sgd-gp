@@ -78,10 +78,10 @@ def main(config):
         
         # y_pred_scale = exact_model.predictive_variance_samples(posterior_samples)
         
-        y_pred_scale = exact_model.predictive_variance(train_ds, test_ds, add_likelihood_noise=True)
-        test_llh = mean_LLH(test_ds.y, y_pred, jnp.sqrt(y_pred_scale), mu=train_ds.mu_y, sigma=train_ds.sigma_y)
+        y_pred_variance = exact_model.predictive_variance(train_ds, test_ds, add_likelihood_noise=True)
+        test_llh = mean_LLH(test_ds.y, y_pred, y_pred_variance, mu=train_ds.mu_y, sigma=train_ds.sigma_y)
         
-        normalised_test_llh = mean_LLH(test_ds.y, y_pred, jnp.sqrt(y_pred_scale))
+        normalised_test_llh = mean_LLH(test_ds.y, y_pred, y_pred_variance)
         print(f"test_llh = {test_llh}")
         print(f"normalised_test_llh = {normalised_test_llh}")
         
