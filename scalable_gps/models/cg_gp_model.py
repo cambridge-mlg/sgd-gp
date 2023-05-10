@@ -13,14 +13,11 @@ from tqdm import tqdm
 from scalable_gps import eval_utils, optim_utils, sampling_utils
 from scalable_gps.custom_cg import custom_cg
 from scalable_gps.data import Dataset
-from scalable_gps.eval_utils import LLH
+from scalable_gps.eval_utils import mean_LLH
 from scalable_gps.kernels import Kernel
 from scalable_gps.linalg_utils import KvP, pivoted_cholesky
 from scalable_gps.models.exact_gp_model import ExactGPModel
-from scalable_gps.utils import (
-    ExactPredictionsTuple,
-    process_vmapped_metrics,
-)
+from scalable_gps.utils import ExactPredictionsTuple, process_pmapped_and_vmapped_metrics
 
 
 class CGGPModel(ExactGPModel):
@@ -204,6 +201,9 @@ class CGGPModel(ExactGPModel):
             exact_samples_tuple = compute_exact_samples_tuple_fn(
                 alpha_samples_exact, posterior_samples_exact, f0_samples_test)
         
+        for metric in ['loss', 'err', 'reg']:
+            if metric in metrics_list:
+                metrics_list.remove(metric)
         eval_fn = eval_utils.get_eval_fn(
             metrics_list,
             train_ds,
@@ -258,16 +258,16 @@ class CGGPModel(ExactGPModel):
             if "test_llh" in metrics_list or "normalised_test_llh" in metrics_list:
                 y_pred_loc = self.predictive_mean(train_ds, test_ds, recompute=False)
                 zero_mean_posterior_samples = compute_posterior_samples_fn(alphas, f0_samples_test)
-                y_pred_scale = self.predictive_variance_samples(zero_mean_posterior_samples)
+                y_pred_scale = self.predictive_variance_samples(zero_mean_posterior_samples, add_likelihood_noise=True)
                 del zero_mean_posterior_samples
                 if "test_llh" in metrics_list:
-                    aux_metrics['test_llh'] = LLH(
+                    aux_metrics['test_llh'] = mean_LLH(
                         test_ds.y, y_pred_loc, y_pred_scale, mu=train_ds.mu_y, sigma=train_ds.sigma_y)
                 if "normalised_test_llh" in metrics_list:
-                    aux_metrics['normalised_test_llh'] = LLH(test_ds.y, y_pred_loc, y_pred_scale)
+                    aux_metrics['normalised_test_llh'] = mean_LLH(test_ds.y, y_pred_loc, y_pred_scale)
                 del y_pred_loc, y_pred_scale
             if wandb.run is not None:
-                wandb.log({**process_vmapped_metrics(vmapped_eval_metrics),
+                wandb.log({**process_pmapped_and_vmapped_metrics(vmapped_eval_metrics),
                             **{'sample_step': i},
                             **aux_metrics})
 

@@ -137,9 +137,7 @@ def get_map_solution(d_name: str, method_name: str, split: int, override_noise_s
     
     artifact = api.artifact(f"shreyaspadhy/scalable-gps/{artifact_name}:latest")
     data = pickle.load(open(artifact.file(), "rb"))
-    
-    print(data)
-    
+
     return data
         
     

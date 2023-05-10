@@ -12,16 +12,12 @@ from tqdm import tqdm
 
 from scalable_gps import eval_utils, optim_utils, sampling_utils
 from scalable_gps.data import Dataset
-from scalable_gps.eval_utils import LLH
+from scalable_gps.eval_utils import mean_LLH
 from scalable_gps.kernels import Kernel
 from scalable_gps.models.base_gp_model import GPModel
 from scalable_gps.models.exact_gp_model import ExactGPModel
 from scalable_gps.optim_utils import get_lr, get_lr_and_schedule
-from scalable_gps.utils import (
-    ExactPredictionsTuple,
-    TargetTuple,
-    process_vmapped_metrics,
-)
+from scalable_gps.utils import ExactPredictionsTuple, TargetTuple, process_pmapped_and_vmapped_metrics
 
 
 class SGDGPModel(GPModel):
@@ -219,17 +215,17 @@ class SGDGPModel(GPModel):
                 if "test_llh" in metrics_list or "normalised_test_llh" in metrics_list:
                     y_pred_loc = self.predictive_mean(train_ds, test_ds, recompute=False)
                     zero_mean_posterior_samples = compute_posterior_samples_fn(alphas_polyak, f0_samples_test)
-                    y_pred_scale = self.predictive_variance_samples(zero_mean_posterior_samples)
+                    y_pred_scale = self.predictive_variance_samples(zero_mean_posterior_samples, add_likelihood_noise=True)
                     del zero_mean_posterior_samples
                     if "test_llh" in metrics_list:
-                        aux_metrics['test_llh'] = LLH(
+                        aux_metrics['test_llh'] = mean_LLH(
                             test_ds.y, y_pred_loc, y_pred_scale, mu=train_ds.mu_y, sigma=train_ds.sigma_y)
                     if "normalised_test_llh" in metrics_list:
-                        aux_metrics['normalised_test_llh'] = LLH(test_ds.y, y_pred_loc, y_pred_scale)
+                        aux_metrics['normalised_test_llh'] = mean_LLH(test_ds.y, y_pred_loc, y_pred_scale)
                     del y_pred_loc, y_pred_scale
 
                 if wandb.run is not None:
-                    wandb.log({**process_vmapped_metrics(vmapped_eval_metrics),
+                    wandb.log({**process_pmapped_and_vmapped_metrics(vmapped_eval_metrics),
                             **{'sample_step': i},
                             **aux_metrics})
 

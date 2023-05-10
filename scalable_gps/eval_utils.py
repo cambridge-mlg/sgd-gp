@@ -9,8 +9,8 @@ from chex import Array
 from scalable_gps.data import Dataset
 from scalable_gps.linalg_utils import KvP
 from scalable_gps.linear_model import loss_fn
-from scalable_gps.utils import ExactPredictionsTuple, ExactSamplesTuple, TargetTuple, revert_z_score
 from scalable_gps.optim_utils import get_uniform_idx_fn
+from scalable_gps.utils import ExactPredictionsTuple, ExactSamplesTuple, TargetTuple, revert_z_score
 
 
 def grad_var_fn(
@@ -54,15 +54,16 @@ def RMSE(
     return jnp.sqrt(jnp.mean((x - x_hat) ** 2))
 
 
-def LLH(
-    x: Array, loc: Array, scale: Array, mu: Optional[Array] = None, sigma: Optional[Array] = None
+def mean_LLH(
+    x: Array, loc: Array, variance: Array, mu: Optional[Array] = None, sigma: Optional[Array] = None
 ):
     """Calculate the log-likelihood of x given loc and scale."""
+    scale = jnp.sqrt(variance)
     if mu is not None and sigma is not None:
         x = revert_z_score(x, mu, sigma)
         loc = revert_z_score(loc, mu, sigma)
         scale = revert_z_score(scale, 0.0, sigma)
-    return jax.scipy.stats.norm.logpdf(x, loc=loc, scale=scale)
+    return jnp.mean(jax.scipy.stats.norm.logpdf(x, loc=loc, scale=scale))
 
 
 def get_eval_fn(
@@ -101,6 +102,9 @@ def get_eval_fn(
             y_pred_loc_sgd = KvP(test_ds.x, train_ds.x, params, kernel_fn=kernel_fn)
         # TODO: Add normalised_test_rmse_Diff and test_rmse_Diff
         # Define all metric function calls here for now, refactor later.
+        
+        all_metrics = ['loss', 'err', 'reg', 'grad_var', 'test_rmse', 'normalised_test_rmse', 
+                       'alpha_diff', 'alpha_rkhs_diff', 'y_pred_diff']
         def _get_metric(metric):
             if metric == "loss":
                 return loss_fn(params, idx, train_ds.x, features, target_tuple, kernel_fn, noise_scale)[0]
@@ -127,7 +131,8 @@ def get_eval_fn(
 
         # TODO: dont return N_steps dicts
         for metric in metrics_list:
-            metrics_update_dict[f"{metrics_prefix}/{metric}"] = _get_metric(metric)
+            if metric in all_metrics:
+                metrics_update_dict[f"{metrics_prefix}/{metric}"] = _get_metric(metric)
 
         return metrics_update_dict
 
