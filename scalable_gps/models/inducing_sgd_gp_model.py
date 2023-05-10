@@ -227,10 +227,6 @@ class ISGDGPModel(GPModel):
             jr.split(prior_samples_key, n_samples)
         )  # (n_samples, n_train), (n_samples, n_test), (n_samples, n_train)
 
-        scaled_eps0_samples = (
-            eps0_samples / self.noise_scale
-        )  # samples from N(0, Sig^-1)
-
         eval_fn = eval_utils.get_inducing_eval_fn(
             metrics_list,
             train_ds,
@@ -244,7 +240,7 @@ class ISGDGPModel(GPModel):
         )
 
         target_tuples = compute_target_tuples_fn(
-            f0_samples_train, scaled_eps0_samples
+            f0_samples_train, eps0_samples
         )  # (n_samples, TargetTuples)
 
         N_inducing = len(train_ds.z)

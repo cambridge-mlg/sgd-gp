@@ -266,10 +266,12 @@ def get_inducing_eval_fn(
                 )
             elif metric == "normalised_test_rmse":
                 return RMSE(test_ds.y, y_pred_loc_sgd)
-            # elif metric == "alpha_diff":
-            #     return RMSE(alpha_exact, params)
-            # elif metric == "alpha_rkhs_diff":
-            #     return hilbert_space_RMSE(alpha_exact, params, K=kernel_fn(train_ds.x, train_ds.x))
+            elif metric == "alpha_diff":
+                return RMSE(alpha_exact, params)
+            elif metric == "alpha_rkhs_diff":
+                return hilbert_space_RMSE(
+                    alpha_exact, params, K=kernel_fn(train_ds.z, train_ds.z)
+                )
             elif metric == "y_pred_diff":
                 # TODO: right now we measure the difference between zero_mean posterior_samples, as alpha_map used for
                 # both y_pred_test and y_pred_exact is alpha_map of ExactGP, and gets cancelled out.

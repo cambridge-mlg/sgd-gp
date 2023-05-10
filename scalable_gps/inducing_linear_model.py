@@ -33,11 +33,12 @@ def i_regularizer(
     chex.assert_equal_shape_prefix([target, features_x], prefix_len=1)
     # features_x (num_points, num_features)
     # features_z (num_inducing, num_features)
-
+    params = noise_scale * params
+    target = target / noise_scale
     params_norm = ((params @ features_z) ** 2).sum()
     targets_norm = ((target @ features_x) ** 2).sum()
     cross_norm = jnp.dot(params @ features_z, target @ features_x)
-    return 0.5 * noise_scale**2 * (params_norm + targets_norm - 2 * cross_norm)
+    return 0.5 * (params_norm + targets_norm - 2 * cross_norm)
 
 
 # TODO: pmap over idx / B
@@ -65,9 +66,10 @@ def i_regularizer_grad_sample(
     chex.assert_equal_shape_prefix([target, features_x], prefix_len=1)
 
     # target_grad = 0 ## features_x @ (features_x.T @ target)
+    params = (noise_scale**2) * params
     param_grad = features_z @ (features_z.T @ params)
     cross_grad = features_z @ (features_x.T @ target)
-    return noise_scale**2 * (param_grad - 2 * cross_grad)
+    return param_grad - 2 * cross_grad
 
 
 def i_loss_fn(
