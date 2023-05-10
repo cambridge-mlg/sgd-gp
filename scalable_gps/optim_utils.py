@@ -34,7 +34,7 @@ def get_stochastic_gradient_fn(x: Array, kernel_fn: Callable, noise_scale: float
 
 
 def get_update_fn(
-    grad_fn: Callable, optimizer, polyak_step_size: float, vmap: bool = False
+    grad_fn: Callable, optimizer, polyak_step_size: float, vmap_and_pmap: bool = False
 ):
     def _fn(params, params_polyak, idx, features, opt_state, target_tuple):
         n_train = params.shape[0]
@@ -48,12 +48,12 @@ def get_update_fn(
 
         return new_params, new_params_polyak, opt_state
 
-    if vmap:
-        return jax.jit(jax.vmap(_fn, in_axes=(0, 0, None, None, 0, 0)))
+    if vmap_and_pmap:
+        return jax.pmap(jax.vmap(_fn, in_axes=(0, 0, None, None, 0, 0)), in_axes=(0, 0, None, None, 0, 0))
     return jax.jit(_fn)
 
 
-def get_target_tuples_fn(loss_objective: int):
+def get_target_tuples_fn(loss_objective: int, pmap: bool = False):
     def _fn(f0_sample_train, eps0_sample):
         n_train = f0_sample_train.shape[0]
         if loss_objective == 1:
@@ -75,7 +75,10 @@ def get_target_tuples_fn(loss_objective: int):
 
         return target_tuple
 
-    return jax.jit(jax.vmap(_fn))
+    if pmap:
+        return jax.pmap(jax.vmap(_fn))
+    else:
+        return jax.jit(jax.vmap(_fn))
 
 
 def get_uniform_idx_fn(batch_size: int, n_train: int, share_idx: bool = False):

@@ -135,13 +135,13 @@ def get_config(config_string):
     config.cg_config.loss_objective = 2
 
     config.cg_sampling_config = ml_collections.ConfigDict()
-    config.cg_sampling_config.batch_size = 0
+    config.cg_sampling_config.batch_size = 1
     config.cg_sampling_config.n_features_prior_sample = 2000
-    config.cg_sampling_config.n_samples = 10
+    config.cg_sampling_config.n_samples = 16
     config.cg_sampling_config.tol = 1e-3
-    config.cg_sampling_config.maxiter = 300
+    config.cg_sampling_config.maxiter = 1000
     config.cg_sampling_config.atol = 0.
-    config.cg_sampling_config.eval_every = 10
+    config.cg_sampling_config.eval_every = 1
     config.cg_sampling_config.preconditioner = True
     config.cg_sampling_config.pivoted_chol_rank = 100
     config.cg_sampling_config.pivoted_diag_rtol = 1e-3
