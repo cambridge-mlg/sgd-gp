@@ -126,14 +126,32 @@ def get_tuned_hparams(d_name: str, split: int):
     return mean_hparams
 
 
-def process_vmapped_metrics(vmapped_metrics):
-    mean_metrics, std_metrics = {}, {}
-    for k, v in vmapped_metrics.items():
-        vmapped_metrics[k] = wandb.Histogram(v)
-        mean_metrics[f'{k}_mean'] = jnp.mean(v)
-        std_metrics[f'{k}_std'] = jnp.std(v)
+def get_map_solution(d_name: str, method_name: str, split: int, override_noise_scale: int):
+    
+    api = wandb.Api()
+    import pickle
+    
+    artifact_name = f"alpha_{d_name}_{method_name}_{split}"
+    if override_noise_scale > 0.:
+        artifact_name += f"_noise_{override_noise_scale}"
+    
+    artifact = api.artifact(f"shreyaspadhy/scalable-gps/{artifact_name}:latest")
+    data = pickle.load(open(artifact.file(), "rb"))
+    
+    print(data)
+    
+    return data
         
-    return {**vmapped_metrics, **mean_metrics, **std_metrics}
+    
+def process_pmapped_and_vmapped_metrics(pmapped_and_vmapped_metrics):
+    mean_metrics, std_metrics = {}, {}
+    for k, v in pmapped_and_vmapped_metrics.items():
+        flattened_v = v.reshape((-1, v.shape[-1]))
+        pmapped_and_vmapped_metrics[k] = wandb.Histogram(flattened_v)
+        mean_metrics[f'{k}_mean'] = jnp.mean(flattened_v)
+        std_metrics[f'{k}_std'] = jnp.std(flattened_v)
+        
+    return {**pmapped_and_vmapped_metrics, **mean_metrics, **std_metrics}
     
     
     
