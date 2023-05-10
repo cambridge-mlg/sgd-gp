@@ -79,36 +79,53 @@ def main(config):
         if config.model_name == "sgd":
             model = SGDGPModel(hparams.noise_scale, kernel)
             train_config = config.train_config
+            sampling_config = config.sampling_config
         elif config.model_name == "cg":
             model = CGGPModel(hparams.noise_scale, kernel)
             train_config = config.cg_config
             train_config.preconditioner = False
+            sampling_config = config.cg_sampling_config
+            sampling_config.preconditioner = False
         elif config.model_name == "precondcg":
             model = CGGPModel(hparams.noise_scale, kernel)
             train_config = config.cg_config
             train_config.preconditioner = True
+            sampling_config = config.cg_sampling_config
+            sampling_config.preconditioner = True
         elif config.model_name == "vi":
             train_config = config.vi_config
             kernel_config = {'signal_scale': hparams.signal_scale, 'length_scale': hparams.length_scale}
             model = SVGPModel(hparams.noise_scale, kernel, config, kernel_config)
 
-        metrics_list = ["loss", "err", "reg", "normalised_test_rmse", "test_rmse"]
+        metrics_list = ["loss", "err", "reg", "normalised_test_rmse", "test_rmse", "test_llh", "normalised_test_llh"]
         if config.compute_exact_soln:
             metrics_list.extend(["alpha_diff", "y_pred_diff", "alpha_rkhs_diff"])
 
-        data = get_map_solution(
-            config.dataset_name, 
-            config.model_name, 
-            config.dataset_config.split,
-            config.override_noise_scale,)
+        try:
+            data = get_map_solution(
+                config.dataset_name, 
+                config.model_name, 
+                config.dataset_config.split,
+                config.override_noise_scale,)
+
+            model.alpha = data['alpha']
+        except:
+            model.compute_representer_weights(
+                optim_key,
+                train_ds,
+                test_ds,
+                train_config,
+                metrics_list=metrics_list,
+                metrics_prefix="train",
+                exact_metrics=exact_metrics if config.compute_exact_soln else None,
+            )
         
-        print(data)
         zero_mean_samples, alpha_samples, _, _ = model.compute_posterior_samples(
             sampling_key,
             n_samples=config.sampling_config.n_samples,
             train_ds=train_ds,
             test_ds=test_ds,
-            config=config.sampling_config,
+            config=sampling_config,
             use_rff=False,
             n_features=config.sampling_config.n_features_prior_sample,
             zero_mean=True,

@@ -55,9 +55,10 @@ def RMSE(
 
 
 def mean_LLH(
-    x: Array, loc: Array, scale: Array, mu: Optional[Array] = None, sigma: Optional[Array] = None
+    x: Array, loc: Array, variance: Array, mu: Optional[Array] = None, sigma: Optional[Array] = None
 ):
     """Calculate the log-likelihood of x given loc and scale."""
+    scale = jnp.sqrt(variance)
     if mu is not None and sigma is not None:
         x = revert_z_score(x, mu, sigma)
         loc = revert_z_score(loc, mu, sigma)
@@ -112,7 +113,9 @@ def get_eval_fn(
         # TODO: Add normalised_test_rmse_Diff and test_rmse_Diff
 
         # Define all metric function calls here for now, refactor later.
-        all_metrics = ["loss", "err", "reg", "grad_var", "test_rmse", "normalised_test_rmse", "alpha_diff", "alpha_rkhs_diff", "y_pred_diff"]
+        
+        all_metrics = ['loss', 'err', 'reg', 'grad_var', 'test_rmse', 'normalised_test_rmse', 
+                       'alpha_diff', 'alpha_rkhs_diff', 'y_pred_diff']
         def _get_metric(metric):
             if metric == "loss":
                 return loss_fn(params, idx, train_ds.x, features, target_tuple, kernel_fn, noise_scale)[0]

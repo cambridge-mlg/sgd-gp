@@ -18,11 +18,7 @@ from scalable_gps.kernels import Kernel
 from scalable_gps.models.base_gp_model import GPModel
 from scalable_gps.models.exact_gp_model import ExactGPModel
 from scalable_gps.optim_utils import get_lr, get_lr_and_schedule
-from scalable_gps.utils import (
-    ExactPredictionsTuple,
-    TargetTuple,
-    process_pmapped_and_vmapped_metrics,
-)
+from scalable_gps.utils import ExactPredictionsTuple, TargetTuple, process_pmapped_and_vmapped_metrics
 
 
 class SGDGPModel(GPModel):
@@ -238,20 +234,14 @@ class SGDGPModel(GPModel):
                 if "test_llh" in metrics_list or "normalised_test_llh" in metrics_list:
                     y_pred_loc = self.predictive_mean(train_ds, test_ds, recompute=False)
                     zero_mean_posterior_samples = compute_posterior_samples_fn(alphas_polyak, f0_samples_test)
-
-                    y_pred_scale = self.predictive_variance_samples(zero_mean_posterior_samples.reshape(n_samples, test_ds.N))
-                    print(f'y_pred_scale shape: {y_pred_scale.shape}')
-                    print(f'y_pred_loc shape: {y_pred_loc.shape}')
-                    print(f'zero_mean_posterior_samples shape: {zero_mean_posterior_samples.shape}')
-                    aux_metrics['marginal_variance'] = wandb.Histogram(y_pred_scale.reshape(-1))
+                    y_pred_variance = self.predictive_variance_samples(zero_mean_posterior_samples.reshape(n_samples, test_ds.N), add_likelihood_noise=True)
                     del zero_mean_posterior_samples
                     if "test_llh" in metrics_list:
                         aux_metrics['test_llh'] = mean_LLH(
-                            test_ds.y, y_pred_loc, y_pred_scale, mu=train_ds.mu_y, sigma=train_ds.sigma_y)
+                            test_ds.y, y_pred_loc, y_pred_variance, mu=train_ds.mu_y, sigma=train_ds.sigma_y)
                     if "normalised_test_llh" in metrics_list:
-                        aux_metrics['normalised_test_llh'] = mean_LLH(test_ds.y, y_pred_loc, y_pred_scale)
-                    
-                    del y_pred_loc, y_pred_scale
+                        aux_metrics['normalised_test_llh'] = mean_LLH(test_ds.y, y_pred_loc, y_pred_variance)
+                    del y_pred_loc, y_pred_variance
 
                 if wandb.run is not None:
                     wandb.log({**process_pmapped_and_vmapped_metrics(pmapped_and_vmapped_eval_metrics),

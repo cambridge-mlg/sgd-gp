@@ -32,7 +32,7 @@ class GPModel:
     # TODO: Biased: use the method that double counts the diagonal (first paragraph of page 28 of https://arxiv.org/pdf/2210.04994.pdf
     # TODO: Unbiased: use a mixture of isotropic Gaussian likelihood with each mixture component's mean being centred at a sample. Then we can compute joint likelihoods as in the "EFFICIENT κ-ADIC SAMPLING" section on page 26 of https://arxiv.org/pdf/2210.04994.pdf
     def predictive_variance_samples(
-        self, zero_mean_posterior_samples: Array, return_marginal_variance: bool = True) -> Array:
+        self, zero_mean_posterior_samples: Array, add_likelihood_noise: bool = False, return_marginal_variance: bool = True) -> Array:
         """Compute MC estimate of posterior variance of the test points using zero mean samples from posterior."""
         # zero_mean_posterior_samples = (N_samples, N_test)
         print(f'zero_mean_posterior_samples.shape = {zero_mean_posterior_samples.shape}')
@@ -41,6 +41,12 @@ class GPModel:
         else:
             n_samples = zero_mean_posterior_samples.shape[0]
             variance = zero_mean_posterior_samples.T @ zero_mean_posterior_samples / n_samples
+        
+        if add_likelihood_noise:
+            if return_marginal_variance:
+                variance += self.noise_scale ** 2
+            else:
+                variance += self.noise_scale ** 2 * jnp.eye(variance.shape[0])
     
         return variance
 

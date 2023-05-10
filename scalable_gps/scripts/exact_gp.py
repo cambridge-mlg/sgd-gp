@@ -1,14 +1,14 @@
 
 import jax
 import jax.numpy as jnp
+import jax.random as jr
 import ml_collections.config_flags
 import wandb
 from absl import app, flags
 
 from scalable_gps import kernels
 from scalable_gps.data import get_dataset
-from scalable_gps.eval_utils import RMSE
-from scalable_gps.linear_model import marginal_likelihood
+from scalable_gps.eval_utils import RMSE, mean_LLH
 from scalable_gps.models.exact_gp_model import ExactGPModel
 from scalable_gps.utils import HparamsTuple, flatten_nested_dict, get_tuned_hparams, setup_training, update_config_dict
 
@@ -63,12 +63,34 @@ def main(config):
         y_pred = exact_model.predictive_mean(train_ds, test_ds)
         test_rmse = RMSE(test_ds.y, y_pred, mu=train_ds.mu_y, sigma=train_ds.sigma_y)
         normalised_test_rmse = RMSE(test_ds.y, y_pred)
-
-        mll = marginal_likelihood(train_ds.x, train_ds.y, exact_model.kernel.kernel_fn, hparams)
+        key = jr.PRNGKey(config.seed)
+        optim_key, sampling_key, key = jr.split(key, 3)
+        
+        posterior_samples, alpha_samples, w_samples = exact_model.compute_posterior_samples(
+            sampling_key,
+            n_samples=config.sampling_config.n_samples,
+            train_ds=train_ds,
+            test_ds=test_ds,
+            use_rff=False,
+            n_features=config.sampling_config.n_features_prior_sample,
+            zero_mean=True,
+        )
+        
+        # y_pred_scale = exact_model.predictive_variance_samples(posterior_samples)
+        
+        y_pred_variance = exact_model.predictive_variance(train_ds, test_ds, add_likelihood_noise=True)
+        test_llh = mean_LLH(test_ds.y, y_pred, y_pred_variance, mu=train_ds.mu_y, sigma=train_ds.sigma_y)
+        
+        normalised_test_llh = mean_LLH(test_ds.y, y_pred, y_pred_variance)
+        print(f"test_llh = {test_llh}")
+        print(f"normalised_test_llh = {normalised_test_llh}")
+        
+        # mll = marginal_likelihood(train_ds.x, train_ds.y, exact_model.kernel.kernel_fn, hparams)
         print(f"test_rmse_exact = {test_rmse}")
         wandb.log({"test_rmse": test_rmse,
                    "normalised_test_rmse": normalised_test_rmse,
-                   "mll": mll / train_ds.N})
+                #    "mll": mll / train_ds.N, 
+                   "test_llh": test_llh,})
 
 if __name__ == "__main__":
     # Adds jax flags to the program.

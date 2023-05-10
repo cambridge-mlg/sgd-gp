@@ -135,7 +135,7 @@ def get_config(config_string):
     config.cg_config.loss_objective = 2
 
     config.cg_sampling_config = ml_collections.ConfigDict()
-    config.cg_sampling_config.batch_size = 1
+    config.cg_sampling_config.batch_size = 512
     config.cg_sampling_config.n_features_prior_sample = 2000
     config.cg_sampling_config.n_samples = 16
     config.cg_sampling_config.tol = 1e-3
