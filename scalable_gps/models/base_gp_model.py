@@ -35,7 +35,6 @@ class GPModel:
         self, zero_mean_posterior_samples: Array, add_likelihood_noise: bool = False, return_marginal_variance: bool = True) -> Array:
         """Compute MC estimate of posterior variance of the test points using zero mean samples from posterior."""
         # zero_mean_posterior_samples = (N_samples, N_test)
-        print(f'zero_mean_posterior_samples.shape = {zero_mean_posterior_samples.shape}')
         if return_marginal_variance:
             variance = jnp.mean(zero_mean_posterior_samples ** 2, axis=0)  # (N_test, 1)
         else:
