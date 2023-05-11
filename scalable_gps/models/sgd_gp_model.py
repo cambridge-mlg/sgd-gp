@@ -2,6 +2,7 @@ import time
 from typing import List, Optional
 
 import chex
+import jax
 import jax.numpy as jnp
 import jax.random as jr
 import optax
@@ -42,7 +43,7 @@ class SGDGPModel(GPModel):
 
         # Define the gradient function
         grad_fn = optim_utils.get_stochastic_gradient_fn(train_ds.x, self.kernel.kernel_fn, self.noise_scale)
-        update_fn = optim_utils.get_update_fn(grad_fn, optimizer, config.polyak, vmap=False)
+        update_fn = optim_utils.get_update_fn(grad_fn, optimizer, config.polyak)
         feature_fn = self.get_feature_fn(train_ds, config.n_features_optim, config.recompute_features)
         
         eval_fn = eval_utils.get_eval_fn(
@@ -117,9 +118,9 @@ class SGDGPModel(GPModel):
         chol_eps: float = 1e-5,
         L: Optional[Array] = None, 
         zero_mean: bool = True,
-        metrics_list=[],
-        metrics_prefix="",
-        compare_exact=False):
+        metrics_list: list = [],
+        metrics_prefix: str = "",
+        compare_exact: bool = False):
         
         prior_covariance_key, prior_samples_key, optim_key = jr.split(key, 3)
 
@@ -135,20 +136,24 @@ class SGDGPModel(GPModel):
                     chol_eps=chol_eps)
         
         # Get vmapped functions for sampling from the prior and computing the posterior.
-        compute_prior_samples_fn = self.get_prior_samples_fn(train_ds.N, L, use_rff)
-        compute_posterior_samples_fn = self.get_posterior_samples_fn(train_ds, test_ds, zero_mean)
-        compute_target_tuples_fn = optim_utils.get_target_tuples_fn(config.loss_objective)
+        compute_prior_samples_fn = self.get_prior_samples_fn(train_ds.N, L, use_rff, pmap=True)
+        compute_posterior_samples_fn = self.get_posterior_samples_fn(train_ds, test_ds, zero_mean, pmap=True)
+        compute_target_tuples_fn = optim_utils.get_target_tuples_fn(config.loss_objective, pmap=True)
         
         optimizer = optax.sgd(learning_rate=config.learning_rate, momentum=config.momentum, nesterov=True)
         
         grad_fn = optim_utils.get_stochastic_gradient_fn(train_ds.x, self.kernel.kernel_fn, self.noise_scale)
-        update_fn = optim_utils.get_update_fn(grad_fn, optimizer, config.polyak, vmap=True)
+        update_fn = optim_utils.get_update_fn(grad_fn, optimizer, config.polyak, vmap_and_pmap=True)
         feature_fn = self.get_feature_fn(train_ds, config.n_features_optim, config.recompute_features)
  
-        # Call the vmapped functions
-        f0_samples_train, f0_samples_test, eps0_samples, w_samples = compute_prior_samples_fn(
-            jr.split(prior_samples_key, n_samples))  # (n_samples, n_train), (n_samples, n_test), (n_samples, n_train)
-
+        # Call the pmapped and vmapped functions
+        n_devices = jax.device_count()
+        assert n_samples % n_devices == 0
+        n_samples_per_device = n_samples // n_devices
+        pmappable_keys = jr.split(prior_samples_key, n_samples).reshape((n_devices, n_samples_per_device, -1))
+        # (n_devices, n_samples_per_device, n_train), (n_devices, n_samples_per_device, n_test)
+        f0_samples_train, f0_samples_test, eps0_samples, w_samples = compute_prior_samples_fn(pmappable_keys)
+        
         exact_samples_tuple = None
         if compare_exact:
             exact_gp = ExactGPModel(self.noise_scale, self.kernel)
@@ -159,11 +164,22 @@ class SGDGPModel(GPModel):
             compute_exact_posterior_samples_fn = exact_gp.get_posterior_samples_fn(train_ds, test_ds, zero_mean=False)
             compute_exact_samples_tuple_fn = eval_utils.get_exact_sample_tuples_fn(exact_gp.alpha)
 
-            alpha_samples_exact = compute_exact_alpha_samples_fn(f0_samples_train, eps0_samples)
-            posterior_samples_exact = compute_exact_posterior_samples_fn(alpha_samples_exact, f0_samples_test)
+            # Reshape from (n_devices, n_samples_per_device, n_train) to (n_samples, n_train)
+            f0_samples_train_reshaped = jax.device_put(
+                f0_samples_train.reshape(n_samples, train_ds.N), jax.devices('cpu')[0])
+            eps0_samples_reshaped = jax.device_put(
+                eps0_samples.reshape(n_samples, train_ds.N), jax.devices('cpu')[0])
+            f0_samples_test_reshaped = jax.device_put(
+                f0_samples_test.reshape(n_samples, test_ds.N), jax.devices('cpu')[0])
+
+            alpha_samples_exact = compute_exact_alpha_samples_fn(
+                f0_samples_train_reshaped, eps0_samples_reshaped)
+
+            posterior_samples_exact = compute_exact_posterior_samples_fn(
+                alpha_samples_exact, f0_samples_test_reshaped)
 
             exact_samples_tuple = compute_exact_samples_tuple_fn(
-                alpha_samples_exact, posterior_samples_exact, f0_samples_test)
+                alpha_samples_exact, posterior_samples_exact, f0_samples_test_reshaped)
         
         eval_fn = eval_utils.get_eval_fn(
             metrics_list,
@@ -174,28 +190,30 @@ class SGDGPModel(GPModel):
             grad_fn=grad_fn,
             metrics_prefix=metrics_prefix,
             exact_samples=exact_samples_tuple if compare_exact else None,
-            vmap=True
+            vmap_and_pmap=True
         )
 
-        target_tuples = compute_target_tuples_fn(f0_samples_train, eps0_samples) # (n_samples, TargetTuples)
+        target_tuples = compute_target_tuples_fn(f0_samples_train, eps0_samples) # (n_devices, n_samples_per_device, TargetTuples)
 
-        alphas, alphas_polyak = jnp.zeros((n_samples, train_ds.N)), jnp.zeros((n_samples, train_ds.N))
+        alphas = jnp.zeros((n_devices, n_samples_per_device, train_ds.N))
+        alphas_polyak = jnp.zeros((n_devices, n_samples_per_device, train_ds.N))
+
         opt_states = optimizer.init(alphas)
         
         idx_key, feature_key = jr.split(key, 2)
         features = feature_fn(feature_key)
-        if config.batch_size == 0:
-            def partial_fn(batch_size):
-                idx_fn = optim_utils.get_idx_fn(batch_size, train_ds.N, config.iterative_idx, share_idx=False)
-                idx = idx_fn(0, idx_key)
-                update_fn(alphas, alphas_polyak, idx, features, opt_states, target_tuples)
-            config.batch_size = optim_utils.select_dynamic_batch_size(train_ds.N, partial_fn)
-            print(f"Selected batch size: {config.batch_size}, (N = {train_ds.N}, D = {train_ds.D}, "
-                  f"length_scale dims: {self.kernel.get_length_scale().shape[-1]})")
-        assert config.batch_size > 0
+        # if config.batch_size == 0:
+        #     def partial_fn(batch_size):
+        #         idx_fn = optim_utils.get_idx_fn(batch_size, train_ds.N, config.iterative_idx, share_idx=False)
+        #         idx = idx_fn(0, idx_key)
+        #         update_fn(alphas, alphas_polyak, idx, features, opt_states, target_tuples)
+        #     config.batch_size = optim_utils.select_dynamic_batch_size(train_ds.N, partial_fn)
+        #     print(f"Selected batch size: {config.batch_size}, (N = {train_ds.N}, D = {train_ds.D}, "
+        #           f"length_scale dims: {self.kernel.get_length_scale().shape[-1]})")
+        # assert config.batch_size > 0
         idx_fn = optim_utils.get_idx_fn(config.batch_size, train_ds.N, config.iterative_idx, share_idx=False)
 
-        # force JIT
+        # # force JIT
         idx = idx_fn(0, idx_key)
         update_fn(alphas, alphas_polyak, idx, features, opt_states, target_tuples)
 
@@ -206,16 +224,17 @@ class SGDGPModel(GPModel):
 
             idx = idx_fn(i, idx_key)
 
+            # 0, 0, None, None, 0, 0
             alphas, alphas_polyak, opt_states = update_fn(alphas, alphas_polyak, idx, features, opt_states, target_tuples)
 
             if i % config.eval_every == 0:
-                vmapped_eval_metrics = eval_fn(alphas_polyak, idx, features, target_tuples)
+                pmapped_and_vmapped_eval_metrics = eval_fn(alphas_polyak, idx, features, target_tuples)
 
                 aux_metrics = {}
                 if "test_llh" in metrics_list or "normalised_test_llh" in metrics_list:
                     y_pred_loc = self.predictive_mean(train_ds, test_ds, recompute=False)
                     zero_mean_posterior_samples = compute_posterior_samples_fn(alphas_polyak, f0_samples_test)
-                    y_pred_variance = self.predictive_variance_samples(zero_mean_posterior_samples, add_likelihood_noise=True)
+                    y_pred_variance = self.predictive_variance_samples(zero_mean_posterior_samples.reshape(n_samples, test_ds.N), add_likelihood_noise=True)
                     del zero_mean_posterior_samples
                     if "test_llh" in metrics_list:
                         aux_metrics['test_llh'] = mean_LLH(
@@ -225,11 +244,11 @@ class SGDGPModel(GPModel):
                     del y_pred_loc, y_pred_variance
 
                 if wandb.run is not None:
-                    wandb.log({**process_pmapped_and_vmapped_metrics(vmapped_eval_metrics),
+                    wandb.log({**process_pmapped_and_vmapped_metrics(pmapped_and_vmapped_eval_metrics),
                             **{'sample_step': i},
                             **aux_metrics})
 
-                aux.append(vmapped_eval_metrics)
+                aux.append(pmapped_and_vmapped_eval_metrics)
 
         print(f'alphas_polyak: {alphas_polyak.shape}')
         

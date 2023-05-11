@@ -82,7 +82,7 @@ def main(config):
                     "mll": mll / train_ds.N})
 
             # Define exact metrics that we will use later to compare with stochastic solution
-            exact_metrics = ExactPredictionsTuple(
+            ExactPredictionsTuple(
                 alpha=exact_model.alpha,
                 y_pred_loc=y_pred_exact
             )
@@ -91,19 +91,20 @@ def main(config):
         model = SGDGPModel(hparams.noise_scale, kernel)
 
         metrics_list = ["loss", "test_rmse", "err", "reg", "normalised_test_rmse"]
+        # metrics_list.extend(["test_llh", "normalised_test_llh"])
         if config.compute_exact_soln:
             metrics_list.extend(["alpha_diff", "y_pred_diff", "alpha_rkhs_diff"])
 
         # Compute the SGD MAP solution for representer weights.
-        model.compute_representer_weights(
-            optim_key,
-            train_ds,
-            test_ds,
-            config.train_config,
-            metrics_list=metrics_list,
-            metrics_prefix="train",
-            exact_metrics=exact_metrics if config.compute_exact_soln else None,
-        )
+        # model.compute_representer_weights(
+        #     optim_key,
+        #     train_ds,
+        #     test_ds,
+        #     config.train_config,
+        #     metrics_list=metrics_list,
+        #     metrics_prefix="train",
+        #     exact_metrics=exact_metrics if config.compute_exact_soln else None,
+        # )
         
         zero_mean_samples, alpha_samples, _, _ = model.compute_posterior_samples(
             sampling_key,

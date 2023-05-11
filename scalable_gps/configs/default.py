@@ -94,10 +94,10 @@ def get_config(config_string):
     config.sampling_config.n_samples = 16
     # Full-batch training configs that get passed
     config.sampling_config.iterative_idx = True
-    config.sampling_config.learning_rate = 1e-3
+    config.sampling_config.learning_rate = 1e-1
     config.sampling_config.momentum = 0.9
-    config.sampling_config.polyak = 1e-3
-    config.sampling_config.iterations = 50000
+    config.sampling_config.polyak = 100 / config.train_config.iterations
+    config.sampling_config.iterations = 100000
     config.sampling_config.batch_size = 512
     config.sampling_config.eval_every = 100
     # RFF Configs
