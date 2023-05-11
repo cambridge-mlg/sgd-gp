@@ -31,13 +31,17 @@ class HparamsTuple(NamedTuple):
     signal_scale: float
     length_scale: Union[float, Array]
 
+
 def get_gpu_or_cpu_device():
     if jax.default_backend() == "gpu":
-        return jax.devices('gpu')[0]
+        return jax.devices("gpu")[0]
     else:
-        return jax.devices('cpu')[0]
+        return jax.devices("cpu")[0]
 
-def apply_z_score(data: Array, mu: Optional[Array]=None, sigma: Optional[Array]=None):
+
+def apply_z_score(
+    data: Array, mu: Optional[Array] = None, sigma: Optional[Array] = None
+):
     if (mu is not None) and (sigma is not None):
         return (data - mu) / sigma
     else:
@@ -103,16 +107,19 @@ def setup_training(wandb_run):
 def get_tuned_hparams(d_name: str, split: int):
     n_seeds = 10
     import pickle
+
     api = wandb.Api()
-    
+
     noise_scales = []
     signal_scales = []
     length_scales = []
-    
+
     for i in range(n_seeds):
         hparams_artifact_name = f"hparams_{d_name}_{split}_{i}"
-        
-        artifact = api.artifact(f"shreyaspadhy/scalable-gps/{hparams_artifact_name}:latest")
+
+        artifact = api.artifact(
+            f"shreyaspadhy/scalable-gps/{hparams_artifact_name}:latest"
+        )
         data = pickle.load(open(artifact.file(), "rb"))
         noise_scales.append(data.noise_scale)
         signal_scales.append(data.signal_scale)
@@ -121,8 +128,9 @@ def get_tuned_hparams(d_name: str, split: int):
     mean_hparams = HparamsTuple(
         noise_scale=float(jnp.mean(jnp.array(noise_scales))),
         signal_scale=float(jnp.mean(jnp.array(signal_scales))),
-        length_scale=jnp.mean(jnp.array(length_scales), axis=0))
-    
+        length_scale=jnp.mean(jnp.array(length_scales), axis=0),
+    )
+
     return mean_hparams
 
 
@@ -130,12 +138,11 @@ def process_vmapped_metrics(vmapped_metrics):
     mean_metrics, std_metrics = {}, {}
     for k, v in vmapped_metrics.items():
         vmapped_metrics[k] = wandb.Histogram(v)
-        mean_metrics[f'{k}_mean'] = jnp.mean(v)
-        std_metrics[f'{k}_std'] = jnp.std(v)
-        
+        mean_metrics[f"{k}_mean"] = jnp.mean(v)
+        std_metrics[f"{k}_std"] = jnp.std(v)
+
     return {**vmapped_metrics, **mean_metrics, **std_metrics}
-    
-    
-    
-if __name__ == '__main__':
+
+
+if __name__ == "__main__":
     pass
