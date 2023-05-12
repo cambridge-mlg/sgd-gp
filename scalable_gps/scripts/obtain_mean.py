@@ -143,6 +143,11 @@ def main(config):
             metrics_list.extend(["alpha_diff", "y_pred_diff", "alpha_rkhs_diff"])
 
         # Compute the SGD MAP solution for representer weights.
+        
+        artifact_name = f"alpha_{config.dataset_name}_{config.model_name}_{config.dataset_config.split}"
+        if config.override_noise_scale > 0.0:
+            artifact_name += f"_noise_{config.override_noise_scale}"
+    
         alpha, aux = model.compute_representer_weights(
             optim_key,
             train_ds,
@@ -151,6 +156,7 @@ def main(config):
             metrics_list=metrics_list,
             metrics_prefix="train",
             exact_metrics=exact_metrics if config.compute_exact_soln else None,
+            artifact_name=artifact_name,
         )
 
         y_pred = model.predictive_mean(train_ds, test_ds)

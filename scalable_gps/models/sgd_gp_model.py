@@ -21,7 +21,9 @@ from scalable_gps.optim_utils import get_lr, get_lr_and_schedule
 from scalable_gps.utils import (
     ExactPredictionsTuple,
     TargetTuple,
+    get_latest_saved_artifact,
     process_pmapped_and_vmapped_metrics,
+    save_latest_artifact,
 )
 
 
@@ -39,6 +41,7 @@ class SGDGPModel(GPModel):
         metrics_prefix: str = "",
         exact_metrics: Optional[ExactPredictionsTuple] = None,
         recompute: Optional[bool] = None,
+        artifact_name: Optional[str] = None,
     ):
         del recompute
         """Compute the representer weights alpha by solving alpha = (K + sigma^2 I)^{-1} y using SGD."""
@@ -101,12 +104,34 @@ class SGDGPModel(GPModel):
         update_fn(alpha, alpha_polyak, idx, features, opt_state, target_tuple)
         
         wall_clock_time = 0.
+        
+        ########### ADD PREEMPTIBLE SAFE CKPT LOADING AND SAVING ####################
+        all_save_steps = list(jnp.arange(0, config.iterations, config.iterations // 10).astype(int))[1:]
+        print(f'All save steps: {all_save_steps}')
+        most_recent_artifact_data = None
+        if config.preempt_safe:
+            most_recent_artifact_data = get_latest_saved_artifact(
+                artifact_name, all_save_steps)
+            print(f'Most recent artifact data: {most_recent_artifact_data}')
+        
+        if most_recent_artifact_data is not None:
+            restart_step = most_recent_artifact_data["train_step"]
+            alpha = most_recent_artifact_data["alpha"]
+            alpha_polyak = most_recent_artifact_data["alpha_polyak"]
+            opt_state = most_recent_artifact_data["opt_state"]
+
+            wall_clock_time = most_recent_artifact_data["wall_clock_time"]
+        
+    
 
         aux = []
         for i in tqdm(range(config.iterations)):
             key, idx_key, feature_key = jr.split(key, 3)
             features = feature_fn(feature_key)
             idx = idx_fn(i, idx_key)
+            
+            if most_recent_artifact_data is not None and i < restart_step:
+                continue
             start_time = time.time()
             alpha, alpha_polyak, opt_state = update_fn(alpha, alpha_polyak, idx, features, opt_state, target_tuple)
             alpha.block_until_ready()
@@ -129,6 +154,17 @@ class SGDGPModel(GPModel):
                         }
                     )
                 aux.append(eval_metrics)
+            
+            if config.preempt_safe and i % (config.iterations // 10) == 0 and i > 0:
+                artifact_data = {
+                    'alpha': alpha,
+                    'alpha_polyak': alpha_polyak,
+                    'opt_state': opt_state,
+                    'train_step': i,
+                    'wall_clock_time': wall_clock_time}
+                save_artifact_name = f"{artifact_name}_{i}"
+                print(f'Saving artifact at step {i}, {save_artifact_name}')
+                save_latest_artifact(artifact_data, save_artifact_name)
 
         self.alpha = alpha_polyak
         return self.alpha, aux

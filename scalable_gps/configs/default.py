@@ -68,6 +68,7 @@ def get_config(config_string):
     config.train_config.iterations = 100000
     config.train_config.batch_size = 512
     config.train_config.eval_every = 1000
+    config.train_config.preempt_safe = False
     config.train_config.time_budget_in_seconds = 0.0
     config.train_config.eval_every_in_seconds = 0.0
     # RFF Configs
@@ -138,6 +139,7 @@ def get_config(config_string):
     config.cg_config.pivoted_diag_rtol = 1e-3
     config.cg_config.pivoted_jitter = 1.0
     config.cg_config.loss_objective = 2
+    config.cg_config.preempt_safe = False
 
     config.cg_sampling_config = ml_collections.ConfigDict()
     config.cg_sampling_config.batch_size = 512

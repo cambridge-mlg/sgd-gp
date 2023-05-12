@@ -1,6 +1,6 @@
 import os
 from collections.abc import MutableMapping
-from typing import NamedTuple, Optional, Union
+from typing import List, NamedTuple, Optional, Union
 
 import jax
 import jax.numpy as jnp
@@ -120,8 +120,9 @@ def get_tuned_hparams(d_name: str, split: int):
         artifact = api.artifact(
             f"shreyaspadhy/scalable-gps/{hparams_artifact_name}:latest"
         )
-        from scalable_gps import utils
         import sys
+
+        from scalable_gps import utils
 
         sys.modules["utils"] = utils
 
@@ -146,8 +147,9 @@ def get_clustered_indices(d_name: str, split: int, lengthscale_ratio: float):
 
     name = f"clustered_indices_{d_name}_{split}_lengthscale_ratio_{lengthscale_ratio}"
     artifact = api.artifact(f"shreyaspadhy/scalable-gps/{name}:latest")
-    from scalable_gps import utils
     import sys
+
+    from scalable_gps import utils
 
     sys.modules["utils"] = utils
 
@@ -160,8 +162,9 @@ def get_map_solution(
 ):
     api = wandb.Api()
     import pickle
-    from scalable_gps import utils
     import sys
+
+    from scalable_gps import utils
 
     sys.modules["utils"] = utils
 
@@ -173,6 +176,57 @@ def get_map_solution(
     data = pickle.load(open(artifact.file(), "rb"))
     return data
 
+def get_latest_saved_artifact(
+    artifact_name: str, all_save_steps: List[int]):
+    
+    api = wandb.Api()
+    import pickle
+    import sys
+
+    from scalable_gps import utils
+
+    sys.modules["utils"] = utils
+    
+    data = None
+    artifact_loaded = False
+
+    for i in all_save_steps:
+        saved_artifact_name = f"{artifact_name}_{i}"
+        
+        try:
+            artifact = api.artifact(f"shreyaspadhy/scalable-gps/{saved_artifact_name}:latest")
+            data = pickle.load(open(artifact.file(), "rb"))
+            artifact_loaded = True
+            print(f'Loaded {saved_artifact_name}')
+        except wandb.CommError:
+            print(f'Failed to load {saved_artifact_name}')
+            if artifact_loaded:
+                break
+
+    if data is None:
+        print("No artifacts found.")
+    
+    return data
+
+def save_latest_artifact(
+    artifact_data, artifact_name):
+    
+    import pickle
+    import sys
+
+    from scalable_gps import utils
+
+    sys.modules["utils"] = utils
+
+    save_artifact = wandb.Artifact(
+        artifact_name,
+        type="saved_ckpt",
+        description="saved checkpoint",)
+                
+    with save_artifact.new_file("saved_ckpt.pkl", "wb") as f:
+        pickle.dump(artifact_data, f)
+    
+    wandb.log_artifact(save_artifact)
 
 def process_pmapped_and_vmapped_metrics(pmapped_and_vmapped_metrics):
     mean_metrics, std_metrics = {}, {}

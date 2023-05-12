@@ -19,7 +19,9 @@ from scalable_gps.linalg_utils import KvP, pivoted_cholesky
 from scalable_gps.models.exact_gp_model import ExactGPModel
 from scalable_gps.utils import (
     ExactPredictionsTuple,
+    get_latest_saved_artifact,
     process_pmapped_and_vmapped_metrics,
+    save_latest_artifact,
 )
 
 
@@ -90,6 +92,7 @@ class CGGPModel(ExactGPModel):
         metrics_prefix: str = "",
         exact_metrics: Optional[ExactPredictionsTuple] = None,
         recompute: Optional[bool] = None,
+        artifact_name: Optional[str] = None,
     ) -> Array:
         del recompute
         """Compute representer weights alpha by solving a linear system using Conjugate Gradients."""
@@ -161,13 +164,44 @@ class CGGPModel(ExactGPModel):
         cg_state = None
 
         wall_clock_time = 0.0
+        
+        ########### ADD PREEMPTIBLE SAFE CKPT LOADING AND SAVING ####################
+        all_save_steps = list(jnp.arange(0, config.maxiter, config.maxiter // 10).astype(int))[1:]
+        print(f'All save steps: {all_save_steps}')
+        most_recent_artifact_data = None
+        if config.preempt_safe:
+            most_recent_artifact_data = get_latest_saved_artifact(
+                artifact_name, all_save_steps)
+            print(f'Most recent artifact data: {most_recent_artifact_data}')
+        
+        if most_recent_artifact_data is not None:
+            restart_step = most_recent_artifact_data["train_step"]
+            alpha = most_recent_artifact_data["alpha"]
+            cg_state = most_recent_artifact_data["cg_state"]
+            wall_clock_time = most_recent_artifact_data["wall_clock_time"]
+        
         for i in tqdm(range(0, config.maxiter, config.eval_every)):
+            if most_recent_artifact_data is not None and i < restart_step:
+                continue
             start_time = time.time()
             alpha, cg_state = cg_fn(train_ds.y, cg_state, i)
             alpha.block_until_ready()
             end_time = time.time()
             eval_metrics = eval_fn(alpha, i, None, None)
             wall_clock_time += end_time - start_time
+            
+            if config.preempt_safe and i in all_save_steps:
+                artifact_data = {
+                    'alpha': alpha,
+                    'cg_state': cg_state,
+                    'train_step': i,
+                    'wall_clock_time': wall_clock_time}
+                save_artifact_name = f"{artifact_name}_{i}"
+                print(f'Saving artifact at step {i}, {save_artifact_name}')
+                save_latest_artifact(artifact_data, save_artifact_name)
+                
+
+                
 
             if wandb.run is not None:
                 wandb.log(
