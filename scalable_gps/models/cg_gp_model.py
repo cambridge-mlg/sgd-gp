@@ -180,6 +180,7 @@ class CGGPModel(ExactGPModel):
                         **eval_metrics,
                         **{
                             "train_step": i,
+                            "residual": cg_state[2].real,
                             "wall_clock_time": wall_clock_time + precond_time,
                         },
                     }
@@ -337,6 +338,11 @@ class CGGPModel(ExactGPModel):
         alphas = None
         cg_states = None
 
+        @jax.jit
+        @jax.vmap
+        def get_residual(cg_state):
+            return {"residual": cg_state[2].real}
+
         for i in tqdm(range(0, config.maxiter, config.eval_every)):
             alphas, cg_states = cg_fn(
                 f0_samples_train + eps0_samples, cg_states, i
@@ -371,6 +377,7 @@ class CGGPModel(ExactGPModel):
                 wandb.log(
                     {
                         **process_vmapped_metrics(vmapped_eval_metrics),
+                        **process_vmapped_metrics(get_residual(cg_states)),
                         **{"sample_step": i},
                         **aux_metrics,
                     }

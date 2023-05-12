@@ -13,8 +13,15 @@ from scalable_gps.utils import apply_z_score
 KwArgs = Any
 
 
+class ThompsonDataset(NamedTuple):
+    x: Array
+    y: Array
+    N: int
+    D: int
+
+
 @dataclass
-class Dataset:  # NamedTuple
+class Dataset:
     x: Array
     y: Array
     N: int

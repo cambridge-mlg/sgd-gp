@@ -7,7 +7,7 @@ from ml_collections import ConfigDict
 from typing import Callable, NamedTuple, Optional
 
 from scalable_gps.kernels import Kernel, FeatureParams, featurise
-from scalable_gps.data import Dataset
+from scalable_gps.data import ThompsonDataset
 from scalable_gps.models.base_gp_model import GPModel
 import chex
 from functools import partial
@@ -15,7 +15,7 @@ import wandb
 
 
 class ThompsonState(NamedTuple):
-    ds: Dataset
+    ds: ThompsonDataset
     feature_params: FeatureParams
     true_w: Array
     max_fn_value: float
@@ -58,7 +58,7 @@ def init(
     y_init = featurise(x_init, params) @ w
     y_init = y_init + jr.normal(noise_key, shape=y_init.shape) * noise_scale
 
-    ds_init = Dataset(x_init, y_init, n_init, D)
+    ds_init = ThompsonDataset(x_init, y_init, n_init, D)
 
     idx = jnp.argmax(y_init)
     argmax, max_fn_value = x_init[idx], y_init[idx]
@@ -90,7 +90,7 @@ def update_state(key: PRNGKey, state: ThompsonState, x_besties: Array):
     y = jnp.concatenate([state.ds.y, y_besties], axis=0)
     N = state.ds.N + x_besties.shape[0]
     # construct updated state dataset
-    ds = Dataset(x, y, N, state.ds.D)
+    ds = ThompsonDataset(x, y, N, state.ds.D)
 
     # find maximum of besties
     idx = jnp.argmax(y_besties)
@@ -114,8 +114,8 @@ def update_state(key: PRNGKey, state: ThompsonState, x_besties: Array):
     return updated_state
 
 
-def fake_dataset_like(dataset: Dataset):
-    return Dataset(x=dataset.x[:1], y=dataset.y[:1], N=1, D=dataset.D)
+def fake_dataset_like(dataset: ThompsonDataset):
+    return ThompsonDataset(x=dataset.x[:1], y=dataset.y[:1], N=1, D=dataset.D)
 
 
 def get_thompson_step_fn(
@@ -155,7 +155,7 @@ def get_thompson_step_fn(
                 test_ds=test_ds,
                 config=inference_config_representer,
                 metrics_list=["loss", "err", "reg"],
-                metrics_prefix=f"Thompson_{i}/alpha_MAP",
+                metrics_prefix="train",
                 exact_metrics=None,
                 recompute=True,
             )
@@ -191,7 +191,7 @@ def get_thompson_step_fn(
                 L=L,
                 zero_mean=False,
                 metrics_list=["loss", "err", "reg"],
-                metrics_prefix=f"Thompson_{i}/alpha_samples",
+                metrics_prefix="sample",
             )
 
             # function optimisation starts here

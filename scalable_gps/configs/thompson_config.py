@@ -4,33 +4,34 @@ import ml_collections
 def get_config():
     config = ml_collections.ConfigDict()
     config.use_tpu = False
+    config.compute_exact_soln = False
 
     config.thompson = ml_collections.ConfigDict()
     config.thompson.use_tpu = False
 
-    config.thompson.seed = 1337
-    config.thompson.D = 64 # try 32, 64, 128, 256
+    config.thompson.seed = 0
+    config.thompson.D = 8 # try 8, 16
 
-    config.thompson.model_name = "CGGP"
+    config.thompson.model_name = "SGDGP"
     config.thompson.kernel_name = "Matern32Kernel" # try 5/2
     config.thompson.signal_scale = 1.0
-    config.thompson.length_scale = (1.0,) # try 0.25, 0.5, 0.75, 1., 1.25, 1.5
+    config.thompson.length_scale = 0.5 # try 0.1, 0.2, 0.3, 0.4, 0.5
 
     config.thompson.noise_scale = 1e-3
 
-    config.thompson.iterations = 20
+    config.thompson.iterations = 30
 
     config.thompson.n_features = 5000
 
-    config.thompson.n_init = 50000
+    config.thompson.n_init = 50000 # 50k
     config.thompson.init_method = "uniform" # try "trunc_normal"
 
-    config.thompson.friends_iterations = 10
-    config.thompson.n_friends = 100000
-    config.thompson.n_homies = 10 // config.thompson.friends_iterations
+    config.thompson.friends_iterations = 30
+    config.thompson.n_friends = 50000
+    config.thompson.n_homies = 30 // config.thompson.friends_iterations
     config.thompson.n_besties = 1
 
-    config.thompson.n_samples = 500
+    config.thompson.n_samples = 1000
 
     config.thompson.find_friends_method = "nearby" # uniform
 
@@ -48,10 +49,10 @@ def get_config():
     config.cg_config = ml_collections.ConfigDict()
 
     config.cg_config.batch_size = 1
-    config.cg_config.maxiter = 100
+    config.cg_config.maxiter = 10 # 10, 50
     config.cg_config.eval_every = 1
 
-    config.cg_config.tol = 1e-2
+    config.cg_config.tol = 0.0
     config.cg_config.atol = 0.0
 
     config.cg_config.preconditioner = False
@@ -71,7 +72,7 @@ def get_config():
 
     # Optimisation Configs
 
-    config.train_config.iterations = 50000
+    config.train_config.iterations = 1000 # 10k, 50k
     config.train_config.batch_size = 500
     config.train_config.eval_every = 100
     config.train_config.time_budget_in_seconds = 0.
@@ -91,7 +92,7 @@ def get_config():
     config.sampling_config = config.train_config.copy_and_resolve_references()
 
     config.sampling_config.iterative_idx = True
-    config.sampling_config.learning_rate = 1e-3
+    config.sampling_config.learning_rate = 1e-3 # double learning rate
     config.sampling_config.loss_objective = 2
 
     # VI
@@ -99,11 +100,11 @@ def get_config():
     config.vi_config = ml_collections.ConfigDict()
     config.vi_config = config.thompson.copy_and_resolve_references()
 
-    config.vi_config.iterations = 10000
-    config.vi_config.batch_size = 100
+    config.vi_config.iterations = 50000 # small compute: 20k, large compute 100x
+    config.vi_config.batch_size = 500
     config.vi_config.num_inducing_points = 1024
     config.vi_config.inducing_init = "kmeans"
-    config.vi_config.learning_rate = 1e-3
+    config.vi_config.learning_rate = 5e-4
     config.vi_config.absolute_clipping = 0.1
     config.kernel_name = config.thompson.kernel_name
 

@@ -7,8 +7,8 @@ SCRIPT = "scripts/thompson_sampling.py"
 TIME = "24:00:00"
 
 model_names = ["CGGP", "SGDGP", "SVGP"]
-dims = [8, 16, 32, 64]
-length_scales = [0.25, 0.5, 0.75, 1.0, 1.25]
+dims = [8, 16]
+length_scales = [0.5, 1.0]
 
 # delete and create job folder
 jobsfolder = Path(f'./{JOBS_FOLDER}')
