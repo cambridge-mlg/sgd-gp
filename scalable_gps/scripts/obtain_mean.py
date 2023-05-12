@@ -17,10 +17,10 @@ from scalable_gps.utils import (
     ExactPredictionsTuple,
     HparamsTuple,
     flatten_nested_dict,
+    get_clustered_indices,
     get_tuned_hparams,
     setup_training,
     update_config_dict,
-    get_clustered_indices,
 )
 
 ml_collections.config_flags.DEFINE_config_file(
@@ -135,8 +135,8 @@ def main(config):
                     config.dataset_config.split,
                     lengthscale_ratio=config.vi_config.clustering_length_scale_ratio,
                 )
-            print(f"loaded {len(keep_indices)} keep indices from clustering")
-            train_ds.z = train_ds.x[keep_indices]
+                print(f"loaded {len(keep_indices)} keep indices from clustering")
+                train_ds.z = train_ds.x[keep_indices]
 
         metrics_list = ["loss", "err", "reg", "normalised_test_rmse", "test_rmse"]
         if config.compute_exact_soln:

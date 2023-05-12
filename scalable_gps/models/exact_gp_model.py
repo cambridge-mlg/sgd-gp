@@ -1,4 +1,4 @@
-from typing import Callable, Optional, List
+from typing import Callable, List, Optional, Tuple
 
 import chex
 import jax
@@ -33,7 +33,7 @@ class ExactGPModel(GPModel):
         metrics_prefix: Optional[str] = None,
         exact_metrics: Optional[List] = None,
         key: Optional[chex.PRNGKey] = None,
-    ) -> Array:
+    ) -> Tuple[Array, Optional[HparamsTuple]]:
         del test_ds, config, metrics_list, metrics_prefix, exact_metrics, key
         """Compute the representer weights alpha by solving alpha = (K + sigma^2 I)^{-1} y"""
 
@@ -44,7 +44,7 @@ class ExactGPModel(GPModel):
         # Compute the representer weights by solving alpha = (K + sigma^2 I)^{-1} y
         self.alpha = solve_K_inv_v(self.K, train_ds.y, noise_scale=self.noise_scale)
 
-        return self.alpha
+        return self.alpha, None
 
     def predictive_variance(
         self, train_ds: Dataset, test_ds: Dataset, add_likelihood_noise: bool=False, return_marginal_variance: bool = True) -> Array:

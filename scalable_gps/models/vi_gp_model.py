@@ -93,7 +93,7 @@ class SVGPModel:
         del recompute, train_ds
 
         test_preds = []
-        x_test_split = jnp.split(test_ds.x, batch_size)
+        x_test_split = jnp.array_split(test_ds.x, batch_size)
         for x in x_test_split:
             (
                 _,
@@ -122,7 +122,7 @@ class SVGPModel:
         # NOTE: THIS INCLUDES OBSERVATION NOISE
         if return_marginal_variance:
             test_preds = []
-            x_test_split = jnp.split(test_ds.x, batch_size)
+            x_test_split = jnp.array_split(test_ds.x, batch_size)
             for x in x_test_split:
                 (
                     _,
