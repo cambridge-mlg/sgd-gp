@@ -19,7 +19,7 @@ def solve_K_inv_v(K: Array, v: Array, noise_scale: float):
 def KvP(x1: Array, x2: Array, v: Array, kernel_fn: Kernel_fn, batch_size=1, **kernel_kwargs):
     def _KvP(_, idx):
         return _, kernel_fn(x1[idx], x2, **kernel_kwargs) @ v
-    batch_size = 1
+
     n1, d1 = x1.shape
     if (n1 % batch_size) > 0:
         padding = batch_size - (n1 % batch_size)

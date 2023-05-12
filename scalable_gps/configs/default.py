@@ -63,7 +63,7 @@ def get_config(config_string):
     # Full-batch training configs that get passed
     config.train_config.iterations = 100000
     config.train_config.batch_size = 512
-    config.train_config.eval_every = 100
+    config.train_config.eval_every = 1000
     config.train_config.time_budget_in_seconds = 0.
     config.train_config.eval_every_in_seconds = 0.
     # RFF Configs
@@ -99,7 +99,7 @@ def get_config(config_string):
     config.sampling_config.polyak = 100 / config.train_config.iterations
     config.sampling_config.iterations = 100000
     config.sampling_config.batch_size = 512
-    config.sampling_config.eval_every = 100
+    config.sampling_config.eval_every = 1000
     # RFF Configs
     config.sampling_config.n_features_prior_sample = 2000
     config.sampling_config.n_features_optim = 100
