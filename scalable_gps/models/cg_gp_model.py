@@ -19,7 +19,7 @@ from scalable_gps.linalg_utils import KvP, pivoted_cholesky
 from scalable_gps.models.exact_gp_model import ExactGPModel
 from scalable_gps.utils import (
     ExactPredictionsTuple,
-    process_vmapped_metrics,
+    process_pmapped_and_vmapped_metrics,
 )
 
 
@@ -267,7 +267,7 @@ class CGGPModel(ExactGPModel):
                     aux_metrics['normalised_test_llh'] = LLH(test_ds.y, y_pred_loc, y_pred_scale)
                 del y_pred_loc, y_pred_scale
             if wandb.run is not None:
-                wandb.log({**process_vmapped_metrics(vmapped_eval_metrics),
+                wandb.log({**process_pmapped_and_vmapped_metrics(vmapped_eval_metrics),
                             **{'sample_step': i},
                             **aux_metrics})
 

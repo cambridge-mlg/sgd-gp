@@ -20,7 +20,7 @@ from scalable_gps.optim_utils import get_lr, get_lr_and_schedule
 from scalable_gps.utils import (
     ExactPredictionsTuple,
     TargetTuple,
-    process_vmapped_metrics,
+    process_pmapped_and_vmapped_metrics,
 )
 
 
@@ -229,7 +229,7 @@ class SGDGPModel(GPModel):
                     del y_pred_loc, y_pred_scale
 
                 if wandb.run is not None:
-                    wandb.log({**process_vmapped_metrics(vmapped_eval_metrics),
+                    wandb.log({**process_pmapped_and_vmapped_metrics(vmapped_eval_metrics),
                             **{'sample_step': i},
                             **aux_metrics})
 
