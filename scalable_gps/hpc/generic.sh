@@ -92,6 +92,6 @@ else
 fi
 
 # Submit the job
-CMD="srun python $JOB_CMD"
+CMD="srun $JOB_CMD"
 echo $CMD
 eval $CMD

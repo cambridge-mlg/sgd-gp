@@ -155,7 +155,7 @@ def get_thompson_step_fn(
                 test_ds=test_ds,
                 config=inference_config_representer,
                 metrics_list=["loss", "err", "reg"],
-                metrics_prefix=f"Thompson_{i}/alpha_MAP",
+                metrics_prefix="train",
                 exact_metrics=None,
                 recompute=True,
             )
@@ -191,7 +191,7 @@ def get_thompson_step_fn(
                 L=L,
                 zero_mean=False,
                 metrics_list=["loss", "err", "reg"],
-                metrics_prefix=f"Thompson_{i}/alpha_samples",
+                metrics_prefix="sample",
             )
 
             # function optimisation starts here

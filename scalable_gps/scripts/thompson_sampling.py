@@ -46,10 +46,10 @@ def main(config):
         kernel = kernel_init_fn(
             {
                 "signal_scale": config.thompson.signal_scale,
-                "length_scale": jnp.array(config.thompson.length_scale),
+                "length_scale": jnp.array([config.thompson.length_scale]),
             }
         )
-        kernel.kernel_config["use_ard"] = len(config.thompson.length_scale) > 1
+        kernel.kernel_config["use_ard"] = False
 
         key = jr.PRNGKey(config.thompson.seed)
         optim_key, init_key = jr.split(key)

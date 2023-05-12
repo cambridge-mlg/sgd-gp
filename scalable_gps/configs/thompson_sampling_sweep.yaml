@@ -1,0 +1,25 @@
+entity: shreyaspadhy
+project: scalable-gps
+program: scripts/thompson_sampling.py
+
+method: grid
+parameters:
+  thompson.model_name:
+    values: ["SVGP"]
+  thompson.seed:
+    values: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+  thompson.D:
+    values: [8]
+  thompson.length_scale:
+    values: [0.1, 0.2, 0.3, 0.4, 0.5]
+  vi_config.iterations:
+    values: [100000]
+
+command:
+  - python
+  - ${program}
+  - 17bb59c7a4e186597fe98347175642c99c8403e2
+  - --config
+  - configs/thompson_config.py
+  - --config.wandb.log
+  - --noconfig.compute_exact_soln
