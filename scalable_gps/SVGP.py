@@ -53,12 +53,10 @@ def regression_SVGP(
     p = prior * likelihood
 
     if inducing_init == "kmeans":
-        
         if train_dataset.z is not None:
             to_cluster = train_dataset.z
         else:
             to_cluster = train_dataset.x
-            
         z, _ = kmeans(key, to_cluster, k=num_inducing, thresh=1e-3)
         raw_counts = centroids_counts(train_dataset.x, z)
         z = z[raw_counts > 0]
