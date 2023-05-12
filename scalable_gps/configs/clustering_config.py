@@ -12,7 +12,7 @@ def get_config():
     config.dataset_split = 0
 
     config.lengthscale_ratio = 2.0
-    config.lengthscale_percentile = 25
+    config.lengthscale_percentile = 20
 
     # WANDB
     config.wandb = ml_collections.ConfigDict()

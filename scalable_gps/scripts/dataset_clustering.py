@@ -17,13 +17,14 @@ from scalable_gps.utils import (
     setup_training,
     update_config_dict,
     get_tuned_hparams,
+    get_clustered_indices,
 )
 from scalable_gps.knn import annoy_cluster_dataset
 
 
 ml_collections.config_flags.DEFINE_config_file(
     "config",
-    "configs/clustering_config.py",
+    "/home/ja666/rds/hpc-work/scalable-gaussian-processes/scalable_gps/configs/clustering_config.py",
     "Clustering configuration.",
     lock_config=True,
 )
@@ -47,6 +48,15 @@ def main(config):
         # If there are any config values dependent on sweep values, recompute them here.
         computed_configs = {}
         update_config_dict(config, run, computed_configs)
+
+        try:
+            get_clustered_indices(
+                config.dataset_name, config.dataset_split, config.lengthscale_ratio
+            )
+            print("clustering already saved")
+            return
+        except:
+            pass
 
         print(config)
         train_ds, test_ds = get_dataset(config.dataset_name, split=config.dataset_split)
@@ -105,10 +115,10 @@ if __name__ == "__main__":
     import os
     import sys
 
-    # if sys.argv:
-    # pass wandb API as argv[1] and set environment variable
-    # 'python mll_optim.py MY_API_KEY'
-    # os.environ["WANDB_API_KEY"] = sys.argv[1]
+    if sys.argv:
+        # pass wandb API as argv[1] and set environment variable
+        # 'python mll_optim.py MY_API_KEY'
+        os.environ["WANDB_API_KEY"] = sys.argv[1]
 
     # Adds jax flags to the program.
     # jax.config.config_with_absl()

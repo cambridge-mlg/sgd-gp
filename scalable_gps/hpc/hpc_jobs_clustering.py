@@ -3,7 +3,7 @@ from pathlib import Path
 EXPERIMENT_NAME = "clustering"
 JOBS_FOLDER = f"hpc-jobs-clustering"
 DELETE_PREV_FOLDER = True
-SCRIPT = "dataset_clustering.py"
+SCRIPT = "/home/ja666/rds/hpc-work/scalable-gaussian-processes/scalable_gps/scripts/dataset_clustering.py"
 TIME = "03:00:00"
 
 datasets = [
@@ -47,11 +47,11 @@ with open(jobsfile, "w") as f:
                 # pass wandb API key as argv[0]
                 line = (
                     f"{SCRIPT} 199c473d24b2682c6b0291b49241f5781e65a655 "
-                    f"--config configs/default.py "
+                    f"--config /home/ja666/rds/hpc-work/scalable-gaussian-processes/scalable_gps/configs/clustering_config.py "
                     f"--config.dataset_name {dataset} "
                     f"--config.dataset_split {split} "
                     f"--config.lengthscale_ratio {ratio} "
                     f"--config.wandb.log "
                     f"--config.wandb.name clustering_{dataset}_split={split}_ratio={ratio}\n"
                 )
-            f.write(line)
+                f.write(line)

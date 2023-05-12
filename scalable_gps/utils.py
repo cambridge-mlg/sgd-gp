@@ -120,6 +120,11 @@ def get_tuned_hparams(d_name: str, split: int):
         artifact = api.artifact(
             f"shreyaspadhy/scalable-gps/{hparams_artifact_name}:latest"
         )
+        from scalable_gps import utils
+        import sys
+
+        sys.modules["utils"] = utils
+
         data = pickle.load(open(artifact.file(), "rb"))
         noise_scales.append(data.noise_scale)
         signal_scales.append(data.signal_scale)
@@ -132,6 +137,22 @@ def get_tuned_hparams(d_name: str, split: int):
     )
 
     return mean_hparams
+
+
+def get_clustered_indices(d_name: str, split: int, lengthscale_ratio: float):
+    import pickle
+
+    api = wandb.Api()
+
+    name = f"clustered_indices_{d_name}_{split}_lengthscale_ratio_{lengthscale_ratio}"
+    artifact = api.artifact(f"shreyaspadhy/scalable-gps/{name}:latest")
+    from scalable_gps import utils
+    import sys
+
+    sys.modules["utils"] = utils
+
+    data = pickle.load(open(artifact.file(), "rb"))
+    return data
 
 
 def process_vmapped_metrics(vmapped_metrics):

@@ -33,7 +33,8 @@ def generate_close_pair_dict(data, t, num_points, num_neighbours, max_dist):
 
     for i in range(num_points):
         NNs = t.get_nns_by_item(i, num_neighbours)
-        NNs.remove(i)
+        if i in NNs:
+            NNs.remove(i)
         NNs = np.array(NNs)
         dists = ((data[i][None, :] - data[NNs]) ** 2).sum(
             axis=-1
