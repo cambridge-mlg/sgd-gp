@@ -1,4 +1,3 @@
-
 from functools import partial
 from typing import Any, List, Optional
 
@@ -34,7 +33,7 @@ class SVGPModel:
             num_inducing=config.vi_config.num_inducing_points,
             kernel_name=config.kernel_name,
             kernel_config=self.kernel.kernel_config,
-            ARD=len(self.kernel.kernel_config['length_scale']) > 1,
+            ARD=len(self.kernel.kernel_config["length_scale"]) > 1,
             noise_scale=noise_scale,
             key=key,
             inducing_init=config.vi_config.inducing_init,
@@ -46,7 +45,7 @@ class SVGPModel:
         train_ds: Dataset,
         test_ds: Dataset,
         config: ml_collections.ConfigDict,
-        metrics_list: List[str],
+        metrics_list: List[str] = [],
         metrics_prefix: str = "",
         exact_metrics: Optional[Any] = None,
         recompute: Optional[bool] = None,
@@ -73,7 +72,7 @@ class SVGPModel:
             num_iters=config.iterations,
             key=fit_key,
             batch_size=config.batch_size,
-            verbose=False
+            verbose=False,
         )
 
         self.vi_params, loss = optimised_state.unpack()
@@ -81,7 +80,7 @@ class SVGPModel:
         if wandb.run is not None:
             for loss_val in loss:
                 wandb.log({"loss": loss_val})
-                
+
         return self.vi_params, loss
 
     def predictive_mean(
@@ -92,11 +91,6 @@ class SVGPModel:
         recompute: bool = True,
     ) -> Array:
         del recompute, train_ds
-
-        if self.predictive_dist is None or self.function_dist is None and not recompute:
-            raise ValueError(
-                "vi_params is None. Please call compute_representer_weights() first."
-            )
 
         test_preds = []
         x_test_split = jnp.split(test_ds.x, batch_size)
@@ -124,10 +118,7 @@ class SVGPModel:
     ) -> chex.Array:
         del recompute, train_ds
         """Compute the posterior variance of the test points."""
-        if self.predictive_dist is None or self.function_dist is None and not recompute:
-            raise ValueError(
-                "vi_params is None. Please call compute_representer_weights() first."
-            )
+
         # NOTE: THIS INCLUDES OBSERVATION NOISE
         if return_marginal_variance:
             test_preds = []
@@ -143,7 +134,7 @@ class SVGPModel:
 
             variance = jnp.concatenate(test_preds, axis=0)
             if not add_likelihood_noise:
-                variance -= self.noise_scale ** 2
+                variance -= self.noise_scale**2
 
             return variance
         else:
@@ -154,7 +145,7 @@ class SVGPModel:
 
             variance = predictive_dist.variance()
             if not add_likelihood_noise:
-                variance -= self.noise_scale ** 2 * jnp.eye(variance.shape[0])
+                variance -= self.noise_scale**2 * jnp.eye(variance.shape[0])
 
             return variance
 
@@ -163,7 +154,9 @@ class SVGPModel:
             "compute_posterior_samples is broken in new minibatched prediction code -- speak to Javi if you really need a fix."
         )
 
-    def predictive_variance_samples(self, zero_mean_posterior_samples: Array, return_marginal_variance: bool = True):
+    def predictive_variance_samples(
+        self, zero_mean_posterior_samples: Array, return_marginal_variance: bool = True
+    ):
         raise NotImplementedError(
             "compute_posterior_samples is broken in new minibatched prediction code -- speak to Javi if you really need a fix."
         )

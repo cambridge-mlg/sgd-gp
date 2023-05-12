@@ -152,37 +152,38 @@ def get_clustered_indices(d_name: str, split: int, lengthscale_ratio: float):
     sys.modules["utils"] = utils
 
     data = pickle.load(open(artifact.file(), "rb"))
-    return data
+    return jnp.array(data)
 
 
-def get_map_solution(d_name: str, method_name: str, split: int, override_noise_scale: int):
-    
+def get_map_solution(
+    d_name: str, method_name: str, split: int, override_noise_scale: int
+):
     api = wandb.Api()
     import pickle
     from scalable_gps import utils
     import sys
 
     sys.modules["utils"] = utils
-    
+
     artifact_name = f"alpha_{d_name}_{method_name}_{split}"
-    if override_noise_scale > 0.:
+    if override_noise_scale > 0.0:
         artifact_name += f"_noise_{override_noise_scale}"
-    
+
     artifact = api.artifact(f"shreyaspadhy/scalable-gps/{artifact_name}:latest")
     data = pickle.load(open(artifact.file(), "rb"))
     return data
-        
-    
+
+
 def process_pmapped_and_vmapped_metrics(pmapped_and_vmapped_metrics):
     mean_metrics, std_metrics = {}, {}
     for k, v in pmapped_and_vmapped_metrics.items():
         flattened_v = v.reshape((-1, v.shape[-1]))
         pmapped_and_vmapped_metrics[k] = wandb.Histogram(flattened_v)
-        mean_metrics[f'{k}_mean'] = jnp.mean(flattened_v)
-        std_metrics[f'{k}_std'] = jnp.std(flattened_v)
-        
+        mean_metrics[f"{k}_mean"] = jnp.mean(flattened_v)
+        std_metrics[f"{k}_std"] = jnp.std(flattened_v)
+
     return {**pmapped_and_vmapped_metrics, **mean_metrics, **std_metrics}
-    
-    
-if __name__ == '__main__':
+
+
+if __name__ == "__main__":
     pass
