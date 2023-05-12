@@ -27,6 +27,8 @@ class Dataset:
     N: int
     D: int
 
+    z: Optional[Array] = None
+
     mu_x: Optional[Array] = None
     sigma_x: Optional[Array] = None
     mu_y: Optional[Array] = None
