@@ -14,7 +14,7 @@ datasets = [
     "protein",
     "keggdirected",
     # "slice",
-    "keggundirected",
+    # "keggundirected",
     "3droad",
     "song",
     "buzz",
