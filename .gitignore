@@ -135,6 +135,8 @@ metrics/
 plots/
 traces/
 logs/
+hpc/mll-optim/hpc-jobs-mll-optim/
+hpc/thompson-sampling/hpc-jobs-thompson-hparams/
 typings
 .vscode
 .ruff_cache

@@ -12,6 +12,10 @@ from scalable_gps.linear_model import (
     error_grad_sample,
     regularizer_grad_sample,
 )
+from scalable_gps.inducing_linear_model import (
+    i_error_grad_sample,
+    i_regularizer_grad_sample,
+)
 from scalable_gps.utils import TargetTuple
 
 PyTree = Any
@@ -25,6 +29,23 @@ def get_stochastic_gradient_fn(x: Array, kernel_fn: Callable, noise_scale: float
         regularizer_grad = regularizer_grad_sample(
             params,
             features,
+            target_tuple.regularizer_target,
+            noise_scale,
+        )
+        return error_grad + regularizer_grad
+
+    return jax.jit(_fn)
+
+def get_inducing_stochastic_gradient_fn(x: Array, z: Array, kernel_fn: Callable, noise_scale: float):
+    def _fn(params, idx, features, target_tuple):
+        features_x, features_z = features
+        error_grad = i_error_grad_sample(
+            params, idx, x, z, target_tuple.error_target, kernel_fn
+        )
+        regularizer_grad = i_regularizer_grad_sample(
+            params,
+            features_x,
+            features_z,
             target_tuple.regularizer_target,
             noise_scale,
         )

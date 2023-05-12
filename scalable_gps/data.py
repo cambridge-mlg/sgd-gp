@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Any, Optional, Tuple
+from typing import Any, Optional, Tuple, NamedTuple
 
 import chex
 import jax.numpy as jnp
@@ -13,12 +13,21 @@ from scalable_gps.utils import apply_z_score
 KwArgs = Any
 
 
+class ThompsonDataset(NamedTuple):
+    x: Array
+    y: Array
+    N: int
+    D: int
+
+
 @dataclass
 class Dataset:
     x: Array
     y: Array
     N: int
     D: int
+
+    z: Optional[Array] = None
 
     mu_x: Optional[Array] = None
     sigma_x: Optional[Array] = None

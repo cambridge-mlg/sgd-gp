@@ -65,11 +65,14 @@ def compute_posterior_fn_sample(
     kernel_fn: Callable,
     zero_mean: bool = True
 ) -> Array:
-    """Compute (~zero_mean) (K(·)x(Kxx + Σ)^{−1} y) + f0(·) − K(·) @ alpha_sample."""
+    """Compute (~zero_mean) (K(·)x(Kxx + Σ)^{−1} y) + f0(·) − K(·) @ alpha_sample.
+    Will use inducing points if available in train_ds."""
     if zero_mean:
         alpha = -alpha_sample
     else:
         alpha = alpha_map - alpha_sample
-    posterior_fn_sample = f0_sample_test + KvP(test_ds.x, train_ds.x, alpha, kernel_fn=kernel_fn)
+    
+    inducing_points = train_ds.x if train_ds.z is None else train_ds.z
+    posterior_fn_sample = f0_sample_test + KvP(test_ds.x, inducing_points, alpha, kernel_fn=kernel_fn)
     return posterior_fn_sample
 
