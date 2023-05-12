@@ -114,8 +114,7 @@ def main(config):
             train_config.preconditioner = True
         elif config.model_name == "vi":
             train_config = config.vi_config
-            kernel_config = {'signal_scale': hparams.signal_scale, 'length_scale': hparams.length_scale}
-            model = SVGPModel(hparams.noise_scale, kernel, config, kernel_config)
+            model = SVGPModel(hparams.noise_scale, kernel, config)
 
         metrics_list = ["loss", "err", "reg", "normalised_test_rmse", "test_rmse"]
         if config.compute_exact_soln:

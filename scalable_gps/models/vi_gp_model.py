@@ -1,20 +1,20 @@
 
-from typing import List, Any, Optional
+from functools import partial
+from typing import Any, List, Optional
 
+import chex
 import gpjax as gpx
-import jax.numpy as jnp
 import jax
+import jax.numpy as jnp
 import ml_collections
-from ml_collections import ConfigDict
 import optax
 import wandb
 from chex import Array
+from ml_collections import ConfigDict
 
 from scalable_gps.data import Dataset
 from scalable_gps.kernels import Kernel
 from scalable_gps.SVGP import regression_SVGP, sample_from_qu
-import chex
-from functools import partial
 
 
 class SVGPModel:
@@ -34,7 +34,7 @@ class SVGPModel:
             num_inducing=config.vi_config.num_inducing_points,
             kernel_name=config.kernel_name,
             kernel_config=self.kernel.kernel_config,
-            ARD=self.kernel.kernel_config["use_ard"],
+            ARD=len(self.kernel.kernel_config['length_scale']) > 1,
             noise_scale=noise_scale,
             key=key,
             inducing_init=config.vi_config.inducing_init,
@@ -81,6 +81,8 @@ class SVGPModel:
         if wandb.run is not None:
             for loss_val in loss:
                 wandb.log({"loss": loss_val})
+                
+        return self.vi_params, loss
 
     def predictive_mean(
         self,
