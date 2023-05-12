@@ -131,7 +131,7 @@ def get_config(config_string):
     config.cg_config.preconditioner = True
     config.cg_config.pivoted_chol_rank = 100
     config.cg_config.pivoted_diag_rtol = 1e-3
-    config.cg_config.pivoted_jitter = 1
+    config.cg_config.pivoted_jitter = 1.
     config.cg_config.loss_objective = 2
 
     config.cg_sampling_config = ml_collections.ConfigDict()
@@ -145,7 +145,7 @@ def get_config(config_string):
     config.cg_sampling_config.preconditioner = True
     config.cg_sampling_config.pivoted_chol_rank = 100
     config.cg_sampling_config.pivoted_diag_rtol = 1e-3
-    config.cg_sampling_config.pivoted_jitter = 1
+    config.cg_sampling_config.pivoted_jitter = 1.
     config.cg_sampling_config.loss_objective = 2
 
     # Wandb Configs
