@@ -6,9 +6,9 @@ methods = ["vi"]
 splits = list(range(10))
 
 # datasets = ['pol', 'elevators', 'bike', 'protein', 'keggdirected', 'kin40k'] # 
-datasets = ['song']
+datasets = ['buzz']
 
-low_noise = True
+low_noise = False
 
 for dataset in datasets:
     for method in methods:
