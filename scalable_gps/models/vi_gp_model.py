@@ -39,6 +39,8 @@ class SVGPModel:
             key=key,
             inducing_init=config.vi_config.inducing_init,
         )
+        # self.function_dist = None
+        # self.predictive_dist = None
 
     def compute_representer_weights(
         self,
@@ -77,30 +79,36 @@ class SVGPModel:
 
         self.vi_params, loss = optimised_state.unpack()
 
-        (
-            self.function_dist,
-            self.predictive_dist,
-        ) = self.get_predictive(self.vi_params, test_ds.x)
-
         if wandb.run is not None:
             for loss_val in loss:
                 wandb.log({"loss": loss_val})
 
     def predictive_mean(
-        self, train_ds: Dataset, test_ds: Dataset, recompute: bool = True
+        self,
+        train_ds: Dataset,
+        test_ds: Dataset,
+        batch_size: int = 256,
+        recompute: bool = True,
     ) -> Array:
+        del recompute, train_ds
+
         if self.predictive_dist is None or self.function_dist is None and not recompute:
             raise ValueError(
                 "vi_params is None. Please call compute_representer_weights() first."
             )
 
-        if recompute:
+        test_preds = []
+        x_test_split = jnp.split(test_ds.x, batch_size)
+        for x in x_test_split:
             (
-                self.function_dist,
-                self.predictive_dist,
-            ) = self.get_predictive(self.vi_params, test_ds.x)
+                _,
+                predictive_dist,
+            ) = self.get_predictive(self.vi_params, x)
 
-        self.y_pred = self.predictive_dist.mean()
+            y_pred = predictive_dist.mean()
+            test_preds.append(y_pred)
+
+        self.y_pred = jnp.concatenate(test_preds, axis=0)
 
         return self.y_pred  # (N_test, 1)
 
@@ -109,60 +117,78 @@ class SVGPModel:
         train_ds: Dataset,
         test_ds: Dataset,
         return_marginal_variance: bool = True,
+        batch_size: int = 256,
         recompute: bool = False,
-    ) -> Array:
+    ) -> chex.Array:
+        del recompute, train_ds
         """Compute the posterior variance of the test points."""
         if self.predictive_dist is None or self.function_dist is None and not recompute:
             raise ValueError(
                 "vi_params is None. Please call compute_representer_weights() first."
             )
+        # NOTE: THIS INCLUDES OBSERVATION NOISE
+        if return_marginal_variance:
+            test_preds = []
+            x_test_split = jnp.split(test_ds.x, batch_size)
+            for x in x_test_split:
+                (
+                    _,
+                    predictive_dist,
+                ) = self.get_predictive(self.vi_params, x)
 
-        if recompute:
+                y_var = jnp.diag(predictive_dist.variance())
+                test_preds.append(y_var)
+
+            variance = jnp.concatenate(test_preds, axis=0)
+
+            return variance
+        else:
             (
-                self.function_dist,
-                self.predictive_dist,
+                _,
+                predictive_dist,
             ) = self.get_predictive(self.vi_params, test_ds.x)
 
-        variance = self.predictive_dist.variance()
-
-        # TODO: is this correct?
-        if return_marginal_variance:
-            return jnp.diag(variance)
-        else:
+            variance = predictive_dist.variance()
             return variance
 
     def compute_posterior_samples(self, key, num_samples):
-        posterior_samples = self.function_dist.sample(
-            seed=key, sample_shape=(num_samples,)
+        raise NotImplementedError(
+            "compute_posterior_samples is broken in new minibatched prediction code -- speak to Javi if you really need a fix."
         )
+        # posterior_samples = self.function_dist.sample(
+        #     seed=key, sample_shape=(num_samples,)
+        # )
 
-        zero_mean_posterior_samples = posterior_samples - self.predictive_dist.mean()
+        # zero_mean_posterior_samples = posterior_samples - self.predictive_dist.mean()
 
-        return zero_mean_posterior_samples
+        # return zero_mean_posterior_samples
 
     # TODO: Biased: use the method that double counts the diagonal (first paragraph of page 28 of https://arxiv.org/pdf/2210.04994.pdf
     # TODO: Unbiased: use a mixture of isotropic Gaussian likelihood with each mixture component's mean being centred at a sample. Then we can compute joint likelihoods as in the "EFFICIENT κ-ADIC SAMPLING" section on page 26 of https://arxiv.org/pdf/2210.04994.pdf
     def predictive_variance_samples(
         self, zero_mean_posterior_samples: Array, return_marginal_variance: bool = True
     ) -> Array:
-        """Compute MC estimate of posterior variance of the test points using zero mean samples from posterior."""
-        if self.predictive_dist is None or self.function_dist is None:
-            raise ValueError(
-                "vi_params is None. Please call compute_representer_weights() first."
-            )
+        raise NotImplementedError(
+            "compute_posterior_samples is broken in new minibatched prediction code -- speak to Javi if you really need a fix."
+        )
+        # """Compute MC estimate of posterior variance of the test points using zero mean samples from posterior."""
+        # if self.predictive_dist is None or self.function_dist is None:
+        #     raise ValueError(
+        #         "vi_params is None. Please call compute_representer_weights() first."
+        #     )
 
-        if return_marginal_variance:
-            variance = jnp.mean(zero_mean_posterior_samples**2, axis=0)  # (N_test, 1)
-            variance -= self.noise_scale**2
-        else:
-            n_samples = zero_mean_posterior_samples.shape[0]
-            variance = (
-                zero_mean_posterior_samples.T @ zero_mean_posterior_samples / n_samples
-            )
+        # if return_marginal_variance:
+        #     variance = jnp.mean(zero_mean_posterior_samples**2, axis=0)  # (N_test, 1)
+        #     variance -= self.noise_scale**2
+        # else:
+        #     n_samples = zero_mean_posterior_samples.shape[0]
+        #     variance = (
+        #         zero_mean_posterior_samples.T @ zero_mean_posterior_samples / n_samples
+        #     )
 
-            variance -= (self.noise_scale**2) * jnp.eye(variance.shape[0])
+        #     variance -= (self.noise_scale**2) * jnp.eye(variance.shape[0])
 
-        return variance
+        # return variance
 
 
 class SVGPThompsonInterface(SVGPModel):
