@@ -10,7 +10,6 @@ from scalable_gps.utils import get_gpu_or_cpu_device
 
 Kernel_fn = Callable[[Array, Array], Array]
 
-
 @partial(jax.jit, device=get_gpu_or_cpu_device())
 def solve_K_inv_v(K: Array, v: Array, noise_scale: float):
     """Solves (K + noise_scale^2 I) x = v for x."""

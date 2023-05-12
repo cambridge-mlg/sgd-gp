@@ -134,9 +134,10 @@ dependencies:
       - dm-tree==0.1.8
       - jax==0.4.8
       - jaxlib==0.4.7
-      - ml-collections==0.1.1
+      - ml-collections==0.1.0
       - ml-dtypes==0.0.4
       - optax==0.1.4
       - toolz==0.12.0
+      - gpjax==0.5.9
       - git+https://github.com/treforevans/uci_datasets.git
       - https://storage.googleapis.com/cloud-tpu-tpuvm-artifacts/wheels/libtpu-nightly/libtpu_nightly-0.1.dev20230410-py3-none-any.whl

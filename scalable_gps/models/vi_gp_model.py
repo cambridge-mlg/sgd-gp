@@ -1,4 +1,6 @@
-from typing import List, Optional, Any
+
+from typing import List, Any, Optional
+
 import gpjax as gpx
 import jax.numpy as jnp
 import jax
@@ -11,9 +13,7 @@ from chex import Array
 from scalable_gps.data import Dataset
 from scalable_gps.kernels import Kernel
 from scalable_gps.SVGP import regression_SVGP, sample_from_qu
-from scalable_gps.models.exact_gp_model import ExactGPModel
 import chex
-from scalable_gps.linalg_utils import KvP, solve_K_inv_v
 from functools import partial
 
 
@@ -39,8 +39,6 @@ class SVGPModel:
             key=key,
             inducing_init=config.vi_config.inducing_init,
         )
-        # self.function_dist = None
-        # self.predictive_dist = None
 
     def compute_representer_weights(
         self,
@@ -75,6 +73,7 @@ class SVGPModel:
             num_iters=config.iterations,
             key=fit_key,
             batch_size=config.batch_size,
+            verbose=False
         )
 
         self.vi_params, loss = optimised_state.unpack()
@@ -118,6 +117,7 @@ class SVGPModel:
         test_ds: Dataset,
         return_marginal_variance: bool = True,
         batch_size: int = 256,
+        add_likelihood_noise: bool = False,
         recompute: bool = False,
     ) -> chex.Array:
         del recompute, train_ds
@@ -140,6 +140,8 @@ class SVGPModel:
                 test_preds.append(y_var)
 
             variance = jnp.concatenate(test_preds, axis=0)
+            if not add_likelihood_noise:
+                variance -= self.noise_scale ** 2
 
             return variance
         else:
@@ -149,46 +151,20 @@ class SVGPModel:
             ) = self.get_predictive(self.vi_params, test_ds.x)
 
             variance = predictive_dist.variance()
+            if not add_likelihood_noise:
+                variance -= self.noise_scale ** 2 * jnp.eye(variance.shape[0])
+
             return variance
 
     def compute_posterior_samples(self, key, num_samples):
         raise NotImplementedError(
             "compute_posterior_samples is broken in new minibatched prediction code -- speak to Javi if you really need a fix."
         )
-        # posterior_samples = self.function_dist.sample(
-        #     seed=key, sample_shape=(num_samples,)
-        # )
 
-        # zero_mean_posterior_samples = posterior_samples - self.predictive_dist.mean()
-
-        # return zero_mean_posterior_samples
-
-    # TODO: Biased: use the method that double counts the diagonal (first paragraph of page 28 of https://arxiv.org/pdf/2210.04994.pdf
-    # TODO: Unbiased: use a mixture of isotropic Gaussian likelihood with each mixture component's mean being centred at a sample. Then we can compute joint likelihoods as in the "EFFICIENT κ-ADIC SAMPLING" section on page 26 of https://arxiv.org/pdf/2210.04994.pdf
-    def predictive_variance_samples(
-        self, zero_mean_posterior_samples: Array, return_marginal_variance: bool = True
-    ) -> Array:
+    def predictive_variance_samples(self, zero_mean_posterior_samples: Array, return_marginal_variance: bool = True):
         raise NotImplementedError(
             "compute_posterior_samples is broken in new minibatched prediction code -- speak to Javi if you really need a fix."
         )
-        # """Compute MC estimate of posterior variance of the test points using zero mean samples from posterior."""
-        # if self.predictive_dist is None or self.function_dist is None:
-        #     raise ValueError(
-        #         "vi_params is None. Please call compute_representer_weights() first."
-        #     )
-
-        # if return_marginal_variance:
-        #     variance = jnp.mean(zero_mean_posterior_samples**2, axis=0)  # (N_test, 1)
-        #     variance -= self.noise_scale**2
-        # else:
-        #     n_samples = zero_mean_posterior_samples.shape[0]
-        #     variance = (
-        #         zero_mean_posterior_samples.T @ zero_mean_posterior_samples / n_samples
-        #     )
-
-        #     variance -= (self.noise_scale**2) * jnp.eye(variance.shape[0])
-
-        # return variance
 
 
 class SVGPThompsonInterface(SVGPModel):

@@ -30,6 +30,7 @@ def get_config(config_string):
 
     config.compute_exact_soln = True
     config.use_tpu = True
+    config.override_noise_scale = -1.
 
     config.model_name = "sgd"
     # Data Configs
@@ -61,8 +62,8 @@ def get_config(config_string):
 
     # Full-batch training configs that get passed
     config.train_config.iterations = 100000
-    config.train_config.batch_size = 0
-    config.train_config.eval_every = 100
+    config.train_config.batch_size = 512
+    config.train_config.eval_every = 1000
     config.train_config.time_budget_in_seconds = 0.
     config.train_config.eval_every_in_seconds = 0.
     # RFF Configs
@@ -90,15 +91,15 @@ def get_config(config_string):
 
     
     config.sampling_config = config.train_config.copy_and_resolve_references()
-    config.sampling_config.n_samples = 10
+    config.sampling_config.n_samples = 16
     # Full-batch training configs that get passed
     config.sampling_config.iterative_idx = True
-    config.sampling_config.learning_rate = 1e-3
+    config.sampling_config.learning_rate = 1e-1
     config.sampling_config.momentum = 0.9
-    config.sampling_config.polyak = 1e-3
-    config.sampling_config.iterations = 50000
-    config.sampling_config.batch_size = 0
-    config.sampling_config.eval_every = 100
+    config.sampling_config.polyak = 100 / config.train_config.iterations
+    config.sampling_config.iterations = 100000
+    config.sampling_config.batch_size = 512
+    config.sampling_config.eval_every = 1000
     # RFF Configs
     config.sampling_config.n_features_prior_sample = 2000
     config.sampling_config.n_features_optim = 100
@@ -122,29 +123,29 @@ def get_config(config_string):
     config.mll_config.n_subsample = 10000
 
     config.cg_config = ml_collections.ConfigDict()
-    config.cg_config.batch_size = 8192
+    config.cg_config.batch_size = 1
     config.cg_config.tol = 1e-2
     config.cg_config.maxiter = 1000
     config.cg_config.atol = 0.
-    config.cg_config.eval_every = 10
+    config.cg_config.eval_every = 1
     config.cg_config.preconditioner = True
     config.cg_config.pivoted_chol_rank = 100
     config.cg_config.pivoted_diag_rtol = 1e-3
-    config.cg_config.pivoted_jitter = 1
+    config.cg_config.pivoted_jitter = 1.
     config.cg_config.loss_objective = 2
 
     config.cg_sampling_config = ml_collections.ConfigDict()
-    config.cg_sampling_config.batch_size = 0
+    config.cg_sampling_config.batch_size = 512
     config.cg_sampling_config.n_features_prior_sample = 2000
-    config.cg_sampling_config.n_samples = 10
+    config.cg_sampling_config.n_samples = 16
     config.cg_sampling_config.tol = 1e-3
-    config.cg_sampling_config.maxiter = 300
+    config.cg_sampling_config.maxiter = 1000
     config.cg_sampling_config.atol = 0.
-    config.cg_sampling_config.eval_every = 10
+    config.cg_sampling_config.eval_every = 1
     config.cg_sampling_config.preconditioner = True
     config.cg_sampling_config.pivoted_chol_rank = 100
     config.cg_sampling_config.pivoted_diag_rtol = 1e-3
-    config.cg_sampling_config.pivoted_jitter = 1
+    config.cg_sampling_config.pivoted_jitter = 1.
     config.cg_sampling_config.loss_objective = 2
 
     # Wandb Configs
@@ -154,5 +155,6 @@ def get_config(config_string):
     config.wandb.entity = "shreyaspadhy"
     config.wandb.code_dir = "/home/shreyaspadhy_gmail_com/scalable-gaussian-processes"
     config.wandb.name = ""
+    config.wandb.log_artifact = False
     
     return config

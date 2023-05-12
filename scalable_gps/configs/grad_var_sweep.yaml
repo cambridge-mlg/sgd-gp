@@ -1,0 +1,19 @@
+entity: shreyaspadhy
+project: scalable-gps
+program: scripts/obtain_samples.py
+
+method: grid
+parameters:
+  dataset_config.split:
+    values: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+  sampling_config.loss_objective:
+    values: [1, 2, 3]
+
+command:
+  - python
+  - ${program}
+  - 17bb59c7a4e186597fe98347175642c99c8403e2
+  - --config
+  - configs/default.py:housing
+  - --config.wandb.log
+  - --noconfig.compute_exact_soln
