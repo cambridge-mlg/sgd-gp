@@ -110,7 +110,7 @@ def get_config():
 
     # WANDB
     config.wandb = ml_collections.ConfigDict()
-    config.wandb.log = True
+    config.wandb.log = False
     config.wandb.project = "scalable-gps"
     config.wandb.entity = "shreyaspadhy"
     # TODO: change this to HPC dir
