@@ -94,10 +94,10 @@ def get_config(config_string):
     config.sampling_config.n_samples = 16
     # Full-batch training configs that get passed
     config.sampling_config.iterative_idx = True
-    config.sampling_config.learning_rate = 1e-3
+    config.sampling_config.learning_rate = 1e-1
     config.sampling_config.momentum = 0.9
-    config.sampling_config.polyak = 1e-3
-    config.sampling_config.iterations = 50000
+    config.sampling_config.polyak = 100 / config.train_config.iterations
+    config.sampling_config.iterations = 100000
     config.sampling_config.batch_size = 512
     config.sampling_config.eval_every = 100
     # RFF Configs
@@ -131,21 +131,21 @@ def get_config(config_string):
     config.cg_config.preconditioner = True
     config.cg_config.pivoted_chol_rank = 100
     config.cg_config.pivoted_diag_rtol = 1e-3
-    config.cg_config.pivoted_jitter = 1
+    config.cg_config.pivoted_jitter = 1.
     config.cg_config.loss_objective = 2
 
     config.cg_sampling_config = ml_collections.ConfigDict()
-    config.cg_sampling_config.batch_size = 0
+    config.cg_sampling_config.batch_size = 512
     config.cg_sampling_config.n_features_prior_sample = 2000
-    config.cg_sampling_config.n_samples = 10
+    config.cg_sampling_config.n_samples = 16
     config.cg_sampling_config.tol = 1e-3
-    config.cg_sampling_config.maxiter = 300
+    config.cg_sampling_config.maxiter = 1000
     config.cg_sampling_config.atol = 0.
-    config.cg_sampling_config.eval_every = 10
+    config.cg_sampling_config.eval_every = 1
     config.cg_sampling_config.preconditioner = True
     config.cg_sampling_config.pivoted_chol_rank = 100
     config.cg_sampling_config.pivoted_diag_rtol = 1e-3
-    config.cg_sampling_config.pivoted_jitter = 1
+    config.cg_sampling_config.pivoted_jitter = 1.
     config.cg_sampling_config.loss_objective = 2
 
     # Wandb Configs

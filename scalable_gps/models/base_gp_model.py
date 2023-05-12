@@ -32,7 +32,7 @@ class GPModel:
     # TODO: Biased: use the method that double counts the diagonal (first paragraph of page 28 of https://arxiv.org/pdf/2210.04994.pdf
     # TODO: Unbiased: use a mixture of isotropic Gaussian likelihood with each mixture component's mean being centred at a sample. Then we can compute joint likelihoods as in the "EFFICIENT κ-ADIC SAMPLING" section on page 26 of https://arxiv.org/pdf/2210.04994.pdf
     def predictive_variance_samples(
-        self, zero_mean_posterior_samples: Array, return_marginal_variance: bool = True) -> Array:
+        self, zero_mean_posterior_samples: Array, add_likelihood_noise: bool = False, return_marginal_variance: bool = True) -> Array:
         """Compute MC estimate of posterior variance of the test points using zero mean samples from posterior."""
         # zero_mean_posterior_samples = (N_samples, N_test)
         if return_marginal_variance:
@@ -40,10 +40,16 @@ class GPModel:
         else:
             n_samples = zero_mean_posterior_samples.shape[0]
             variance = zero_mean_posterior_samples.T @ zero_mean_posterior_samples / n_samples
+        
+        if add_likelihood_noise:
+            if return_marginal_variance:
+                variance += self.noise_scale ** 2
+            else:
+                variance += self.noise_scale ** 2 * jnp.eye(variance.shape[0])
     
         return variance
 
-    def get_prior_samples_fn(self, n_train, L, use_rff: bool=False):
+    def get_prior_samples_fn(self, n_train, L, use_rff: bool=False, pmap: bool=False):
         """Vmap factory function for sampling from the prior."""
         # fn(keys) -> prior_samples
         def _fn(key):
@@ -55,9 +61,12 @@ class GPModel:
 
             return f0_sample_train, f0_sample_test, eps0_sample, w_sample
 
-        return jax.jit(jax.vmap(_fn))
+        if pmap:
+            return jax.pmap(jax.vmap(_fn)) # (n_devices, n_samples_per_device)
+        else:
+            return jax.jit(jax.vmap(_fn))
 
-    def get_posterior_samples_fn(self, train_ds, test_ds, zero_mean: bool = True):
+    def get_posterior_samples_fn(self, train_ds, test_ds, zero_mean: bool = True, pmap: bool = False):
         """Vmap factory function for computing the zero mean posterior from sample."""
 
         def _fn(alpha_sample, f0_sample_test):
@@ -72,7 +81,10 @@ class GPModel:
 
             return zero_mean_posterior_sample
 
-        return jax.jit(jax.vmap(_fn))
+        if pmap:
+            return jax.pmap(jax.vmap(_fn)) # (n_devices, n_samples_per_device)
+        else:
+            return jax.jit(jax.vmap(_fn))
 
     def get_feature_fn(self, train_ds: Dataset, n_features: int, recompute: bool):
         """Factory function that wraps feature_fn so that it is jittable."""

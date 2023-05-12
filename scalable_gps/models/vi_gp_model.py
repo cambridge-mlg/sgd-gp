@@ -106,7 +106,7 @@ class SVGPModel:
         return self.y_pred  # (N_test, 1)
 
     def predictive_variance(
-        self, train_ds: Dataset, test_ds: Dataset, return_marginal_variance: bool = True, recompute: bool=False) -> Array:
+        self, train_ds: Dataset, test_ds: Dataset, add_likelihood_noise: bool = False, return_marginal_variance: bool = True, recompute: bool=False) -> Array:
         """Compute the posterior variance of the test points."""
         if self.predictive_dist is None or self.function_dist is None and not recompute:
             raise ValueError("vi_params is None. Please call compute_representer_weights() first.")
@@ -115,7 +115,10 @@ class SVGPModel:
             self.function_dist, self.predictive_dist = self.get_predictive(
                 self.vi_params, test_ds.x)
         
-        variance  = self.predictive_dist.variance()
+        if add_likelihood_noise:
+            variance  = self.predictive_dist.variance() + self.noise_scale ** 2 * jnp.eye(test_ds.x.shape[0])
+        else:
+            variance = self.predictive_dist.variance()
         
         # TODO: is this correct?
         if return_marginal_variance:
@@ -134,18 +137,20 @@ class SVGPModel:
     # TODO: Biased: use the method that double counts the diagonal (first paragraph of page 28 of https://arxiv.org/pdf/2210.04994.pdf
     # TODO: Unbiased: use a mixture of isotropic Gaussian likelihood with each mixture component's mean being centred at a sample. Then we can compute joint likelihoods as in the "EFFICIENT κ-ADIC SAMPLING" section on page 26 of https://arxiv.org/pdf/2210.04994.pdf
     def predictive_variance_samples(
-        self, zero_mean_posterior_samples: Array, return_marginal_variance: bool = True) -> Array:
+        self, zero_mean_posterior_samples: Array, add_likelihood_noise: bool = False, return_marginal_variance: bool = True) -> Array:
         """Compute MC estimate of posterior variance of the test points using zero mean samples from posterior."""
-        if self.predictive_dist is None or self.function_dist is None and not recompute:
+        if self.predictive_dist is None or self.function_dist is None:
             raise ValueError("vi_params is None. Please call compute_representer_weights() first.")
         
         if return_marginal_variance:
             variance = jnp.mean(zero_mean_posterior_samples ** 2, axis=0)  # (N_test, 1)
-            variance -= self.noise_scale ** 2
+            if add_likelihood_noise:
+                variance += self.noise_scale ** 2
         else:
             n_samples = zero_mean_posterior_samples.shape[0]
             variance = zero_mean_posterior_samples.T @ zero_mean_posterior_samples / n_samples
-        
-            variance -= (self.noise_scale ** 2) * jnp.eye(variance.shape[0])
+
+            if add_likelihood_noise:
+                variance += (self.noise_scale ** 2) * jnp.eye(variance.shape[0])
         
         return variance
