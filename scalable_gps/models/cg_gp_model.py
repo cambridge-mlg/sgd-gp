@@ -243,14 +243,13 @@ class CGGPModel(ExactGPModel):
             f0_samples_test_reshaped = jax.device_put(
                 f0_samples_test.reshape(n_samples, test_ds.N), jax.devices('cpu')[0])
 
-            alpha_samples_exact = compute_exact_alpha_samples_fn(
-                f0_samples_train_reshaped, eps0_samples_reshaped)
+            compute_exact_alpha_samples_fn = exact_gp.get_alpha_samples_fn()
+            compute_exact_posterior_samples_fn = exact_gp.get_posterior_samples_fn(train_ds, test_ds, zero_mean=False)
+            compute_exact_samples_tuple_fn = eval_utils.get_exact_sample_tuples_fn(exact_gp.alpha)
 
-            posterior_samples_exact = compute_exact_posterior_samples_fn(
-                alpha_samples_exact, f0_samples_test_reshaped)
-
-            exact_samples_tuple = compute_exact_samples_tuple_fn(
-                alpha_samples_exact, posterior_samples_exact, f0_samples_test_reshaped)
+            alpha_samples_exact = compute_exact_alpha_samples_fn(f0_samples_train_reshaped, eps0_samples_reshaped)
+            posterior_samples_exact = compute_exact_posterior_samples_fn(alpha_samples_exact, f0_samples_test_reshaped)
+            exact_samples_tuple = compute_exact_samples_tuple_fn(alpha_samples_exact, posterior_samples_exact, f0_samples_test_reshaped)
         
         for metric in ['loss', 'err', 'reg']:
             if metric in metrics_list:

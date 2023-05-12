@@ -159,6 +159,10 @@ def get_map_solution(d_name: str, method_name: str, split: int, override_noise_s
     
     api = wandb.Api()
     import pickle
+    from scalable_gps import utils
+    import sys
+
+    sys.modules["utils"] = utils
     
     artifact_name = f"alpha_{d_name}_{method_name}_{split}"
     if override_noise_scale > 0.:
