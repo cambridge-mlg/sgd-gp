@@ -6,6 +6,7 @@ methods = ["precondcg"]
 splits = list(range(10))
 datasets = ['pol', 'elevators', 'bike', 'protein', 'keggdirected', 'kin40k'] # 
 low_noise = True
+
 for dataset in datasets:
     for method in methods:
         for split in splits:

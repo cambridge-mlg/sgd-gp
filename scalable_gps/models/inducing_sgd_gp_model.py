@@ -1,8 +1,8 @@
 import time
 from typing import List, Optional
 
-import jax
 import chex
+import jax
 import jax.numpy as jnp
 import jax.random as jr
 import optax
@@ -11,20 +11,18 @@ from chex import Array
 from ml_collections import ConfigDict
 from tqdm import tqdm
 
-from scalable_gps import eval_utils, optim_utils, sampling_utils
+from scalable_gps import eval_utils, optim_utils
 from scalable_gps.data import Dataset
-from scalable_gps.eval_utils import LLH
-from scalable_gps.kernels import Kernel
-from scalable_gps.models.base_gp_model import GPModel
-from scalable_gps.models.exact_gp_model import ExactGPModel
+from scalable_gps.eval_utils import mean_LLH
+from scalable_gps.kernels import Kernel, featurise
 from scalable_gps.linalg_utils import KvP
+from scalable_gps.models.base_gp_model import GPModel
 from scalable_gps.optim_utils import get_lr, get_lr_and_schedule
 from scalable_gps.utils import (
     ExactPredictionsTuple,
     TargetTuple,
-    process_vmapped_metrics,
+    process_pmapped_and_vmapped_metrics,
 )
-from scalable_gps.kernels import featurise
 
 
 class ISGDGPModel(GPModel):
@@ -87,7 +85,7 @@ class ISGDGPModel(GPModel):
             train_ds.x, train_ds.z, self.kernel.kernel_fn, self.noise_scale
         )
         update_fn = optim_utils.get_update_fn(
-            grad_fn, optimizer, config.polyak, vmap=False
+            grad_fn, optimizer, config.polyak
         )
         feature_fn = self.get_inducing_feature_fn(
             train_ds, config.n_features_optim, config.recompute_features
@@ -193,13 +191,13 @@ class ISGDGPModel(GPModel):
 
         # Get vmapped functions for sampling from the prior and computing the posterior.
         # Will use this one for samples at x only, and manually compute function at z
-        compute_prior_samples_fn = self.get_prior_samples_fn(train_ds.N, L, use_rff)
+        compute_prior_samples_fn = self.get_prior_samples_fn(train_ds.N, L, use_rff, pmap=True)
         # adapted to use inducing points automatically
         compute_posterior_samples_fn = self.get_posterior_samples_fn(
-            train_ds, test_ds, zero_mean
+            train_ds, test_ds, zero_mean, pmap=True
         )
         compute_target_tuples_fn = optim_utils.get_target_tuples_fn(
-            config.loss_objective
+            config.loss_objective, pmap=True
         )
 
         optimizer = optax.sgd(
@@ -210,7 +208,7 @@ class ISGDGPModel(GPModel):
             train_ds.x, train_ds.z, self.kernel.kernel_fn, self.noise_scale
         )
         update_fn = optim_utils.get_update_fn(
-            grad_fn, optimizer, config.polyak, vmap=True
+            grad_fn, optimizer, config.polyak, vmap_and_pmap=True
         )
         feature_fn = self.get_inducing_feature_fn(
             train_ds, config.n_features_optim, config.recompute_features
@@ -218,14 +216,13 @@ class ISGDGPModel(GPModel):
 
         # Call the vmapped functions -- NOTE: eps0 samples need to be from Sig^-1
 
-        (
-            f0_samples_train,
-            f0_samples_test,
-            eps0_samples,
-            w_samples,
-        ) = compute_prior_samples_fn(
-            jr.split(prior_samples_key, n_samples)
-        )  # (n_samples, n_train), (n_samples, n_test), (n_samples, n_train)
+         # Call the pmapped and vmapped functions
+        n_devices = jax.device_count()
+        assert n_samples % n_devices == 0
+        n_samples_per_device = n_samples // n_devices
+        pmappable_keys = jr.split(prior_samples_key, n_samples).reshape((n_devices, n_samples_per_device, -1))
+        # (n_devices, n_samples_per_device, n_train), (n_devices, n_samples_per_device, n_test)
+        f0_samples_train, f0_samples_test, eps0_samples, w_samples = compute_prior_samples_fn(pmappable_keys)
 
         eval_fn = eval_utils.get_inducing_eval_fn(
             metrics_list,
@@ -236,17 +233,17 @@ class ISGDGPModel(GPModel):
             grad_fn=grad_fn,
             metrics_prefix=metrics_prefix,
             exact_samples=None,  # exact_samples_tuple if compare_exact else None,
-            vmap=True,
+            vmap_and_pmap=True
         )
 
         target_tuples = compute_target_tuples_fn(
             f0_samples_train, eps0_samples
-        )  # (n_samples, TargetTuples)
+        )  # (n_devices, n_samples_per_device, TargetTuples)
 
         N_inducing = len(train_ds.z)
-        alphas, alphas_polyak = jnp.zeros((n_samples, N_inducing)), jnp.zeros(
-            (n_samples, N_inducing)
-        )
+        alphas = jnp.zeros((n_devices, n_samples_per_device, N_inducing))
+        alphas_polyak = jnp.zeros((n_devices, n_samples_per_device, N_inducing))
+        
         opt_states = optimizer.init(alphas)
 
         idx_key, feature_key = jr.split(key, 2)
@@ -276,7 +273,7 @@ class ISGDGPModel(GPModel):
             )
 
             if i % config.eval_every == 0:
-                vmapped_eval_metrics = eval_fn(
+                pmapped_and_vmapped_eval_metrics = eval_fn(
                     alphas_polyak, idx, features[0], features[1], target_tuples
                 )
 
@@ -288,34 +285,35 @@ class ISGDGPModel(GPModel):
                     zero_mean_posterior_samples = compute_posterior_samples_fn(
                         alphas_polyak, f0_samples_test
                     )
-                    y_pred_scale = self.predictive_variance_samples(
-                        zero_mean_posterior_samples
+                    y_pred_variance = self.predictive_variance_samples(
+                        zero_mean_posterior_samples.reshape(n_samples, test_ds.N),
+                        add_likelihood_noise=True
                     )
                     del zero_mean_posterior_samples
                     if "test_llh" in metrics_list:
-                        aux_metrics["test_llh"] = LLH(
+                        aux_metrics["test_llh"] = mean_LLH(
                             test_ds.y,
                             y_pred_loc,
-                            y_pred_scale,
+                            y_pred_variance,
                             mu=train_ds.mu_y,
                             sigma=train_ds.sigma_y,
                         )
                     if "normalised_test_llh" in metrics_list:
-                        aux_metrics["normalised_test_llh"] = LLH(
-                            test_ds.y, y_pred_loc, y_pred_scale
+                        aux_metrics["normalised_test_llh"] = mean_LLH(
+                            test_ds.y, y_pred_loc, y_pred_variance
                         )
-                    del y_pred_loc, y_pred_scale
+                    del y_pred_loc, y_pred_variance
 
                 if wandb.run is not None:
                     wandb.log(
                         {
-                            **process_vmapped_metrics(vmapped_eval_metrics),
+                            **process_pmapped_and_vmapped_metrics(pmapped_and_vmapped_eval_metrics),
                             **{"sample_step": i},
                             **aux_metrics,
                         }
                     )
 
-                aux.append(vmapped_eval_metrics)
+                aux.append(pmapped_and_vmapped_eval_metrics)
 
         # print(f"alphas_polyak: {alphas_polyak.shape}")
 
