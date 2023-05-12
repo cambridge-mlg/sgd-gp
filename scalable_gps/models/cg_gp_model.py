@@ -17,7 +17,10 @@ from scalable_gps.eval_utils import mean_LLH
 from scalable_gps.kernels import Kernel
 from scalable_gps.linalg_utils import KvP, pivoted_cholesky
 from scalable_gps.models.exact_gp_model import ExactGPModel
-from scalable_gps.utils import ExactPredictionsTuple, process_pmapped_and_vmapped_metrics
+from scalable_gps.utils import (
+    ExactPredictionsTuple,
+    process_pmapped_and_vmapped_metrics,
+)
 
 
 class CGGPModel(ExactGPModel):
@@ -288,7 +291,7 @@ class CGGPModel(ExactGPModel):
                     aux_metrics['normalised_test_llh'] = mean_LLH(test_ds.y, y_pred_loc, y_pred_variance)
                 del y_pred_loc, y_pred_variance
             if wandb.run is not None:
-                wandb.log({**process_pmapped_and_vmapped_metrics(vmapped_eval_metrics),
+                wandb.log({**process_pmapped_and_vmapped_metrics(pmapped_and_vmapped_eval_metrics),
                             **{'sample_step': i},
                             **aux_metrics})
 

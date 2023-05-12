@@ -18,7 +18,11 @@ from scalable_gps.kernels import Kernel
 from scalable_gps.models.base_gp_model import GPModel
 from scalable_gps.models.exact_gp_model import ExactGPModel
 from scalable_gps.optim_utils import get_lr, get_lr_and_schedule
-from scalable_gps.utils import ExactPredictionsTuple, TargetTuple, process_pmapped_and_vmapped_metrics
+from scalable_gps.utils import (
+    ExactPredictionsTuple,
+    TargetTuple,
+    process_pmapped_and_vmapped_metrics,
+)
 
 
 class SGDGPModel(GPModel):
