@@ -131,7 +131,7 @@ class SGDGPModel(GPModel):
                 aux.append(eval_metrics)
 
         self.alpha = alpha_polyak
-        return self.alpha
+        return self.alpha, aux
 
     def compute_posterior_samples(
         self,

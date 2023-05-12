@@ -127,11 +127,7 @@ def main(config):
             train_config.preconditioner = True
         elif config.model_name == "vi":
             train_config = config.vi_config
-            kernel_config = {
-                "signal_scale": hparams.signal_scale,
-                "length_scale": hparams.length_scale,
-            }
-            model = SVGPModel(hparams.noise_scale, kernel, config, kernel_config)
+            model = SVGPModel(hparams.noise_scale, kernel, config)
 
             if config.vi_config.annoy_pre_clustering:
                 keep_indices = get_clustered_indices(
@@ -140,7 +136,6 @@ def main(config):
                     lengthscale_ratio=config.vi_config.clustering_length_scale_ratio,
                 )
             print(f"loaded {len(keep_indices)} keep indices from clustering")
-            print(keep_indices.shape)
             train_ds.z = train_ds.x[keep_indices]
 
         metrics_list = ["loss", "err", "reg", "normalised_test_rmse", "test_rmse"]
