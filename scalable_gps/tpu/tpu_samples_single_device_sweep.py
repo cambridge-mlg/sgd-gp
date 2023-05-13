@@ -11,7 +11,7 @@ datasets = datasets[::-1]
 # , 'kin40k'] # 
 # datasets = ['houseelectric']
 
-low_noise = False
+low_noise = True
 
 for dataset in datasets:
     for method in methods:
