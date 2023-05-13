@@ -97,12 +97,12 @@ def get_config(config_string):
         )
 
     config.sampling_config = config.train_config.copy_and_resolve_references()
-    config.sampling_config.n_samples = 16
+    config.sampling_config.n_samples = 64
     # Full-batch training configs that get passed
     config.sampling_config.iterative_idx = True
     config.sampling_config.learning_rate = 1e-1
     config.sampling_config.momentum = 0.9
-    config.sampling_config.polyak = 100 / config.train_config.iterations
+    config.sampling_config.polyak = 100 / config.sampling_config.iterations
     config.sampling_config.iterations = 100000
     config.sampling_config.batch_size = 512
     config.sampling_config.eval_every = 1000
@@ -142,9 +142,9 @@ def get_config(config_string):
     config.cg_config.preempt_safe = False
 
     config.cg_sampling_config = ml_collections.ConfigDict()
-    config.cg_sampling_config.batch_size = 512
+    config.cg_sampling_config.batch_size = 1
     config.cg_sampling_config.n_features_prior_sample = 2000
-    config.cg_sampling_config.n_samples = 16
+    config.cg_sampling_config.n_samples = 64
     config.cg_sampling_config.tol = 1e-3
     config.cg_sampling_config.maxiter = 1000
     config.cg_sampling_config.atol = 0.0

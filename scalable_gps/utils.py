@@ -158,7 +158,7 @@ def get_clustered_indices(d_name: str, split: int, lengthscale_ratio: float):
 
 
 def get_map_solution(
-    d_name: str, method_name: str, split: int, override_noise_scale: int
+    d_name: str, method_name: str, split: int, override_noise_scale: float
 ):
     api = wandb.Api()
     import pickle
@@ -174,6 +174,7 @@ def get_map_solution(
 
     artifact = api.artifact(f"shreyaspadhy/scalable-gps/{artifact_name}:latest")
     data = pickle.load(open(artifact.file(), "rb"))
+    print(f'loaded {artifact_name}')
     return data
 
 def get_latest_saved_artifact(

@@ -107,8 +107,8 @@ def main(config):
                 config.model_name, 
                 config.dataset_config.split,
                 config.override_noise_scale,)
-
             model.alpha = data['alpha']
+            print('loaded in mean alpha from WANDB server.')
         except:
             model.compute_representer_weights(
                 optim_key,
@@ -120,7 +120,7 @@ def main(config):
                 exact_metrics=exact_metrics if config.compute_exact_soln else None,
             )
         
-        zero_mean_samples, alpha_samples, _, _ = model.compute_posterior_samples(
+        zero_mean_samples, alpha_samples, _ = model.compute_posterior_samples(
             sampling_key,
             n_samples=config.sampling_config.n_samples,
             train_ds=train_ds,

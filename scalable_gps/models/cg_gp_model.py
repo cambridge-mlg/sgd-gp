@@ -345,7 +345,6 @@ class CGGPModel(ExactGPModel):
             # f0_samples_train + eps0_samples is (n_devices, n_samples_per_device, n_train)
             alphas, cg_states = cg_fn(f0_samples_train + eps0_samples, cg_states, i)  # (n_samples, n_train)
 
-            print(f'alphas: {alphas.shape}, f0_samples_test: {f0_samples_test.shape}')
             pmapped_and_vmapped_eval_metrics = eval_fn(alphas, i, None, target_tuples)
 
             aux_metrics = {}
@@ -373,4 +372,4 @@ class CGGPModel(ExactGPModel):
         print(f'alphas: {alphas.shape}')
         posterior_samples = compute_posterior_samples_fn(alphas, f0_samples_test)  # (n_samples, n_test)
         
-        return posterior_samples, alphas, w_samples, aux
+        return posterior_samples, alphas, w_samples
