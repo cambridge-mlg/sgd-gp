@@ -126,12 +126,12 @@ def main(config):
             train_ds=train_ds,
             test_ds=test_ds,
             config=sampling_config,
-            use_rff=False,
+            use_rff=True,
             n_features=config.sampling_config.n_features_prior_sample,
             zero_mean=True,
             metrics_list=metrics_list,
             metrics_prefix="sampling",
-            compare_exact=True
+            compare_exact=False
         )
 
         if config.wandb.log_artifact:
