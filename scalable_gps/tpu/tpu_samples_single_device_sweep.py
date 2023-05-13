@@ -8,7 +8,7 @@ splits = list(range(5))
 datasets = ['pol', 'elevators', 'bike', 'protein', 'keggdirected'] # , 'kin40k'] # 
 # datasets = ['houseelectric']
 
-low_noise = False
+low_noise = True
 
 for dataset in datasets:
     for method in methods:
