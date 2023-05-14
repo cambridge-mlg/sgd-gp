@@ -6,7 +6,7 @@
 
 # Set number of GPUs and CPUs
 gpus=1      # NOTE: batch size will be divided by number of GPUs
-cpus=$((2 * $gpus))
+cpus=$((32 * $gpus))
 
 # Check if provided directory exists
 if [ ! -d "$1" ]
@@ -33,7 +33,7 @@ for FILE in $1*; do
     # Extract job time and name from filename
     # see https://stackoverflow.com/a/5257398 for an explanation of this code
     IFS='/'; arr=($FILE); unset IFS;
-    FILE_=${arr[2]}
+    FILE_=${arr[1]}
     IFS='.'; arr=($FILE_); unset IFS;
     FILE_=${arr[0]}
     IFS='_'; arr=($FILE_); unset IFS;

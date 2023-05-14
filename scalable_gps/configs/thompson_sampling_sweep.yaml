@@ -5,7 +5,7 @@ program: scripts/thompson_sampling.py
 method: grid
 parameters:
   thompson.model_name:
-    values: ["SVGP"]
+    values: ["SGDGP"]
   thompson.seed:
     values: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
   thompson.D:
@@ -13,7 +13,7 @@ parameters:
   thompson.length_scale:
     values: [0.1, 0.2, 0.3, 0.4, 0.5]
   vi_config.iterations:
-    values: [100000]
+    values: [20000]
 
 command:
   - python
