@@ -211,12 +211,43 @@ class SGDGPModel(GPModel):
         feature_fn = self.get_feature_fn(train_ds, config.n_features_optim, config.recompute_features)
  
         # Call the pmapped and vmapped functions
+        manual_split_size = 20
+        
         n_devices = jax.device_count()
         assert n_samples % n_devices == 0
         n_samples_per_device = n_samples // n_devices
-        pmappable_keys = jr.split(prior_samples_key, n_samples).reshape((n_devices, n_samples_per_device, -1))
+        pmappable_keys = jr.split(
+            prior_samples_key, manual_split_size * n_samples
+        ).reshape((manual_split_size, n_devices, n_samples_per_device, -1))
         # (n_devices, n_samples_per_device, n_train), (n_devices, n_samples_per_device, n_test)
-        f0_samples_train, f0_samples_test, eps0_samples, w_samples = compute_prior_samples_fn(pmappable_keys)
+        
+        w_samples = []
+        f0_samples_train = jnp.zeros(
+            (n_devices, n_samples_per_device, train_ds.x.shape[0])
+        )
+        f0_samples_test = jnp.zeros(
+            (n_devices, n_samples_per_device, test_ds.x.shape[0])
+        )
+
+        for ii, L_i in enumerate(jnp.split(L, manual_split_size, axis=1)):
+            compute_prior_samples_fn = self.get_prior_samples_fn(
+                train_ds.N, L_i, use_rff, pmap=True
+            )
+            # (n_devices, n_samples_per_device, n_train), (n_devices, n_samples_per_device, n_test)
+            pmappable_keys_ = pmappable_keys[ii]
+            (
+                f0_samples_train_,
+                f0_samples_test_,
+                eps0_samples,
+                w_samples_,
+            ) = compute_prior_samples_fn(pmappable_keys_)
+            w_samples.append(w_samples_)
+            f0_samples_train += f0_samples_train_
+            f0_samples_test += f0_samples_test_
+
+        del L
+        w_samples = jnp.concatenate(w_samples, axis=-1)
+        
         
         exact_samples_tuple = None
         if compare_exact:
