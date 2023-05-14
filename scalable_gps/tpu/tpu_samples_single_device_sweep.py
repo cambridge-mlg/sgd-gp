@@ -2,16 +2,19 @@ import subprocess
 
 # methods = ['sgd', 'cg', 'precondcg', 'vi']
 # methods = ['sgd', 'cg']
-methods = ["sgd"]
+methods = ["precondcg"]
 splits = list(range(5))
 
-datasets = ['pol', 'elevators', 'bike', 'protein', 'keggdirected'] 
+# datasets = ['pol', 'elevators', 'bike', 'protein', 'keggdirected'] 
+datasets = ['bike'] 
 datasets = datasets[::-1]
 
 # , 'kin40k'] # 
 # datasets = ['houseelectric']
 
-low_noise = True
+low_noise = False
+
+splits = [0, 3, 4]
 
 for dataset in datasets:
     for method in methods:
