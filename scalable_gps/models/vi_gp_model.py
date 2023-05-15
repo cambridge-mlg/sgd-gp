@@ -136,7 +136,6 @@ class SVGPModel:
                     _,
                     predictive_dist,
                 ) = self.get_predictive(self.vi_params, x)
-                print(f'predictive_dist.variance(): {predictive_dist.variance().shape}')
                 
                 y_var = predictive_dist.variance()
 
