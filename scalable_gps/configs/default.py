@@ -62,6 +62,7 @@ def get_config(config_string):
     config.vi_config.clustering_length_scale_ratio = 1.0
     config.vi_config.learning_rate = 1e-3
     config.vi_config.absolute_clipping = 0.1
+    config.vi_config.use_exact_pred_variance = False
     config.train_config = ml_collections.ConfigDict()
 
     # Full-batch training configs that get passed

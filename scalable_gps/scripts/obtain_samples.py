@@ -156,37 +156,39 @@ def main(config):
         else:
             y_pred_loc = model.predictive_mean(train_ds, test_ds)
             
-            # Calculate Inducing points.
-            inducing_inputs = model.vi_params["variational_family"]["inducing_inputs"]
-            feature_params = kernel.feature_params(key, 2000, inducing_inputs, recompute=True)
-            L = featurise(
-                inducing_inputs,
-                feature_params
-                )
-            alpha_map = jnp.zeros(inducing_inputs.shape[0])
+            if not config.vi_config.use_exact_pred_variance:
+                # Calculate Inducing points.
+                inducing_inputs = model.vi_params["variational_family"]["inducing_inputs"]
+                feature_params = kernel.feature_params(key, 2000, inducing_inputs, recompute=True)
+                L = featurise(
+                    inducing_inputs,
+                    feature_params
+                    )
+                alpha_map = jnp.zeros(inducing_inputs.shape[0])
 
-            aux_vi_model = SVGPThompsonInterface(hparams.noise_scale, kernel, config)
-            aux_vi_model.vi_params = model.vi_params
-            _, pseudo_representer_weights, w_samples = aux_vi_model.compute_posterior_samples(
-                sampling_key, config.sampling_config.n_samples, train_ds, test_ds, train_config, L=L)
-            
-            class DummyState(NamedTuple):
-                feature_params: Array
-            
-            state = DummyState(feature_params)
-            acq_fn, _, _ = get_acquisition_fn(
-                state, kernel, alpha_map, pseudo_representer_weights, 
-                w_samples, inducing_inputs=inducing_inputs)
-            
-            posterior_variance = acq_fn(test_ds.x)
+                aux_vi_model = SVGPThompsonInterface(hparams.noise_scale, kernel, config)
+                aux_vi_model.vi_params = model.vi_params
+                _, pseudo_representer_weights, w_samples = aux_vi_model.compute_posterior_samples(
+                    sampling_key, config.sampling_config.n_samples, train_ds, test_ds, train_config, L=L)
+                
+                class DummyState(NamedTuple):
+                    feature_params: Array
+                
+                state = DummyState(feature_params)
+                acq_fn, _, _ = get_acquisition_fn(
+                    state, kernel, alpha_map, pseudo_representer_weights, 
+                    w_samples, inducing_inputs=inducing_inputs)
+                
+                posterior_variance = acq_fn(test_ds.x)
 
-            y_pred_variance = jnp.var(posterior_variance, axis=0) + hparams.noise_scale ** 2
-            # zero_mean_posterior_samples = model.compute_posterior_samples(
-            #     sampling_key, train_ds, test_ds, 64, L=L)
-            
-            # print(f'zero_mean_posterior_samples: {zero_mean_posterior_samples.shape}')
-            # y_pred_variance = model.predictive_variance(
-            #     train_ds, test_ds, add_likelihood_noise=True, return_marginal_variance=True)
+                y_pred_variance = jnp.var(posterior_variance, axis=0) + hparams.noise_scale ** 2
+            else:
+                # zero_mean_posterior_samples = model.compute_posterior_samples(
+                #     sampling_key, train_ds, test_ds, 64, L=L)
+                
+                # print(f'zero_mean_posterior_samples: {zero_mean_posterior_samples.shape}')
+                y_pred_variance = model.predictive_variance(
+                    train_ds, test_ds, add_likelihood_noise=True, return_marginal_variance=True)
             test_llh = mean_LLH(
                 test_ds.y, y_pred_loc, y_pred_variance, mu=train_ds.mu_y, sigma=train_ds.sigma_y)
             normalised_test_llh = mean_LLH(test_ds.y, y_pred_loc, y_pred_variance)
