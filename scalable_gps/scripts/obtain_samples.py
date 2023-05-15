@@ -6,6 +6,7 @@ import wandb
 from absl import app, flags
 
 from scalable_gps import kernels
+from scalable_gps.eval_utils import mean_LLH
 from scalable_gps.data import get_dataset
 from scalable_gps.models.cg_gp_model import CGGPModel
 from scalable_gps.models.sgd_gp_model import SGDGPModel
@@ -94,8 +95,8 @@ def main(config):
             sampling_config.preconditioner = True
         elif config.model_name == "vi":
             train_config = config.vi_config
-            kernel_config = {'signal_scale': hparams.signal_scale, 'length_scale': hparams.length_scale}
-            model = SVGPModel(hparams.noise_scale, kernel, config, kernel_config)
+            model = SVGPModel(hparams.noise_scale, kernel, config)
+            model.reinit_get_predictive(train_ds, optim_key)
 
         metrics_list = ["loss", "err", "reg", "normalised_test_rmse", "test_rmse", "test_llh", "normalised_test_llh"]
         if config.compute_exact_soln:
@@ -107,7 +108,11 @@ def main(config):
                 config.model_name, 
                 config.dataset_config.split,
                 config.override_noise_scale,)
-            model.alpha = data['alpha']
+            
+            if config.model_name == "vi":
+                model.vi_params = data['alpha']
+            else:
+                model.alpha = data['alpha']
             print('loaded in mean alpha from WANDB server.')
         except:
             model.compute_representer_weights(
@@ -120,19 +125,29 @@ def main(config):
                 exact_metrics=exact_metrics if config.compute_exact_soln else None,
             )
         
-        zero_mean_samples, alpha_samples, _ = model.compute_posterior_samples(
-            sampling_key,
-            n_samples=config.sampling_config.n_samples,
-            train_ds=train_ds,
-            test_ds=test_ds,
-            config=sampling_config,
-            use_rff=True,
-            n_features=config.sampling_config.n_features_prior_sample,
-            zero_mean=True,
-            metrics_list=metrics_list,
-            metrics_prefix="sampling",
-            compare_exact=False
-        )
+        if config.model_name != 'vi':
+            zero_mean_samples, alpha_samples, _ = model.compute_posterior_samples(
+                sampling_key,
+                n_samples=config.sampling_config.n_samples,
+                train_ds=train_ds,
+                test_ds=test_ds,
+                config=sampling_config,
+                use_rff=True,
+                n_features=config.sampling_config.n_features_prior_sample,
+                zero_mean=True,
+                metrics_list=metrics_list,
+                metrics_prefix="sampling",
+                compare_exact=False
+            )
+        else:
+            y_pred_loc = model.predictive_mean(train_ds, test_ds)
+            y_pred_variance = model.predictive_variance(
+                train_ds, test_ds, add_likelihood_noise=True, return_marginal_variance=True)
+            test_llh = mean_LLH(
+                test_ds.y, y_pred_loc, y_pred_variance, mu=train_ds.mu_y, sigma=train_ds.sigma_y)
+            normalised_test_llh = mean_LLH(test_ds.y, y_pred_loc, y_pred_variance)
+            
+            wandb.log({"test_llh": test_llh, "normalised_test_llh": normalised_test_llh})
 
         if config.wandb.log_artifact:
             # Use wandb artifacts to save model hparams for a given dataset split and subsample_idx.

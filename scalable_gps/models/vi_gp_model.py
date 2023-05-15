@@ -39,6 +39,13 @@ class SVGPModel:
             inducing_init=config.vi_config.inducing_init,
         )
 
+    
+    def reinit_get_predictive(
+        self, train_ds, key):
+        init_key, _ = jax.random.split(key, 2)
+        _, _, _, self.get_predictive = self.regression_fn(
+            train_ds, init_key
+        )
     def compute_representer_weights(
         self,
         key: chex.PRNGKey,
