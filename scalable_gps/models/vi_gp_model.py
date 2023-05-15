@@ -46,6 +46,7 @@ class SVGPModel:
         _, _, _, self.get_predictive = self.regression_fn(
             train_ds, init_key
         )
+
     def compute_representer_weights(
         self,
         key: chex.PRNGKey,
@@ -159,10 +160,23 @@ class SVGPModel:
 
             return variance
 
-    def compute_posterior_samples(self, key, num_samples):
-        raise NotImplementedError(
-            "compute_posterior_samples is broken in new minibatched prediction code -- speak to Javi if you really need a fix."
+    # def compute_posterior_samples(self, key, num_samples):
+    #     raise NotImplementedError(
+    #         "compute_posterior_samples is broken in new minibatched prediction code -- speak to Javi if you really need a fix."
+    #     )
+    
+    def compute_posterior_samples(self, key, train_ds, test_ds, num_samples):
+        (
+                function_dist,
+                predictive_dist
+        ) = self.get_predictive(self.vi_params, train_ds.x)
+        posterior_samples = function_dist.sample(
+            seed=key, sample_shape=(num_samples,)
         )
+
+        zero_mean_posterior_samples = posterior_samples - self.predictive_mean(train_ds, test_ds)
+
+        return zero_mean_posterior_samples
 
     def predictive_variance_samples(
         self, zero_mean_posterior_samples: Array, return_marginal_variance: bool = True
