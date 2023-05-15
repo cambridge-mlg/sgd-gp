@@ -17,6 +17,7 @@ fi
 
 # Loop over files in the given directory
 for FILE in $1*; do
+    echo $FILE
     # This convoluted way of counting also works if a final EOL character is missing
     n_jobs=$(grep -c '^' "$FILE")
 
@@ -33,13 +34,14 @@ for FILE in $1*; do
     # Extract job time and name from filename
     # see https://stackoverflow.com/a/5257398 for an explanation of this code
     IFS='/'; arr=($FILE); unset IFS;
-    FILE_=${arr[1]}
+    FILE_=${arr[2]}
     IFS='.'; arr=($FILE_); unset IFS;
     FILE_=${arr[0]}
     IFS='_'; arr=($FILE_); unset IFS;
     NAME=${arr[0]}
     TIME=${arr[1]}
-
+    echo $NAME
+    echo $arr
     # Define and create logging directory
     log_dir="logs/$NAME"
     mkdir -p $log_dir

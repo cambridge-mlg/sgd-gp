@@ -49,6 +49,7 @@ class SVGPModel:
         metrics_prefix: str = "",
         exact_metrics: Optional[Any] = None,
         recompute: Optional[bool] = None,
+        artifact_name: Optional[str] = None,
     ):
         del metrics_list, metrics_prefix, exact_metrics, recompute
 
