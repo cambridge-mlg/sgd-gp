@@ -1,3 +1,4 @@
+import time
 from functools import partial
 from typing import Any, List, Optional
 
@@ -10,7 +11,7 @@ import optax
 import wandb
 from chex import Array
 from ml_collections import ConfigDict
-import time
+
 from scalable_gps.data import Dataset
 from scalable_gps.kernels import Kernel
 from scalable_gps.SVGP import regression_SVGP, sample_from_qu
@@ -83,8 +84,16 @@ class SVGPModel:
             batch_size=config.batch_size,
             verbose=False,
         )
-        wall_clock_time = time.time() - wall_clock_time
+        
         self.vi_params, loss = optimised_state.unpack()
+        
+        (
+                _,
+                predictive_dist,
+            ) = self.get_predictive(self.vi_params, test_ds.x)
+        
+        wall_clock_time = time.time() - wall_clock_time
+        
 
         if wandb.run is not None:
             for loss_val in loss:
