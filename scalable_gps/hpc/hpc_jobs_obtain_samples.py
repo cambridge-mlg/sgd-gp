@@ -2,8 +2,8 @@ from pathlib import Path
 
 low_noise = False
 
-EXPERIMENT_NAME = "obtain-samples"
-JOBS_FOLDER = f'hpc-jobs-obtain-samples'
+EXPERIMENT_NAME = "obtain-samples-houseelectric"
+JOBS_FOLDER = f'hpc-jobs-obtain-samples-houseelectric'
 DELETE_PREV_FOLDER = True
 SCRIPT = "/home/sp2058/rds/rds-t2-cs117/sp2058/repos/scalable-gaussian-processes/scalable_gps/scripts/obtain_samples.py"
 TIME = "18:00:00"
@@ -17,9 +17,9 @@ datasets = [
     # "keggdirected",
     # "slice",
     # "keggundirected",
-    "3droad",
-    "song",
-    "buzz",
+    # "3droad",
+    # "song",
+    # "buzz",
     "houseelectric"
     ]
 
@@ -57,10 +57,10 @@ if jobsfile.exists():
     jobsfile.unlink()
 jobsfile.touch()
 
-methods = ['sgd', 'cg', 'precondcg']
+methods = ['sgd']
 
 # all_splits = [0, 1, 2, 3, 4]
-all_splits = [0, 1, 2, 3, 4]
+all_splits = [0, 1, 2]
 
 
 splits = {
@@ -72,25 +72,34 @@ splits = {
 
 
 # write job commands
+use_exact = [False]
 with open(jobsfile, 'w') as f:
     for dataset in datasets:
         for method in methods:
              for split in splits[method]:
-                # pass wandb API key as argv[0]
-                line = (f'python {SCRIPT} 9835d6db89010f73306f92bb9a080c9751b25d28 '
-                        f'--config configs/default.py:{dataset} '
-                        f'--config.model_name {method} '
-                        f'--config.dataset_config.split {split} '
-                        f'--config.wandb.log '
-                        f'--config.wandb.code_dir /home/sp2058/rds/rds-t2-cs117/sp2058/repos/scalable-gaussian-processes '
-                        f'--config.wandb.log_artifact '
-                        f'--config.cg_sampling_config.batch_size {CG_BS[dataset]} '
-                        f'--config.cg_sampling_config.maxiter {CG_MAXITER[dataset]} '
-                        f'--config.sampling_config.learning_rate {SGD_LR[dataset]} '
-                        f'--noconfig.compute_exact_soln '
-                        f'--config.sampling_config.eval_every 10000 ')
-                name = f'samples_final_{dataset}_{method}_{split}'
+                for exact in use_exact:
+                    # pass wandb API key as argv[0]
+                    line = (f'python {SCRIPT} 9835d6db89010f73306f92bb9a080c9751b25d28 '
+                            f'--config configs/default.py:{dataset} '
+                            f'--config.model_name {method} '
+                            f'--config.dataset_config.split {split} '
+                            f'--config.wandb.log '
+                            f'--config.wandb.code_dir /home/sp2058/rds/rds-t2-cs117/sp2058/repos/scalable-gaussian-processes '
+                            # f'--config.wandb.log_artifact '
+                            # f'--config.cg_sampling_config.batch_size {CG_BS[dataset]} '
+                            # f'--config.cg_sampling_config.maxiter {CG_MAXITER[dataset]} '
+                            f'--config.sampling_config.learning_rate {SGD_LR[dataset]} '
+                            f'--noconfig.compute_exact_soln '
+                            f'--config.sampling_config.eval_every 1000 ')
+                    
+                    name = f'samples_final_{dataset}_{method}_{split}'
+                    if dataset == "houseelectric" and method == "vi":
+                        line += '--config.vi_config.annoy_pre_clustering '
+                    
+                    if exact:
+                        line += '--config.vi_config.use_exact_pred_variance '
+                        name += '_exactpredvar'
 
 
-                line += f'--config.wandb.name {name}\n'
-                f.write(line)
+                    line += f'--config.wandb.name {name}\n'
+                    f.write(line)
