@@ -10,7 +10,7 @@ import optax
 import wandb
 from chex import Array
 from ml_collections import ConfigDict
-
+import time
 from scalable_gps.data import Dataset
 from scalable_gps.kernels import Kernel
 from scalable_gps.SVGP import regression_SVGP, sample_from_qu
@@ -72,7 +72,7 @@ class SVGPModel:
         negative_elbo, init_state, D, self.get_predictive = self.regression_fn(
             train_ds, init_key
         )
-
+        wall_clock_time = time.time()
         optimised_state = gpx.fit_batches(
             objective=negative_elbo,
             parameter_state=init_state,
@@ -83,13 +83,13 @@ class SVGPModel:
             batch_size=config.batch_size,
             verbose=False,
         )
-
+        wall_clock_time = time.time() - wall_clock_time
         self.vi_params, loss = optimised_state.unpack()
 
         if wandb.run is not None:
             for loss_val in loss:
                 wandb.log({"loss": loss_val})
-
+            wandb.log({"wall_clock_time": wall_clock_time})
         return self.vi_params, loss
 
     def predictive_mean(
