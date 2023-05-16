@@ -87,11 +87,7 @@ class SVGPModel:
         
         self.vi_params, loss = optimised_state.unpack()
         
-        (
-                _,
-                predictive_dist,
-            ) = self.get_predictive(self.vi_params, test_ds.x)
-        
+        y_pred = self.predictive_mean(train_ds, test_ds)
         wall_clock_time = time.time() - wall_clock_time
         
 
