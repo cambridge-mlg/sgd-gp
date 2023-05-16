@@ -237,11 +237,11 @@ class SVGPThompsonInterface(SVGPModel):
 
         jit_solve = jax.jit(partial(jax.scipy.linalg.solve, assume_a="pos"))
 
-        alpha_means = jit_solve(K, u_samples)  # (num_inducing, num_samples)
+        alpha_means = jit_solve(K + 1e-3 * jnp.eye(K.shape[0]), u_samples)  # (num_inducing, num_samples)
 
         w_samples = jax.random.normal(w_sample_key, shape=(n_samples, L.shape[1]))
         f0_samples = L @ w_samples.T  # (num_inducing, n_samples)
-        alpha_samples = jit_solve(K, f0_samples)  # (num_inducing, num_samples)
+        alpha_samples = jit_solve(K + 1e-3 * jnp.eye(K.shape[0]), f0_samples)  # (num_inducing, num_samples)
 
         pseudo_representer_weights = -(
             alpha_means - alpha_samples
