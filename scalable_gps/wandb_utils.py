@@ -6,9 +6,9 @@ def _load(runs, config_keys, metric_keys, page_size=100000000):
     configs_and_metrics = []
 
     for run in tqdm(runs):
-        # if run.state != 'finished':
-        #     print(f"Skipping run '{run.id}' because it '{run.state}'.")
-        #     continue
+        if run.state != 'finished':
+            print(f"Skipping run '{run.id}' because it '{run.state}'.")
+            continue
         # retrieve desired configs
         configs = {k: run.config[k] for k in config_keys}
 
