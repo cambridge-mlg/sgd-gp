@@ -1,0 +1,49 @@
+\documentclass[hidelinks]{article}
+\PassOptionsToPackage{backend=bibtex}{biblatex}
+
+\usepackage[nonatbib]{neurips_2022} % final
+\usepackage[centerfigures,citations,commands,enumerate,environments,theorems,lmrscinnershape]{AVT}
+
+\usepackage{placeins}
+\usepackage{xcolor}
+\usepackage{layouts}
+\usepackage{enumitem}
+\usepackage{nicefrac}
+\usepackage{dcolumn}
+
+\usepackage{booktabs}
+\usepackage{multirow}
+\usepackage{graphicx}
+\usepackage{tabularx} % for 'tabularx' env. and 'X' col. type
+
+
+\newcommand{\draft}[1]{{\color{magenta} #1}}
+
+\title{Sampling from Gaussian Process Posteriors\\using Stochastic Gradient Descent}
+
+\author{Jihao Andreas Lin\textsuperscript{\ensuremath{1,}}\thanks{Equal contribution, order chosen randomly.\\Code available at: \emph{removed to preserve anonymity.}}\qquad Javier Antorán\textsuperscript{\ensuremath{1,*}}\qquad Shreyas Padhy\textsuperscript{\ensuremath{1,*}}\\\bfseries David Janz\textsuperscript{\ensuremath{2}}\qquad José Miguel Hernandez-Lobato\textsuperscript{\ensuremath{1}}\qquad Alexander Terenin\textsuperscript{\ensuremath{1}}\\\textsuperscript{\ensuremath{1}}University of Cambridge\qquad \textsuperscript{\ensuremath{2}}University of Alberta}
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+Gaussian processes are a powerful framework for quantifying uncertainty and sequential decision-making but are limited by requiring to solve linear systems. In general, this has a cubic cost in data set size and is sensitive to conditioning.
+This work explores stochastic gradient algorithms as a computationally efficient method of approximately solving these linear systems: we develop low-variance optimization objectives for sampling from the posterior; we extend these results to the inducing point setting. 
+Counterintuitively, stochastic gradient descent does not converge quickly to the exact solutions of the (potentially ill-conditioned) linear systems, but it often produces very accurate predictions.
+We explain this through a spectral characterization of the implicit bias from non-convergence, showing that stochastic gradient descent produces predictive distributions that match the true posterior in both regions with sufficient data coverage, and regions sufficiently far away from the data.
+Experimentally, stochastic gradient descent achieves state-of-the-art performance on sufficiently-large-scale, or ill-conditioned, regression tasks, and its uncertainty estimates match the performance of significantly more expensive baselines on a large-scale Bayesian optimization~task.
+\end{abstract}
+
+Hello this is my table. I am under the water.
+Just typing some random stuff to reach the end of line.
+Lorem Ipsum should do the trick.
+
+
+\input{regression.tex}
+
+
+\end{document}
+
+
+
