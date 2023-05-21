@@ -19,6 +19,8 @@ class ThompsonDataset(NamedTuple):
     N: int
     D: int
 
+    z: Optional[Array] = None
+
 
 @dataclass
 class Dataset:

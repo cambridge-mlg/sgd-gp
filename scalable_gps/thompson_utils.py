@@ -149,7 +149,7 @@ def get_thompson_step_fn(
             test_ds = fake_dataset_like(state.ds)
 
             # get posterior samples
-            alpha_map = model.compute_representer_weights(
+            alpha_map, _ = model.compute_representer_weights(
                 key=representer_key,
                 train_ds=state.ds,
                 test_ds=test_ds,
@@ -237,7 +237,7 @@ def gp_sample_argmax(
             minval=config.minval,
             maxval=config.maxval,
             state=state,
-            lengthscale=kernel.kernel_config["length_scale"],
+            length_scale=kernel.kernel_config["length_scale"],
         )  #  ( config.n_friends, state.ds.D)
 
         y_friends = acquisition_fn_sharex(x_friends)  # (num_samples, config.n_friends)
@@ -276,13 +276,13 @@ def gp_sample_argmax(
 
 def find_friends(
     key: PRNGKey,
-    ndims,
+    ndims: int,
     n_friends: int,
     method: str = "uniform",
     minval: float = 0.0,
     maxval: float = 1.0,
     state: Optional[ThompsonState] = None,
-    lengthscale: Optional[Array] = None,
+    length_scale: Optional[Array] = None,
 ) -> Array:
     """Given the current state, choose the next batch of exploration points."""
 
@@ -300,7 +300,7 @@ def find_friends(
         )
         # TODO: consider making this uniform between - lengthscale[None, :] / 4 and lengthscale[None, :] / 4
         x_friends_localised_noise = jr.normal(key_nearby, shape=(num_exploit, ndims))
-        x_friends_localised_noise = x_friends_localised_noise * lengthscale[None, :] / 2
+        x_friends_localised_noise = x_friends_localised_noise * length_scale[None, :] / 2
 
         scores = state.ds.y + state.ds.y.min() + 1e-6
         scores = scores / scores.sum()
@@ -357,24 +357,19 @@ def find_besties(
 
     opt_state = optimiser.init(x_homies)
 
-    # TODO: will this work for (num_samples) y_homies?
-    trace = []
-    if optim_trace:
-        y_homies = acquisition_fn(x_homies)
-        trace.append((x_homies, y_homies))
-
     scan_idx = jnp.arange(iterations)
 
     def scan_fn(scan_state, _):
-        x_homies, opt_state, trace = scan_state
+        x_homies, opt_state = scan_state
         x_homies, opt_state = update(x_homies, opt_state)
         if optim_trace:
             y_homies = acquisition_fn(x_homies)
-            trace.append((x_homies, y_homies))
-        return (x_homies, opt_state, trace), 0
+            trace_tuple = (x_homies, y_homies)
+        else:
+            trace_tuple = None
+        return (x_homies, opt_state), trace_tuple
 
-    scan_state = jax.lax.scan(scan_fn, (x_homies, opt_state, trace), scan_idx)[0]
-    x_homies, _, trace = scan_state
+    (x_homies, _), trace = jax.lax.scan(scan_fn, (x_homies, opt_state), scan_idx)
 
     if wandb.run is not None and optim_trace:
         for ii, step_data in enumerate(trace):
@@ -398,8 +393,7 @@ def find_besties(
         """
         return x[jnp.argsort(y)[-n_besties:]]
 
-    if not optim_trace:
-        y_homies = acquisition_fn(x_homies)
+    y_homies = acquisition_fn(x_homies)
 
     return top_args(x_homies, y_homies), trace
 
