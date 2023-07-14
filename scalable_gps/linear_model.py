@@ -21,24 +21,35 @@ def regularizer(params: Array, features: Array, target: Array, noise_scale: floa
     R = L.T @ (params - target)
     return 0.5 * jnp.dot(R, R)
 
-# TODO: pmap over idx / B
-def error_grad_sample(params: Array, idx: Array, x: Array, target: Array, kernel_fn: Callable):
+def grad_sample(params: Array, idx: Array, x: Array, features: Array, target_tuple: TargetTuple, kernel_fn: Callable, noise_scale: float):
     K = kernel_fn(x[idx], x)
     B, N = K.shape
-    return -K.T @ (target[idx] - K @ params) * (N / B)
-
-def regularizer_grad_sample(params: Array, features: Array, target: Array, noise_scale: float):
     L = features
-    params = (noise_scale**2) * params
-    return L @ (L.T @ (params - target))
 
+    err_grad = -K.T @ (target_tuple.error_target[idx] - K @ params) * (N / B)
+    reg_grad = L @ (L.T @ ((noise_scale ** 2) * params - target_tuple.regularizer_target))
+    grad = err_grad + reg_grad
+    return grad
+
+def improved_grad_sample(params: Array, idx: Array, x: Array, target_tuple: TargetTuple, kernel_fn: Callable, noise_scale: float):
+    K = kernel_fn(x[idx], x)
+    B, N = K.shape
+
+    batch_pred = jnp.zeros_like(params)
+    batch_pred = batch_pred.at[idx].set(K @ params)
+
+    err_grad = (N / B) * batch_pred - target_tuple.error_target
+    reg_grad = (noise_scale ** 2) * params - target_tuple.regularizer_target
+    grad = err_grad + reg_grad
+    return grad
 
 def loss_fn(params: Array, idx: Array, x: Array, features:Array, target_tuple: TargetTuple, kernel_fn: Callable, noise_scale):
     err = error(params, idx, x, target_tuple.error_target, kernel_fn)
     reg = regularizer(params, features, target_tuple.regularizer_target, noise_scale)
     chex.assert_rank([err, reg], 0)
     
-    return err + reg, err, reg
+    loss = err + reg
+    return loss
 
 
 def marginal_likelihood(x: Array, targets: Array, kernel_fn: Callable, hparams_tuple: HparamsTuple, 

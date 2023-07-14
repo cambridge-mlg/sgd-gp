@@ -138,9 +138,10 @@ def main(config):
                 print(f"loaded {len(keep_indices)} keep indices from clustering")
                 train_ds.z = train_ds.x[keep_indices]
 
-        metrics_list = ["loss", "err", "reg", "normalised_test_rmse", "test_rmse"]
+        # metrics_list = ["loss", "err", "reg", "normalised_test_rmse", "test_rmse"]
+        metrics_list = ["normalised_test_rmse"]
         if config.compute_exact_soln:
-            metrics_list.extend(["alpha_diff", "y_pred_diff", "alpha_rkhs_diff"])
+            metrics_list.extend(["alpha_diff", "alpha_rkhs_diff", "y_pred_diff"])
 
         # Compute the SGD MAP solution for representer weights.
         
@@ -174,6 +175,8 @@ def main(config):
             artifact_name = f"alpha_{config.dataset_name}_{config.model_name}_{config.dataset_config.split}"
             if config.override_noise_scale > 0.0:
                 artifact_name += f"_noise_{config.override_noise_scale}"
+            if config.train_config.use_improved_grad:
+                artifact_name += f"_improved_grad"
             model_artifact = wandb.Artifact(
                 artifact_name,
                 type="alpha",
@@ -183,6 +186,7 @@ def main(config):
                         "dataset_name": config.dataset_name,
                         "model_name": config.model_name,
                         "split": config.dataset_config.split,
+                        "use_improved_grad": config.train_config.use_improved_grad
                     }
                 },
             )

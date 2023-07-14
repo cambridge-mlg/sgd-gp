@@ -188,10 +188,10 @@ class ExactGPModel(GPModel):
         optimizer = optax.adam(learning_rate=config.learning_rate)
         opt_state = optimizer.init(log_hparams)
 
-        loss_fn = self.get_mll_loss_fn(
+        mll_loss_fn = self.get_mll_loss_fn(
             train_ds, self.kernel.kernel_fn, transform=transform
         )
-        update_fn = self.get_mll_update_fn(loss_fn, optimizer)
+        update_fn = self.get_mll_update_fn(mll_loss_fn, optimizer)
 
         iterator = tqdm(range(config.iterations))
         for i in iterator:
