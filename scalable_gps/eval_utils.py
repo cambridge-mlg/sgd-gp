@@ -8,7 +8,7 @@ from chex import Array
 
 from scalable_gps.data import Dataset
 from scalable_gps.linalg_utils import KvP
-from scalable_gps.linear_model import loss_fn
+from scalable_gps.linear_model import loss_fn, error, regularizer
 from scalable_gps.inducing_linear_model import i_loss_fn
 from scalable_gps.utils import (
     ExactPredictionsTuple,
@@ -134,27 +134,22 @@ def get_eval_fn(
                     target_tuple,
                     kernel_fn,
                     noise_scale,
-                )[0]
+                )
             elif metric == "err":
-                return loss_fn(
+                return error(
                     params,
                     idx,
                     train_ds.x,
-                    features,
-                    target_tuple,
-                    kernel_fn,
-                    noise_scale,
-                )[1]
+                    target_tuple.error_target,
+                    kernel_fn
+                )
             elif metric == "reg":
-                return loss_fn(
+                return regularizer(
                     params,
-                    idx,
-                    train_ds.x,
                     features,
-                    target_tuple,
-                    kernel_fn,
-                    noise_scale,
-                )[2]
+                    target_tuple.regularizer_target,
+                    noise_scale
+                )
             elif metric == "grad_var":
                 return grad_var_fn(params, grad_fn, idx, features, target_tuple)
             elif metric == "test_rmse":

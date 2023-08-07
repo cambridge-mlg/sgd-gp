@@ -9,8 +9,8 @@ from chex import Array
 from tqdm import tqdm
 
 from scalable_gps.linear_model import (
-    error_grad_sample,
-    regularizer_grad_sample,
+    grad_sample,
+    improved_grad_sample
 )
 from scalable_gps.inducing_linear_model import (
     i_error_grad_sample,
@@ -21,18 +21,13 @@ from scalable_gps.utils import TargetTuple
 PyTree = Any
 
 
-def get_stochastic_gradient_fn(x: Array, kernel_fn: Callable, noise_scale: float):
-    def _fn(params, idx, features, target_tuple):
-        error_grad = error_grad_sample(
-            params, idx, x, target_tuple.error_target, kernel_fn
-        )
-        regularizer_grad = regularizer_grad_sample(
-            params,
-            features,
-            target_tuple.regularizer_target,
-            noise_scale,
-        )
-        return error_grad + regularizer_grad
+def get_stochastic_gradient_fn(x: Array, kernel_fn: Callable, noise_scale: float, use_improved_grad: bool):
+    if use_improved_grad:
+        def _fn(params, idx, _, target_tuple):
+            return improved_grad_sample(params, idx, x, target_tuple, kernel_fn, noise_scale)
+    else:
+        def _fn(params, idx, features, target_tuple):
+            return grad_sample(params, idx, x, features, target_tuple, kernel_fn, noise_scale)
 
     return jax.jit(_fn)
 
@@ -66,7 +61,7 @@ def get_update_fn(
         new_params_polyak = optax.incremental_update(
             new_params, params_polyak, step_size=polyak_step_size
         )
-
+        
         return new_params, new_params_polyak, opt_state
 
     if vmap_and_pmap:

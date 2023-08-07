@@ -54,9 +54,13 @@ class SGDGPModel(GPModel):
         )
 
         # Define the gradient function
-        grad_fn = optim_utils.get_stochastic_gradient_fn(train_ds.x, self.kernel.kernel_fn, self.noise_scale)
+        grad_fn = optim_utils.get_stochastic_gradient_fn(train_ds.x, self.kernel.kernel_fn, self.noise_scale, config.use_improved_grad)
         update_fn = optim_utils.get_update_fn(grad_fn, optimizer, config.polyak)
-        feature_fn = self.get_feature_fn(train_ds, config.n_features_optim, config.recompute_features)
+
+        if config.use_improved_grad:
+            feature_fn = lambda _: None
+        else:
+            feature_fn = self.get_feature_fn(train_ds, config.n_features_optim, config.recompute_features)
         
         eval_fn = eval_utils.get_eval_fn(
             metrics_list,
@@ -126,13 +130,12 @@ class SGDGPModel(GPModel):
 
         aux = []
         for i in tqdm(range(config.iterations)):
-            key, idx_key, feature_key = jr.split(key, 3)
-            features = feature_fn(feature_key)
-            idx = idx_fn(i, idx_key)
-            
             if most_recent_artifact_data is not None and i < restart_step:
                 continue
             start_time = time.time()
+            key, idx_key, feature_key = jr.split(key, 3)
+            features = feature_fn(feature_key)
+            idx = idx_fn(i, idx_key)
             alpha, alpha_polyak, opt_state = update_fn(alpha, alpha_polyak, idx, features, opt_state, target_tuple)
             alpha.block_until_ready()
             end_time = time.time()
@@ -204,11 +207,15 @@ class SGDGPModel(GPModel):
         compute_posterior_samples_fn = self.get_posterior_samples_fn(train_ds, test_ds, zero_mean, pmap=True)
         compute_target_tuples_fn = optim_utils.get_target_tuples_fn(config.loss_objective, pmap=True)
         
-        optimizer = optax.sgd(learning_rate=config.learning_rate, momentum=config.momentum, nesterov=True)
+        optimizer = optax.sgd(learning_rate=config.learning_rate, momentum=config.momentum, nesterov=config.nesterov)
         
-        grad_fn = optim_utils.get_stochastic_gradient_fn(train_ds.x, self.kernel.kernel_fn, self.noise_scale)
+        grad_fn = optim_utils.get_stochastic_gradient_fn(train_ds.x, self.kernel.kernel_fn, self.noise_scale, config.use_improved_grad)
         update_fn = optim_utils.get_update_fn(grad_fn, optimizer, config.polyak, vmap_and_pmap=True)
-        feature_fn = self.get_feature_fn(train_ds, config.n_features_optim, config.recompute_features)
+
+        if config.use_improved_grad:
+            feature_fn = lambda _: None
+        else:
+            feature_fn = self.get_feature_fn(train_ds, config.n_features_optim, config.recompute_features)
  
         # Call the pmapped and vmapped functions
         manual_split_size = 20
