@@ -38,7 +38,7 @@ def improved_grad_sample(params: Array, idx: Array, x: Array, target_tuple: Targ
     batch_pred = jnp.zeros_like(params)
     batch_pred = batch_pred.at[idx].set(K @ params)
 
-    err_grad = (N / B) * (batch_pred - target_tuple.error_target)
+    err_grad = (N / B) * batch_pred - target_tuple.error_target
     reg_grad = (noise_scale ** 2) * params - target_tuple.regularizer_target
     grad = err_grad + reg_grad
     return grad
