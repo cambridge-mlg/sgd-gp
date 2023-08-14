@@ -188,6 +188,9 @@ class SGDGPModel(GPModel):
         metrics_prefix: str = "",
         compare_exact: bool = False):
         
+        if not use_rff:
+            raise DeprecationWarning("You are using the deprecated 'use_rff' flag.")
+        del use_rff
         prior_covariance_key, prior_samples_key, optim_key = jr.split(key, 3)
 
         if L is None:

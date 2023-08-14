@@ -6,7 +6,7 @@ from chex import Array, PRNGKey
 from ml_collections import ConfigDict
 from typing import Callable, NamedTuple, Optional
 
-from scalable_gps.kernels import Kernel, FeatureParams, featurise
+from scalable_gps.kernels import Kernel, FourierFeatureParams
 from scalable_gps.data import ThompsonDataset
 from scalable_gps.models.base_gp_model import GPModel
 import chex
@@ -16,11 +16,19 @@ import wandb
 
 class ThompsonState(NamedTuple):
     ds: ThompsonDataset
-    feature_params: FeatureParams
+    feature_params: FourierFeatureParams
     true_w: Array
     max_fn_value: float
     argmax: float
     noise_scale: float
+
+
+def featurise(x: chex.Array, params: FourierFeatureParams):
+    return (
+        params.signal_scale
+        * jnp.sqrt(2.0 / params.M)
+        * jnp.cos((x / params.length_scale) @ params.omega + params.phi)
+    )
 
 
 # dont jit since we just run it once
