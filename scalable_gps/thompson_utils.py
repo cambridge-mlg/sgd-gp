@@ -60,7 +60,7 @@ def init(
         x_init = jr.truncated_normal(data_key, lower=minval, upper=maxval, shape=(n_init, D))
     else:
         raise NotImplementedError(f"Thompson sampling init_method '{init_method}' is not implemented.")
-    params = kernel.feature_params(feature_key, n_features, x_init, recompute=True)
+    params = kernel.feature_params(feature_key, n_features, x_init.shape[-1])
 
     w = jr.normal(w_key, shape=(n_features,))
     y_init = featurise(x_init, params) @ w
