@@ -14,7 +14,7 @@ from tqdm import tqdm
 from scalable_gps import eval_utils, optim_utils
 from scalable_gps.data import Dataset
 from scalable_gps.eval_utils import mean_LLH
-from scalable_gps.kernels import Kernel, featurise
+from scalable_gps.kernels import Kernel
 from scalable_gps.linalg_utils import KvP
 from scalable_gps.models.base_gp_model import GPModel
 from scalable_gps.optim_utils import get_lr, get_lr_and_schedule
@@ -36,10 +36,10 @@ class ISGDGPModel(GPModel):
 
         def _fn(key):
             params = self.kernel.feature_params(
-                key, n_features, train_ds.x, recompute=True
+                key, n_features, train_ds.x.shape[-1]
             )
-            features_x = featurise(train_ds.x, params)
-            features_z = featurise(train_ds.z, params)
+            features_x = self.kernel.featurise(train_ds.x, params)
+            features_z = self.kernel.featurise(train_ds.z, params)
             return features_x, features_z
 
         return jax.jit(_fn)
@@ -182,10 +182,10 @@ class ISGDGPModel(GPModel):
         if L is not None:
             raise ValueError("Inducing point SGD does not support")
         feature_params = self.kernel.feature_params(
-            key, n_features, train_ds.x, recompute=True
+            key, n_features, train_ds.x.shape[-1]
         )
-        features_x = featurise(train_ds.x, feature_params)
-        features_x_test = featurise(test_ds.x, feature_params)
+        features_x = self.kernel.featurise(train_ds.x, feature_params)
+        features_x_test = self.kernel.featurise(test_ds.x, feature_params)
         L = jnp.concatenate([features_x, features_x_test], axis=0)
         # features_z = featurise(train_ds.z, feature_params)
 

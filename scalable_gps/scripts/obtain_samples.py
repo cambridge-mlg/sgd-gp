@@ -11,7 +11,6 @@ from chex import Array
 from scalable_gps import kernels
 from scalable_gps.data import get_dataset
 from scalable_gps.eval_utils import mean_LLH
-from scalable_gps.kernels import featurise
 from scalable_gps.models.cg_gp_model import CGGPModel
 from scalable_gps.models.sgd_gp_model import SGDGPModel
 from scalable_gps.models.vi_gp_model import SVGPModel, SVGPThompsonInterface
@@ -162,8 +161,8 @@ def main(config):
             if not config.vi_config.use_exact_pred_variance:
                 # Calculate Inducing points.
                 inducing_inputs = model.vi_params["variational_family"]["inducing_inputs"]
-                feature_params = kernel.feature_params(key, 2000, inducing_inputs, recompute=True)
-                L = featurise(
+                feature_params = kernel.feature_params(key, 2000, inducing_inputs.shape[-1])
+                L = kernel.featurise(
                     inducing_inputs,
                     feature_params
                     )
