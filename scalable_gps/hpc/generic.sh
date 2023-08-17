@@ -8,7 +8,7 @@
 # Batch job mode: pass a file with first the job tag and second the commands per line
 
 #! Which project should be charged (NB Wilkes2 projects end in '-GPU'):
-#SBATCH -A T2-CS117-GPU
+#SBATCH -A T2-CS169-GPU
 
 #! How many whole nodes should be allocated?
 #SBATCH --nodes=1
