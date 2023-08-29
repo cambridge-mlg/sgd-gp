@@ -200,13 +200,12 @@ class SGDGPModel(GPModel):
                 test_ds,
                 self.kernel.kernel_fn,
                 self.kernel.feature_fn,
-                use_rff=use_rff,
                 n_features=n_features,
                 chol_eps=chol_eps,
             )
 
         # Get vmapped functions for sampling from the prior and computing the posterior.
-        compute_prior_samples_fn = self.get_prior_samples_fn(train_ds.N, L, use_rff, pmap=True)
+        compute_prior_samples_fn = self.get_prior_samples_fn(train_ds.N, L, pmap=True)
         compute_posterior_samples_fn = self.get_posterior_samples_fn(train_ds, test_ds, zero_mean, pmap=True)
         compute_target_tuples_fn = optim_utils.get_target_tuples_fn(config.loss_objective, pmap=True)
         
@@ -241,7 +240,7 @@ class SGDGPModel(GPModel):
 
         for ii, L_i in enumerate(jnp.split(L, manual_split_size, axis=1)):
             compute_prior_samples_fn = self.get_prior_samples_fn(
-                train_ds.N, L_i, use_rff, pmap=True
+                train_ds.N, L_i, pmap=True
             )
             # (n_devices, n_samples_per_device, n_train), (n_devices, n_samples_per_device, n_test)
             pmappable_keys_ = pmappable_keys[ii]
@@ -261,17 +260,18 @@ class SGDGPModel(GPModel):
         
         exact_samples_tuple = None
         if compare_exact:
+            print('Computing exact samples tuple')
             exact_gp = ExactGPModel(self.noise_scale, self.kernel)
             exact_gp.K = exact_gp.kernel.kernel_fn(train_ds.x, train_ds.x)
             exact_gp.compute_representer_weights(train_ds)
 
             # Reshape from (n_devices, n_samples_per_device, n_train) to (n_samples, n_train)
             f0_samples_train_reshaped = jax.device_put(
-                f0_samples_train.reshape(n_samples, train_ds.N), jax.devices('cpu')[0])
+                f0_samples_train.reshape(n_samples, train_ds.N), jax.devices('gpu')[0])
             eps0_samples_reshaped = jax.device_put(
-                eps0_samples.reshape(n_samples, train_ds.N), jax.devices('cpu')[0])
+                eps0_samples.reshape(n_samples, train_ds.N), jax.devices('gpu')[0])
             f0_samples_test_reshaped = jax.device_put(
-                f0_samples_test.reshape(n_samples, test_ds.N), jax.devices('cpu')[0])
+                f0_samples_test.reshape(n_samples, test_ds.N), jax.devices('gpu')[0])
 
             compute_exact_alpha_samples_fn = exact_gp.get_alpha_samples_fn()
             compute_exact_posterior_samples_fn = exact_gp.get_posterior_samples_fn(train_ds, test_ds, zero_mean=False)

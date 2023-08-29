@@ -236,6 +236,9 @@ class CGGPModel(ExactGPModel):
         metrics_prefix: str = "",
         compare_exact: bool = False,
     ):
+        if not use_rff:
+            raise DeprecationWarning("You are using the deprecated 'use_rff' flag.")
+        del use_rff
         prior_covariance_key, prior_samples_key, _ = jr.split(key, 3)
 
         if L is None:
@@ -245,13 +248,12 @@ class CGGPModel(ExactGPModel):
                 test_ds,
                 self.kernel.kernel_fn,
                 self.kernel.feature_fn,
-                use_rff=use_rff,
                 n_features=n_features,
                 chol_eps=chol_eps,
             )
 
         # Get vmapped functions for sampling from the prior and computing the posterior.
-        compute_prior_samples_fn = self.get_prior_samples_fn(train_ds.N, L, use_rff, pmap=True)
+        compute_prior_samples_fn = self.get_prior_samples_fn(train_ds.N, L, pmap=True)
         compute_posterior_samples_fn = self.get_posterior_samples_fn(train_ds, test_ds, zero_mean, pmap=True)
         compute_target_tuples_fn = optim_utils.get_target_tuples_fn(config.loss_objective, pmap=True)
 
@@ -275,7 +277,7 @@ class CGGPModel(ExactGPModel):
 
         for ii, L_i in enumerate(jnp.split(L, manual_split_size, axis=1)):
             compute_prior_samples_fn = self.get_prior_samples_fn(
-                train_ds.N, L_i, use_rff, pmap=True
+                train_ds.N, L_i, pmap=True
             )
             # (n_devices, n_samples_per_device, n_train), (n_devices, n_samples_per_device, n_test)
             pmappable_keys_ = pmappable_keys[ii]

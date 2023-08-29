@@ -122,7 +122,9 @@ def main(config):
                 config.model_name, 
                 config.dataset_config.split,
                 config.override_noise_scale,
-                config.train_config.use_improved_grad
+                config.train_config.use_improved_grad,
+                config.wandb.entity,
+                config.wandb.project,
             )
             
             if config.model_name == "vi":
@@ -153,7 +155,7 @@ def main(config):
                 zero_mean=True,
                 metrics_list=metrics_list,
                 metrics_prefix="sampling",
-                compare_exact=False
+                compare_exact=config.compute_exact_soln
             )
         else:
             y_pred_loc = model.predictive_mean(train_ds, test_ds)

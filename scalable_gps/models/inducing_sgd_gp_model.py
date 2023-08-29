@@ -191,7 +191,7 @@ class ISGDGPModel(GPModel):
 
         # Get vmapped functions for sampling from the prior and computing the posterior.
         # Will use this one for samples at x only, and manually compute function at z
-        compute_prior_samples_fn = self.get_prior_samples_fn(train_ds.N, L, use_rff, pmap=True)
+        compute_prior_samples_fn = self.get_prior_samples_fn(train_ds.N, L, pmap=True)
         # adapted to use inducing points automatically
         compute_posterior_samples_fn = self.get_posterior_samples_fn(
             train_ds, test_ds, zero_mean, pmap=True

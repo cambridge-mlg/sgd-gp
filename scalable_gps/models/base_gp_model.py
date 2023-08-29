@@ -49,13 +49,13 @@ class GPModel:
     
         return variance
 
-    def get_prior_samples_fn(self, n_train, L, use_rff: bool=False, pmap: bool=False):
+    def get_prior_samples_fn(self, n_train, L, pmap: bool=False):
         """Vmap factory function for sampling from the prior."""
         # fn(keys) -> prior_samples
         def _fn(key):
             prior_sample_key, sample_key = jr.split(key)
             f0_sample_train, f0_sample_test, w_sample = sampling_utils.draw_f0_sample(
-                    prior_sample_key, n_train, L, use_rff=use_rff)
+                    prior_sample_key, n_train, L)
             eps0_sample = sampling_utils.draw_eps0_sample(
                 sample_key, n_train, noise_scale=self.noise_scale)
 
@@ -92,7 +92,8 @@ class GPModel:
             return self.kernel.feature_fn(
                 key, 
                 n_features=n_features, 
+                n_input_dims=train_ds.D,
                 recompute=recompute, 
                 x=train_ds.x)
         
-        return jax.jit(_fn)    
+        return jax.jit(_fn, static_argnums=(1, 2, 3))    

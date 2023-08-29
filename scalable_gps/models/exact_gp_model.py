@@ -98,6 +98,9 @@ class ExactGPModel(GPModel):
         metrics_prefix: Optional[str] = None,
     ):
         del config, metrics_list, metrics_prefix
+        if not use_rff:
+            raise DeprecationWarning("You are using the deprecated 'use_rff' flag.")
+        del use_rff
         """Computes n_samples posterior samples, and returns posterior_samples along with alpha_samples."""
         prior_covariance_key, prior_samples_key, _ = jr.split(key, 3)
 
@@ -108,7 +111,6 @@ class ExactGPModel(GPModel):
                 test_ds,
                 self.kernel.kernel_fn,
                 self.kernel.feature_fn,
-                use_rff=use_rff,
                 n_features=n_features,
                 chol_eps=chol_eps,
             )

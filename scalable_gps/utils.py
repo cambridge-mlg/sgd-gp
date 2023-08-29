@@ -159,7 +159,8 @@ def get_clustered_indices(d_name: str, split: int, lengthscale_ratio: float):
 
 # TODO: refactor to use this in obtain mean to get correct artifact name
 def get_map_solution(
-    d_name: str, method_name: str, split: int, override_noise_scale: float, use_improved_grad: bool
+    d_name: str, method_name: str, split: int, override_noise_scale: float, use_improved_grad: bool,
+    entity: str, project: str
 ):
     api = wandb.Api()
     import pickle
@@ -175,7 +176,7 @@ def get_map_solution(
     if use_improved_grad:
         artifact_name += f"_improved_grad"
 
-    artifact = api.artifact(f"shreyaspadhy/scalable-gps/{artifact_name}:latest")
+    artifact = api.artifact(f"{entity}/{project}/{artifact_name}:latest")
     data = pickle.load(open(artifact.file(), "rb"))
     print(f'loaded {artifact_name}')
     return data

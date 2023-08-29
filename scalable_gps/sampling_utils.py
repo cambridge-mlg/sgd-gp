@@ -11,15 +11,10 @@ from scalable_gps.linalg_utils import KvP
 def draw_f0_sample(
     key: chex.PRNGKey,
     N: int,
-    L: Array,
-    use_rff: bool = False) -> Tuple[Array, Array]:
-    """Given L as either chol(K) or RFF Features, computes a sample from the prior function f_0."""
-    if use_rff:
-        M = L.shape[-1]
-        w_sample = jr.normal(key, (M,))
-    else:
-        N_full = L.shape[0]
-        w_sample = jr.normal(key, (N_full,))
+    L: Array) -> Tuple[Array, Array]:
+    """Given L as RFF Features only, computes a sample from the prior function f_0."""
+    M = L.shape[-1]
+    w_sample = jr.normal(key, (M,))
     
     f0_sample = L @ w_sample
 
@@ -40,18 +35,13 @@ def compute_prior_covariance_factor(
     test_ds: Dataset, 
     kernel_fn: Callable,
     feature_fn: Callable,
-    use_rff: bool = False, 
     n_features: int = 0,
     chol_eps: float = 1e-5):
     """Compute prior_covariance factor L as either chol(K) or Phi Phi^T."""
     x_full = jnp.vstack((train_ds.x, test_ds.x))
     N_full, N = x_full.shape[0], train_ds.N
 
-    if use_rff:
-        L = feature_fn(key, n_features, x_full)
-    else:
-        K_full = kernel_fn(x_full, x_full)
-        L = jnp.linalg.cholesky(K_full + chol_eps * jnp.identity(N_full))
+    L = feature_fn(key, n_features, train_ds.D, x_full)
     
     return L
 

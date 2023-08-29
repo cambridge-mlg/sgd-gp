@@ -24,25 +24,24 @@ class Kernel:
     def __init__(self, kernel_config=None):
         self.kernel_config = kernel_config or {}
 
-    def check_required_hparam_in_config(self, hparam_name: str, config_dict):
-        if hparam_name not in config_dict:
-            raise ValueError(
-                f"Required hyperparameter '{hparam_name}' must be present in config dict"
-            )
-
     def kernel_fn(self, x: Array, y: Array, **kwargs) -> Array:
         raise NotImplementedError("Subclasses should implement this method.")
 
     def _get_hparam(self, hparam_name: str, kwargs: Optional[dict]):
-        if kwargs is None or not kwargs:
-            self.check_required_hparam_in_config(hparam_name, self.kernel_config)
-            hparam = self.kernel_config[hparam_name]
-
-        else:
-            self.check_required_hparam_in_config(hparam_name, self.kernel_config)
+        try:
             hparam = kwargs[hparam_name]
+            return hparam
+        except KeyError:
+            pass
 
-        return hparam
+        try:
+            hparam = self.kernel_config[hparam_name]
+            return hparam
+        except KeyError:
+            raise ValueError(
+                f"Required hyperparameter '{hparam_name}' must be present in config dict or specified in kwargs"
+            )
+        
 
     def get_signal_scale(self, kwargs: Optional[dict] = None):
         return self._get_hparam("signal_scale", kwargs)
@@ -59,19 +58,19 @@ class Kernel:
     def featurise(self, x: Array, params: NamedTuple) -> Array:
         raise NotImplementedError("Subclasses should implement this method.")
 
-    @partial(jax.jit, static_argnums=(0,))
     def feature_fn(
         self,
         key: chex.PRNGKey,
         n_features: int,
+        n_input_dims: int,
         x: Array,
         **kwargs,
     ):  
-        D = x.shape[-1]
+        print(n_features, n_input_dims)
         params = self.feature_params(
             key,
             n_features,
-            D,
+            n_input_dims,
             **kwargs,
         )
         return self.featurise(x, params)
@@ -109,6 +108,7 @@ class StationaryKernel(Kernel):
             * jnp.cos((x / params.length_scale) @ params.omega + params.phi)
         )
 
+    @partial(jax.jit, static_argnums=(0, 2, 3))
     def feature_params(
         self,
         key: chex.PRNGKey,
@@ -144,8 +144,8 @@ class RBFKernel(StationaryKernel):
         return (signal_scale**2) * jnp.exp(-0.5 * self._sq_dist(x, y, length_scale))
 
     @staticmethod
-    @jax.jit
-    def omega_fn(key: chex.PRNGKey, n_input_dims: int, n_features: int):
+    @partial(jax.jit, static_argnums=(0,))
+    def omega_fn(self, key: chex.PRNGKey, n_input_dims: int, n_features: int):
         return jr.normal(key, shape=(n_input_dims, n_features))
 
 
@@ -166,6 +166,7 @@ class MaternKernel(StationaryKernel):
         exponential_term = jnp.exp(-jnp.sqrt(self._df) * dist)
         return (signal_scale**2) * normaliser * exponential_term
 
+    @partial(jax.jit, static_argnums=(0, 2, 3))
     def omega_fn(self, key: chex.PRNGKey, n_input_dims: int, n_features: int):
         return jr.t(key, df=self._df, shape=(n_input_dims, n_features))
 
