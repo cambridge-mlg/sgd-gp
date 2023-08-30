@@ -31,7 +31,7 @@ def grad_sample(params: Array, idx: Array, x: Array, features: Array, target_tup
     grad = err_grad + reg_grad
     return grad
 
-def improved_grad_sample(params: Array, idx: Array, x: Array, target_tuple: TargetTuple, kernel_fn: Callable, noise_scale: float):
+def improved_grad_sample_batch_kvp(params: Array, idx: Array, x: Array, features: Array, target_tuple: TargetTuple, kernel_fn: Callable, noise_scale: float):
     K = kernel_fn(x[idx], x)
     B, N = K.shape
 
@@ -39,6 +39,24 @@ def improved_grad_sample(params: Array, idx: Array, x: Array, target_tuple: Targ
     batch_pred = batch_pred.at[idx].set(K @ params)
 
     err_grad = (N / B) * batch_pred - target_tuple.error_target
+    reg_grad = (noise_scale ** 2) * params - target_tuple.regularizer_target
+    grad = err_grad + reg_grad
+    return grad
+
+def improved_grad_sample_batch_err(params: Array, idx: Array, x: Array, features: Array, target_tuple: TargetTuple, kernel_fn: Callable, noise_scale: float):
+    K = kernel_fn(x[idx], x)
+    B, N = K.shape
+
+    batch_err = jnp.zeros_like(params)
+    batch_err = batch_err.at[idx].set(K @ params - target_tuple.error_target[idx])
+
+    err_grad = (N / B) * batch_err
+    reg_grad = (noise_scale ** 2) * params - target_tuple.regularizer_target
+    grad = err_grad + reg_grad
+    return grad
+
+def improved_grad_sample_random_kvp(params: Array, idx: Array, x: Array, features: Array, target_tuple: TargetTuple, kernel_fn: Callable, noise_scale: float):
+    err_grad = features @ (features.T @ params) - target_tuple.error_target
     reg_grad = (noise_scale ** 2) * params - target_tuple.regularizer_target
     grad = err_grad + reg_grad
     return grad
