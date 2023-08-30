@@ -159,7 +159,7 @@ def get_clustered_indices(d_name: str, split: int, lengthscale_ratio: float):
 
 # TODO: refactor to use this in obtain mean to get correct artifact name
 def get_map_solution(
-    d_name: str, method_name: str, split: int, override_noise_scale: float, use_improved_grad: bool,
+    d_name: str, method_name: str, split: int, override_noise_scale: float, grad_variant: str,
     entity: str, project: str
 ):
     api = wandb.Api()
@@ -173,8 +173,7 @@ def get_map_solution(
     artifact_name = f"alpha_{d_name}_{method_name}_{split}"
     if override_noise_scale > 0.0:
         artifact_name += f"_noise_{override_noise_scale}"
-    if use_improved_grad:
-        artifact_name += f"_improved_grad"
+    artifact_name += f"_{grad_variant}"
 
     artifact = api.artifact(f"{entity}/{project}/{artifact_name}:latest")
     data = pickle.load(open(artifact.file(), "rb"))

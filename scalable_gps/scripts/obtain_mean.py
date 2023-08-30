@@ -175,8 +175,7 @@ def main(config):
             artifact_name = f"alpha_{config.dataset_name}_{config.model_name}_{config.dataset_config.split}"
             if config.override_noise_scale > 0.0:
                 artifact_name += f"_noise_{config.override_noise_scale}"
-            if config.train_config.use_improved_grad:
-                artifact_name += f"_improved_grad"
+            artifact_name += f"_{config.train_config.grad_variant}"
             model_artifact = wandb.Artifact(
                 artifact_name,
                 type="alpha",
@@ -186,7 +185,7 @@ def main(config):
                         "dataset_name": config.dataset_name,
                         "model_name": config.model_name,
                         "split": config.dataset_config.split,
-                        "use_improved_grad": config.train_config.use_improved_grad
+                        "grad_variant": config.train_config.grad_variant
                     }
                 },
             )
