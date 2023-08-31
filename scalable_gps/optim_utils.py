@@ -10,7 +10,9 @@ from tqdm import tqdm
 
 from scalable_gps.linear_model import (
     grad_sample,
-    improved_grad_sample
+    improved_grad_sample_batch_kvp,
+    improved_grad_sample_batch_err,
+    improved_grad_sample_random_kvp
 )
 from scalable_gps.inducing_linear_model import (
     i_error_grad_sample,
@@ -21,13 +23,21 @@ from scalable_gps.utils import TargetTuple
 PyTree = Any
 
 
-def get_stochastic_gradient_fn(x: Array, kernel_fn: Callable, noise_scale: float, use_improved_grad: bool):
-    if use_improved_grad:
-        def _fn(params, idx, _, target_tuple):
-            return improved_grad_sample(params, idx, x, target_tuple, kernel_fn, noise_scale)
-    else:
+def get_stochastic_gradient_fn(x: Array, kernel_fn: Callable, noise_scale: float, grad_variant: str):
+    if grad_variant == 'vanilla':
         def _fn(params, idx, features, target_tuple):
             return grad_sample(params, idx, x, features, target_tuple, kernel_fn, noise_scale)
+    elif grad_variant == 'batch_kvp':
+        def _fn(params, idx, features, target_tuple):
+            return improved_grad_sample_batch_kvp(params, idx, x, features, target_tuple, kernel_fn, noise_scale)
+    elif grad_variant == 'batch_err':
+        def _fn(params, idx, features, target_tuple):
+            return improved_grad_sample_batch_err(params, idx, x, features, target_tuple, kernel_fn, noise_scale)
+    elif grad_variant == 'random_kvp':
+        def _fn(params, idx, features, target_tuple):
+            return improved_grad_sample_random_kvp(params, idx, x, features, target_tuple, kernel_fn, noise_scale)
+    else:
+        raise ValueError("grad_variant must be 'vanilla', 'batch_kvp', 'batch_err' or 'random_kvp'")
 
     return jax.jit(_fn)
 

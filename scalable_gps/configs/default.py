@@ -81,7 +81,7 @@ def get_config(config_string):
     config.train_config.learning_rate = 5e-1
     config.train_config.momentum = 0.9
     config.train_config.nesterov = True
-    config.train_config.use_improved_grad = True
+    config.train_config.grad_variant = 'vanilla' # 'vanilla', 'batch_kvp', 'batch_err', 'random_kvp'
     # TODO: Calculate polyak dynamically.
     config.train_config.polyak = 100 / config.train_config.iterations
     config.train_config.absolute_clipping = 0.1  # -1 to avoid clipping
@@ -105,7 +105,7 @@ def get_config(config_string):
     config.sampling_config.learning_rate = 1e-1
     config.sampling_config.momentum = 0.9
     config.sampling_config.nesterov = True
-    config.sampling_config.use_improved_grad = True
+    config.sampling_config.grad_variant = 'vanilla' # 'vanilla', 'batch_kvp', 'batch_err', 'random_kvp'
     config.sampling_config.polyak = 100 / config.sampling_config.iterations
     config.sampling_config.iterations = 100000
     config.sampling_config.batch_size = 512
