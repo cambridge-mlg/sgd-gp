@@ -122,7 +122,7 @@ def main(config):
                 config.model_name, 
                 config.dataset_config.split,
                 config.override_noise_scale,
-                config.train_config.grad_variant,
+                config.sampling_config.grad_variant,
                 config.wandb.entity,
                 config.wandb.project,
             )
