@@ -214,8 +214,22 @@ class Matern52Kernel(MaternKernel):
 
 class TanimotoKernel(Kernel):
 
+    def _pairwise_tanimoto(self, x: Array, y: Array):
+        return jnp.sum(jnp.minimum(x, y), axis=-1) / jnp.sum(jnp.maximum(x, y), axis=-1)
+
     def kernel_fn(self, x: Array, y: Array, **kwargs) -> Array:
-        raise NotImplementedError("Subclasses should implement this method.")
+        r"""
+        Computes the following kernel between two non-negative vectors:
+
+        \frac{\sum_i \min(x_i, y_i)}{\sum_i \max(x_i, y_i)}
+
+        This is just designed for scalars.
+        """
+        chex.assert_rank(x, 2)
+        chex.assert_rank(y, 2)
+
+        return jax.vmap(
+            jax.vmap(self._pairwise_tanimoto, in_axes=(0, None), in_axes=(None, 0))(x, y))
     
     def feature_params(
         self,
