@@ -54,13 +54,15 @@ class SGDGPModel(GPModel):
         )
 
         # Define the gradient function
-        grad_fn = optim_utils.get_stochastic_gradient_fn(train_ds.x, self.kernel.kernel_fn, self.noise_scale, config.use_improved_grad)
+        grad_fn = optim_utils.get_stochastic_gradient_fn(train_ds.x, self.kernel.kernel_fn, self.noise_scale, config.grad_variant)
         update_fn = optim_utils.get_update_fn(grad_fn, optimizer, config.polyak)
 
-        if config.use_improved_grad:
+        if config.grad_variant in ['batch_kvp', 'batch_err']:
             feature_fn = lambda _: None
+        elif config.grad_variant in ['vanilla', 'random_kvp']:
+            feature_fn = self.get_feature_fn(train_ds, config.n_features_optim)
         else:
-            feature_fn = self.get_feature_fn(train_ds, config.n_features_optim, config.recompute_features)
+            raise ValueError("grad_variant must be 'vanilla', 'batch_kvp', 'batch_err' or 'random_kvp'")
         
         eval_fn = eval_utils.get_eval_fn(
             metrics_list,
@@ -211,13 +213,15 @@ class SGDGPModel(GPModel):
         
         optimizer = optax.sgd(learning_rate=config.learning_rate, momentum=config.momentum, nesterov=config.nesterov)
         
-        grad_fn = optim_utils.get_stochastic_gradient_fn(train_ds.x, self.kernel.kernel_fn, self.noise_scale, config.use_improved_grad)
+        grad_fn = optim_utils.get_stochastic_gradient_fn(train_ds.x, self.kernel.kernel_fn, self.noise_scale, config.grad_variant)
         update_fn = optim_utils.get_update_fn(grad_fn, optimizer, config.polyak, vmap_and_pmap=True)
 
-        if config.use_improved_grad:
+        if config.grad_variant in ['batch_kvp', 'batch_err']:
             feature_fn = lambda _: None
+        elif config.grad_variant in ['vanilla', 'random_kvp']:
+            feature_fn = self.get_feature_fn(train_ds, config.n_features_optim)
         else:
-            feature_fn = self.get_feature_fn(train_ds, config.n_features_optim, config.recompute_features)
+            raise ValueError("grad_variant must be 'vanilla', 'batch_kvp', 'batch_err' or 'random_kvp'")
  
         # Call the pmapped and vmapped functions
         manual_split_size = 20
