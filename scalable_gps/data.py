@@ -1,13 +1,17 @@
 from dataclasses import dataclass
-from typing import Any, Optional, Tuple, NamedTuple
+from pathlib import Path
+from typing import Any, NamedTuple, Optional, Tuple
 
 import chex
 import jax.numpy as jnp
 import jax.random as jr
+import numpy as np
+import pandas as pd
 from chex import Array
 from uci_datasets import Dataset as uci_dataset
 from uci_datasets import all_datasets
 
+import scalable_gps.fingerprint_utils as ff
 from scalable_gps.utils import apply_z_score
 
 KwArgs = Any
@@ -188,4 +192,79 @@ def get_dataset(dataset_name, **kwargs):
     if kwargs.get("normalise", False):
         train_ds, test_ds = _normalise_dataset(train_ds, test_ds)
 
+    return train_ds, test_ds
+
+
+def load_dockstring_dataset(
+    dataset_dir: str, limit_num_train: Optional[int] = None
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Load the dockstring dataset from the specified directory.
+
+    Args:
+        dataset_dir: Path to the directory containing the dockstring dataset.
+
+    Returns:
+        train_df, test_df: DataFrames containing the training and test data.
+    """
+    print("Starting to load datasets...")
+
+    # Ensure file paths are present
+    print(dataset_dir)
+    dataset_path = Path(dataset_dir) / "dockstring-dataset.tsv"
+    assert dataset_path.exists()
+
+    dataset_split_path = Path(dataset_dir) / "cluster_split.tsv"
+    assert dataset_split_path.exists()
+
+    # Copied from data loading notebook
+    df = pd.read_csv(dataset_path, sep="\t").set_index("inchikey")
+    splits = (
+        pd.read_csv(dataset_split_path, sep="\t")
+        .set_index("inchikey")  # use same index as dataset
+        .loc[df.index]  # re-order to match the dataset
+    )
+
+    df_train = df[splits["split"] == "train"]
+    df_test = df[splits["split"] == "test"]
+
+    # Optionally limit train data size by subsampling without replacement
+    if limit_num_train is not None:
+        assert limit_num_train <= len(df_train)
+        df_train = df_train.sample(n=limit_num_train, replace=False)
+
+    print("Finished loading datasets.")
+    return df_train, df_test
+
+
+def get_protein_dataset(dataset_dir: str, n_train: int, target: str, fp_dim: int):
+    df_train, df_test = load_dockstring_dataset(
+        str(Path(dataset_dir)), limit_num_train=n_train
+    )
+    df_train = df_train[["smiles", target]].dropna()  # no nans
+    df_test = df_test[["smiles", target]].dropna()  # no nans
+
+    # Extract train/test SMILES
+    smiles_train = df_train.smiles.to_list()
+    smiles_test = df_test.smiles.to_list()
+    y_train = df_train[target].to_numpy()
+    y_test = df_test[target].to_numpy()
+
+    # Clip to max of 5.0
+    y_train = np.minimum(y_train, 5.0)
+    y_test = np.minimum(y_test, 5.0)
+
+    fp_kwargs = dict(use_counts=True, radius=1, nbits=fp_dim)
+    fp_train = ff.smiles_to_fingerprint_arr(smiles_train, **fp_kwargs).astype(
+        np.float64
+    )
+    fp_test = ff.smiles_to_fingerprint_arr(smiles_test, **fp_kwargs).astype(np.float64)
+
+    fp_train = jnp.array(fp_train)
+    fp_test = jnp.array(fp_test)
+    y_train = jnp.array(y_train)
+    y_test = jnp.array(y_test)
+
+    
+    train_ds = Dataset(fp_train, y_train, len(y_train), fp_dim)
+    test_ds = Dataset(fp_test, y_test, len(y_test), fp_dim)
     return train_ds, test_ds

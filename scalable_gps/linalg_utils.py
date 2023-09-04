@@ -26,7 +26,6 @@ def KvP(x1: Array, x2: Array, v: Array, kernel_fn: Kernel_fn, batch_size=1, **ke
         x1 = jnp.concatenate([x1, jnp.zeros((padding, d1))], axis=0)
 
     xs = jnp.reshape(jnp.arange(0, x1.shape[0]), (-1, batch_size))
-    
     return jax.lax.scan(_KvP, jnp.zeros(()), xs)[1].reshape(-1)[:n1]
 
 

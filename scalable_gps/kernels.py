@@ -229,7 +229,7 @@ class TanimotoKernel(Kernel):
         chex.assert_rank(y, 2)
 
         return jax.vmap(
-            jax.vmap(self._pairwise_tanimoto, in_axes=(0, None), in_axes=(None, 0))(x, y))
+            jax.vmap(self._pairwise_tanimoto, in_axes=(None, 0)), in_axes=(0, None))(x, y)
     
     def feature_params(
         self,
