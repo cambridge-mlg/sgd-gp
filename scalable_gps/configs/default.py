@@ -14,6 +14,11 @@ def get_dataset_config(name):
     elif name in all_datasets.keys():
         config.input_dim = all_datasets[name][-1]
         config.noise_scale = 1.0
+    elif 'tanimoto' in name:
+        config.input_dim = 5
+        config.noise_scale = 0.01
+        config.dataset_dir = "/home/sp2058/scalable-gaussian-processes/scalable_gps/datafiles"
+        config.n_train = None
 
     return config
 
@@ -75,6 +80,8 @@ def get_config(config_string):
     # RFF Configs
     config.train_config.n_features_optim = 100
     config.train_config.recompute_features = True
+
+    config.train_config.rff_modulo_value = 8
 
     # Optimisation Configs
     config.train_config.iterative_idx = True
@@ -162,8 +169,11 @@ def get_config(config_string):
     # Wandb Configs
     config.wandb = ml_collections.ConfigDict()
     config.wandb.log = False
-    config.wandb.project = "faster-sgd-gp"
-    config.wandb.entity = "jandylin"
+    # config.wandb.project = "faster-sgd-gp"
+    # config.wandb.entity = "jandylin"
+
+    config.wandb.project = "faster-sscalable-gps"
+    config.wandb.entity = "shreyaspadhy"
     config.wandb.code_dir = "/home/jal232/Code/scalable-gaussian-processes" # TODO: use os utility to get this
     config.wandb.name = ""
     config.wandb.log_artifact = False

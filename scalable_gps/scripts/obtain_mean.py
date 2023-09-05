@@ -7,7 +7,7 @@ from absl import app, flags
 
 from scalable_gps import kernels
 from scalable_gps.data import get_dataset
-from scalable_gps.eval_utils import RMSE
+from scalable_gps.eval_utils import RMSE, R2_score
 from scalable_gps.linear_model import marginal_likelihood
 from scalable_gps.models.cg_gp_model import CGGPModel
 from scalable_gps.models.exact_gp_model import ExactGPModel
@@ -55,6 +55,9 @@ def main(config):
         # Obtain Dataset and HParams
         train_ds, test_ds = get_dataset(config.dataset_name, **config.dataset_config)
 
+        print(f'N: {train_ds.N}, D: {train_ds.D}, N_test: {test_ds.N}')
+        print(f'x_train: {train_ds.x.shape}, y_train: {train_ds.y.shape}')
+
         try:
             hparams = get_tuned_hparams(
                 config.dataset_name, config.dataset_config.split
@@ -90,6 +93,8 @@ def main(config):
             exact_model = ExactGPModel(hparams.noise_scale, kernel)
 
             exact_model.compute_representer_weights(train_ds)
+
+            print(exact_model.alpha)
             y_pred_exact = exact_model.predictive_mean(train_ds, test_ds)
             test_rmse_exact = RMSE(
                 test_ds.y, y_pred_exact, mu=train_ds.mu_y, sigma=train_ds.sigma_y
@@ -99,12 +104,19 @@ def main(config):
             mll = marginal_likelihood(
                 train_ds.x, train_ds.y, exact_model.kernel.kernel_fn, hparams
             )
+
+            exact_r2 = R2_score(
+                test_ds.y, y_pred_exact, mu=train_ds.mu_y, sigma=train_ds.sigma_y
+            )
+
             print(f"test_rmse_exact = {test_rmse_exact}")
+            print(f"r2_exact = {exact_r2}")
             wandb.log(
                 {
                     "exact/test_rmse": test_rmse_exact,
                     "exact/normalised_test_rmse": normalised_test_rmse,
                     "exact/mll": mll / train_ds.N,
+                    "exact/r2": exact_r2,
                 }
             )
 
@@ -139,7 +151,7 @@ def main(config):
                 train_ds.z = train_ds.x[keep_indices]
 
         # metrics_list = ["loss", "err", "reg", "normalised_test_rmse", "test_rmse"]
-        metrics_list = ["normalised_test_rmse"]
+        metrics_list = ["normalised_test_rmse", "test_rmse", "R2"]
         if config.compute_exact_soln:
             metrics_list.extend(["alpha_diff", "alpha_rkhs_diff", "y_pred_diff"])
 

@@ -60,7 +60,7 @@ class SGDGPModel(GPModel):
         if config.grad_variant in ['batch_kvp', 'batch_err']:
             feature_fn = lambda _: None
         elif config.grad_variant in ['vanilla', 'random_kvp']:
-            feature_fn = self.get_feature_fn(train_ds, config.n_features_optim)
+            feature_fn = self.get_feature_fn(train_ds, config.n_features_optim, modulo_value=config.rff_modulo_value)
         else:
             raise ValueError("grad_variant must be 'vanilla', 'batch_kvp', 'batch_err' or 'random_kvp'")
         
@@ -219,7 +219,7 @@ class SGDGPModel(GPModel):
         if config.grad_variant in ['batch_kvp', 'batch_err']:
             feature_fn = lambda _: None
         elif config.grad_variant in ['vanilla', 'random_kvp']:
-            feature_fn = self.get_feature_fn(train_ds, config.n_features_optim)
+            feature_fn = self.get_feature_fn(train_ds, config.n_features_optim, modulo_value=config.rff_modulo_value)
         else:
             raise ValueError("grad_variant must be 'vanilla', 'batch_kvp', 'batch_err' or 'random_kvp'")
  

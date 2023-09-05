@@ -182,6 +182,9 @@ def get_dataset(dataset_name, **kwargs):
         train_ds, test_ds = get_expanding_toy_sin_dataset(**kwargs)
     elif dataset_name in all_datasets.keys():
         train_ds, test_ds = get_uci_dataset(dataset_name, **kwargs)
+    elif 'tanimoto' in dataset_name:
+        target = dataset_name.split('_')[1]
+        train_ds, test_ds = get_protein_dataset(target, **kwargs)
     else:
         raise ValueError(f"Unknown dataset {dataset_name}")
 
@@ -236,7 +239,7 @@ def load_dockstring_dataset(
     return df_train, df_test
 
 
-def get_protein_dataset(dataset_dir: str, n_train: int, target: str, fp_dim: int):
+def get_protein_dataset(target: str, dataset_dir: str = '', input_dim: int = 1, n_train: Optional[int] = None, **kwargs):
     df_train, df_test = load_dockstring_dataset(
         str(Path(dataset_dir)), limit_num_train=n_train
     )
@@ -253,7 +256,7 @@ def get_protein_dataset(dataset_dir: str, n_train: int, target: str, fp_dim: int
     y_train = np.minimum(y_train, 5.0)
     y_test = np.minimum(y_test, 5.0)
 
-    fp_kwargs = dict(use_counts=True, radius=1, nbits=fp_dim)
+    fp_kwargs = dict(use_counts=True, radius=1, nbits=input_dim)
     fp_train = ff.smiles_to_fingerprint_arr(smiles_train, **fp_kwargs).astype(
         np.float64
     )
@@ -265,6 +268,6 @@ def get_protein_dataset(dataset_dir: str, n_train: int, target: str, fp_dim: int
     y_test = jnp.array(y_test)
 
     
-    train_ds = Dataset(fp_train, y_train, len(y_train), fp_dim)
-    test_ds = Dataset(fp_test, y_test, len(y_test), fp_dim)
+    train_ds = Dataset(fp_train, y_train, len(y_train), input_dim)
+    test_ds = Dataset(fp_test, y_test, len(y_test), input_dim)
     return train_ds, test_ds

@@ -17,7 +17,12 @@ class FourierFeatureParams(NamedTuple):
 
 
 class TanimotoFeatureParams(NamedTuple):
-    pass
+    M: int
+    r: chex.Array
+    c: chex.Array
+    xi: chex.Array
+    modulo_value: int
+    beta: chex.Array
 
 
 class Kernel:
@@ -231,14 +236,66 @@ class TanimotoKernel(Kernel):
         return jax.vmap(
             jax.vmap(self._pairwise_tanimoto, in_axes=(None, 0)), in_axes=(0, None))(x, y)
     
+
     def feature_params(
         self,
         key: chex.PRNGKey,
         n_features: int,
         D: int,
+        modulo_value: int,
         **kwargs,
     ) -> TanimotoFeatureParams:
-        raise NotImplementedError("Subclasses should implement this method.")
+        M = n_features
+
+        r_key_1, r_key_2, c_key_1, c_key_2, xi_key, beta_key = jr.split(key, 6)
+
+        r = -jnp.log(jr.uniform(r_key_1, (M, D))) - jnp.log(jr.uniform(r_key_2, (M, D)))
+        c = -jnp.log(jr.uniform(c_key_1, (M, D))) - jnp.log(jr.uniform(c_key_2, (M, D)))
+        xi = jr.randint(xi_key, (M, D, modulo_value), 0, 2) * 2 - 1
+        beta = jr.uniform(beta_key, (M, D))
+
+        return TanimotoFeatureParams(
+            M=M,
+            r=r,
+            c=c,
+            xi=xi,
+            modulo_value=modulo_value,
+            beta=beta,
+        )
+
+    def _elementwise_featurise(
+            self, x: Array, r: Array, c: Array, xi: Array, beta: Array, modulo_value: int) -> Array:
+        t = jnp.floor(jnp.log(x) / r + beta)  # shape D (same as input x)
+        ln_y = r * (t - beta)  # also shape D
+        ln_a = jnp.log(c) - ln_y - r  # also shape D
+
+        # argmin
+        a_argmin = jnp.argmin(ln_a)  # this only works for 1D inputs, vectorizing will break
+
+        print(a_argmin.shape, t.shape)
+        t_selected = t[a_argmin].astype(jnp.int32)
+        # Use this to index xi
+        return xi[a_argmin, t_selected % modulo_value]
+
 
     def featurise(self, x: Array, params: TanimotoFeatureParams) -> Array:
-        raise NotImplementedError("Subclasses should implement this method.")
+        chex.assert_rank(x, 2)
+
+        features = jax.vmap(
+            jax.vmap(
+                self._elementwise_featurise, in_axes=(0, None, None, None, None, None)
+            ), in_axes=(None, 0, 0, 0, 0, None)
+        )(x, params.r, params.c, params.xi, params.beta, params.modulo_value)
+
+        return features.T
+
+        # Vmap over the n_features and n_train of x.
+
+
+class TanimotoL1Kernel(TanimotoKernel):
+
+    def _pairwise_tanimoto(self, x: Array, y: Array):
+        return (jnp.sum(x) + jnp.sum(y) - jnp.sum(jnp.abs(x - y))) / (
+                jnp.sum(x) + jnp.sum(y) + jnp.sum(jnp.abs(x - y)))
+    
+    
