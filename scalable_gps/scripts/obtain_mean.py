@@ -153,7 +153,7 @@ def main(config):
         # metrics_list = ["loss", "err", "reg", "normalised_test_rmse", "test_rmse"]
         metrics_list = ["normalised_test_rmse", "test_rmse", "R2"]
         if config.compute_exact_soln:
-            metrics_list.extend(["alpha_diff", "alpha_rkhs_diff", "y_pred_diff"])
+            metrics_list.extend(["alpha_diff", "alpha_rkhs_diff", "y_pred_diff", "y_pred_test_diff"])
 
         # Compute the SGD MAP solution for representer weights.
         

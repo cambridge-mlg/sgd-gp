@@ -1,6 +1,15 @@
 import ml_collections
 from uci_datasets import all_datasets
+import jax.numpy as jnp
 
+PROTEIN_DATASET_HPARAMS = {
+    'tanimoto_ESR2': {'mean': -6.73,
+                      'noise_scale': jnp.sqrt(0.261),
+                       'signal_scale': 0.706},
+    'tanimoto_F2': {'mean': -6.14,
+                    'noise_scale': jnp.sqrt(0.0899),
+                    'signal_scale': 0.356},
+}
 
 def get_dataset_config(name):
     config = ml_collections.ConfigDict()
@@ -15,10 +24,14 @@ def get_dataset_config(name):
         config.input_dim = all_datasets[name][-1]
         config.noise_scale = 1.0
     elif 'tanimoto' in name:
-        config.input_dim = 5
-        config.noise_scale = 0.01
+        config.input_dim = 1024
+        config.noise_scale = 0.5
         config.dataset_dir = "/home/sp2058/scalable-gaussian-processes/scalable_gps/datafiles"
-        config.n_train = None
+        config.n_train = 1000
+        if name in PROTEIN_DATASET_HPARAMS.keys():
+            config.data_target_mean = PROTEIN_DATASET_HPARAMS[name]['mean']
+        else:
+            config.data_target_mean = None
 
     return config
 

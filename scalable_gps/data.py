@@ -177,6 +177,17 @@ def _normalise_dataset(train_ds: Dataset, test_ds: Dataset) -> Tuple[Dataset, Da
     return train_ds, test_ds
 
 
+def _normalise_protein_dataset(train_ds: Dataset, test_ds: Dataset, mean) -> Tuple[Dataset, Dataset]:
+    # Don't normalise hashed features for protein datasets.
+    train_ds.mu_y, test_ds.mu_y = mean, mean
+    train_ds.sigma_y, test_ds.sigma_y = 1., 1.
+    train_ds.y = apply_z_score(train_ds.y, mu=train_ds.mu_y, sigma=train_ds.sigma_y)
+    test_ds.y = apply_z_score(test_ds.y, mu=train_ds.mu_y, sigma=train_ds.sigma_y)
+
+
+    return train_ds, test_ds
+
+
 def get_dataset(dataset_name, **kwargs):
     if dataset_name == "toy_sin":
         train_ds, test_ds = get_expanding_toy_sin_dataset(**kwargs)
@@ -185,6 +196,7 @@ def get_dataset(dataset_name, **kwargs):
     elif 'tanimoto' in dataset_name:
         target = dataset_name.split('_')[1]
         train_ds, test_ds = get_protein_dataset(target, **kwargs)
+        
     else:
         raise ValueError(f"Unknown dataset {dataset_name}")
 
@@ -193,7 +205,13 @@ def get_dataset(dataset_name, **kwargs):
     chex.assert_rank([train_ds.y, test_ds.y], [1, 1])
 
     if kwargs.get("normalise", False):
-        train_ds, test_ds = _normalise_dataset(train_ds, test_ds)
+        if 'tanimoto' in dataset_name:
+            mean_y = kwargs.get('data_target_mean', None)
+            print(f'mean y is {mean_y}')
+            if mean_y is not None:
+                train_ds, test_ds = _normalise_protein_dataset(train_ds, test_ds, mean_y)
+        else:
+            train_ds, test_ds = _normalise_dataset(train_ds, test_ds)
 
     return train_ds, test_ds
 
