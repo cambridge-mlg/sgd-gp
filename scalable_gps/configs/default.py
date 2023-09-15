@@ -1,6 +1,24 @@
 import ml_collections
 from uci_datasets import all_datasets
+import jax.numpy as jnp
 
+PROTEIN_DATASET_HPARAMS = {
+    'tanimoto_ESR2': {'mean': -6.73,
+                      'noise_scale': jnp.sqrt(0.261),
+                       'signal_scale': 0.706},
+    'tanimoto_F2': {'mean': -6.14,
+                    'noise_scale': jnp.sqrt(0.0899),
+                    'signal_scale': 0.356},
+    'tanimoto_KIT': {'mean': -6.39,
+                    'noise_scale': jnp.sqrt(0.112),
+                    'signal_scale': 0.679},
+    'tanimoto_PARP1': {'mean': -6.95,
+                    'noise_scale': jnp.sqrt(0.0238),
+                    'signal_scale': 0.56},
+    'tanimoto_PGR': {'mean': -7.08,
+                    'noise_scale': jnp.sqrt(0.332),
+                    'signal_scale': 0.63},
+}
 
 def get_dataset_config(name):
     config = ml_collections.ConfigDict()
@@ -14,6 +32,15 @@ def get_dataset_config(name):
     elif name in all_datasets.keys():
         config.input_dim = all_datasets[name][-1]
         config.noise_scale = 1.0
+    elif 'tanimoto' in name:
+        config.input_dim = 1024
+        config.noise_scale = 0.5
+        config.dataset_dir = "/home/sp2058/scalable-gaussian-processes/scalable_gps/datafiles"
+        config.n_train = None
+        if name in PROTEIN_DATASET_HPARAMS.keys():
+            config.data_target_mean = PROTEIN_DATASET_HPARAMS[name]['mean']
+        else:
+            config.data_target_mean = None
 
     return config
 
@@ -75,6 +102,8 @@ def get_config(config_string):
     # RFF Configs
     config.train_config.n_features_optim = 100
     config.train_config.recompute_features = True
+
+    config.train_config.rff_modulo_value = 8
 
     # Optimisation Configs
     config.train_config.iterative_idx = True
@@ -161,9 +190,12 @@ def get_config(config_string):
 
     # Wandb Configs
     config.wandb = ml_collections.ConfigDict()
-    config.wandb.log = False
-    config.wandb.project = "faster-sgd-gp"
-    config.wandb.entity = "jandylin"
+    config.wandb.log = True
+    # config.wandb.project = "faster-sgd-gp"
+    # config.wandb.entity = "jandylin"
+
+    config.wandb.project = "faster-sscalable-gps"
+    config.wandb.entity = "shreyaspadhy"
     config.wandb.code_dir = "/home/jal232/Code/scalable-gaussian-processes" # TODO: use os utility to get this
     config.wandb.name = ""
     config.wandb.log_artifact = False

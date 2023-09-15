@@ -86,13 +86,14 @@ class GPModel:
         else:
             return jax.jit(jax.vmap(_fn))
 
-    def get_feature_fn(self, train_ds: Dataset, n_features: int):
+    def get_feature_fn(self, train_ds: Dataset, n_features: int, modulo_value: int = 8, **kwargs):
         """Factory function that wraps feature_fn so that it is jittable."""
         def _fn(key):
             return self.kernel.feature_fn(
                 key, 
                 n_features=n_features, 
                 n_input_dims=train_ds.D,
-                x=train_ds.x)
+                x=train_ds.x,
+                modulo_value=modulo_value,)
         
         return jax.jit(_fn, static_argnums=(1, 2, 3))    

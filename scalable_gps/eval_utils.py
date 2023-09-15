@@ -49,7 +49,10 @@ def grad_var_fn(
 
 
 def hilbert_space_RMSE(x: Array, x_hat: Array, K: Array):
-    return jnp.sqrt(jnp.mean((x - x_hat) * (K @ (x - x_hat))))
+    return jnp.sqrt(jnp.mean((x - x_hat).T * (K @ (x - x_hat))))
+
+def pred_space_RMSE(x: Array, x_hat: Array, K: Array):
+    return jnp.sqrt(jnp.mean((K @ (x - x_hat)).T * (K @ (x - x_hat))))
 
 
 def RMSE(
@@ -71,6 +74,26 @@ def mean_LLH(
         loc = revert_z_score(loc, mu, sigma)
         scale = revert_z_score(scale, 0.0, sigma)
     return jnp.mean(jax.scipy.stats.norm.logpdf(x, loc=loc, scale=scale))
+
+
+def R2_score(
+    x_hat: Array, x: Array, mu: Optional[Array] = None, sigma: Optional[Array] = None
+):
+    # TODO: implement check for zero denominator.
+    if mu is not None and sigma is not None:
+        x = revert_z_score(x, mu, sigma)
+        x_hat = revert_z_score(x_hat, mu, sigma)
+    
+    y_diff_avg = jnp.average(x - x_hat, axis=0)
+    numerator = jnp.average(
+        (x - x_hat - y_diff_avg) ** 2, axis=0
+    )
+
+    y_true_avg = jnp.average(x_hat, axis=0)
+    denominator = jnp.average((x_hat - y_true_avg) ** 2, axis=0)
+
+    return jnp.mean(1. - numerator / denominator)
+
 
 
 def get_eval_fn(
@@ -123,7 +146,7 @@ def get_eval_fn(
         # Define all metric function calls here for now, refactor later.
         
         all_metrics = ['loss', 'err', 'reg', 'grad_var', 'test_rmse', 'normalised_test_rmse', 
-                       'alpha_diff', 'alpha_rkhs_diff', 'y_pred_diff']
+                       'alpha_diff', 'alpha_rkhs_diff', 'y_pred_diff', "R2", "y_pred_test_diff"]
         def _get_metric(metric):
             if metric == "loss":
                 return loss_fn(
@@ -158,6 +181,8 @@ def get_eval_fn(
                 )
             elif metric == "normalised_test_rmse":
                 return RMSE(test_ds.y, y_pred_loc_sgd)
+            elif metric == "R2":
+                return R2_score(test_ds.y, y_pred_loc_sgd)
             elif metric == "alpha_diff":
                 return RMSE(alpha_exact, params)
             elif metric == "alpha_rkhs_diff":
@@ -165,8 +190,18 @@ def get_eval_fn(
                     alpha_exact, params, K=kernel_fn(train_ds.x, train_ds.x)
                 )
             elif metric == "y_pred_diff":
-                # TODO: right now we measure the difference between zero_mean posterior_samples, as alpha_map used for
-                # both y_pred_test and y_pred_exact is alpha_map of ExactGP, and gets cancelled out.
+                # # TODO: right now we measure the difference between zero_mean posterior_samples, as alpha_map used for
+                # # both y_pred_test and y_pred_exact is alpha_map of ExactGP, and gets cancelled out.
+                # return RMSE(
+                #     y_pred_loc_sgd,
+                #     y_pred_loc_exact,
+                #     mu=train_ds.mu_y,
+                #     sigma=train_ds.sigma_y,
+                # )
+                return pred_space_RMSE(
+                    alpha_exact, params, K=kernel_fn(train_ds.x, train_ds.x)
+                )
+            elif metric == "y_pred_test_diff":
                 return RMSE(
                     y_pred_loc_sgd,
                     y_pred_loc_exact,
@@ -257,6 +292,8 @@ def get_inducing_eval_fn(
                 )
             elif metric == "normalised_test_rmse":
                 return RMSE(test_ds.y, y_pred_loc_sgd)
+            elif metric == "R2":
+                return R2_score(test_ds.y, y_pred_loc_sgd)
             elif metric == "alpha_diff":
                 return RMSE(alpha_exact, params)
             elif metric == "alpha_rkhs_diff":

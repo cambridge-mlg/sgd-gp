@@ -7,6 +7,7 @@ import jax.numpy as jnp
 import ml_collections
 import wandb
 from chex import Array
+from scalable_gps.configs.default import PROTEIN_DATASET_HPARAMS
 
 
 class TargetTuple(NamedTuple):
@@ -110,32 +111,43 @@ def get_tuned_hparams(d_name: str, split: int):
 
     api = wandb.Api()
 
-    noise_scales = []
-    signal_scales = []
-    length_scales = []
+    if "tanimoto" in d_name:
+        try:
+            hparams = PROTEIN_DATASET_HPARAMS[d_name]
+            mean_hparams = HparamsTuple(
+                noise_scale=hparams["noise_scale"],
+                signal_scale=hparams["signal_scale"],
+                length_scale=1. # Doesn't matter
+            )
+        except:
+            raise ValueError(f"No hparams found for {d_name} dataset")
+    else:
+        noise_scales = []
+        signal_scales = []
+        length_scales = []
 
-    for i in range(n_seeds):
-        hparams_artifact_name = f"hparams_{d_name}_{split}_{i}"
+        for i in range(n_seeds):
+            hparams_artifact_name = f"hparams_{d_name}_{split}_{i}"
 
-        artifact = api.artifact(
-            f"shreyaspadhy/scalable-gps/{hparams_artifact_name}:latest"
+            artifact = api.artifact(
+                f"shreyaspadhy/scalable-gps/{hparams_artifact_name}:latest"
+            )
+            import sys
+
+            from scalable_gps import utils
+
+            sys.modules["utils"] = utils
+
+            data = pickle.load(open(artifact.file(), "rb"))
+            noise_scales.append(data.noise_scale)
+            signal_scales.append(data.signal_scale)
+            length_scales.append(data.length_scale)
+
+        mean_hparams = HparamsTuple(
+            noise_scale=float(jnp.mean(jnp.array(noise_scales))),
+            signal_scale=float(jnp.mean(jnp.array(signal_scales))),
+            length_scale=jnp.mean(jnp.array(length_scales), axis=0),
         )
-        import sys
-
-        from scalable_gps import utils
-
-        sys.modules["utils"] = utils
-
-        data = pickle.load(open(artifact.file(), "rb"))
-        noise_scales.append(data.noise_scale)
-        signal_scales.append(data.signal_scale)
-        length_scales.append(data.length_scale)
-
-    mean_hparams = HparamsTuple(
-        noise_scale=float(jnp.mean(jnp.array(noise_scales))),
-        signal_scale=float(jnp.mean(jnp.array(signal_scales))),
-        length_scale=jnp.mean(jnp.array(length_scales), axis=0),
-    )
 
     return mean_hparams
 
