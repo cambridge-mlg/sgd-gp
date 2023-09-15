@@ -9,6 +9,15 @@ PROTEIN_DATASET_HPARAMS = {
     'tanimoto_F2': {'mean': -6.14,
                     'noise_scale': jnp.sqrt(0.0899),
                     'signal_scale': 0.356},
+    'tanimoto_KIT': {'mean': -6.39,
+                    'noise_scale': jnp.sqrt(0.112),
+                    'signal_scale': 0.679},
+    'tanimoto_PARP1': {'mean': -6.95,
+                    'noise_scale': jnp.sqrt(0.0238),
+                    'signal_scale': 0.56},
+    'tanimoto_PGR': {'mean': -7.08,
+                    'noise_scale': jnp.sqrt(0.332),
+                    'signal_scale': 0.63},
 }
 
 def get_dataset_config(name):
@@ -181,7 +190,7 @@ def get_config(config_string):
 
     # Wandb Configs
     config.wandb = ml_collections.ConfigDict()
-    config.wandb.log = False
+    config.wandb.log = True
     # config.wandb.project = "faster-sgd-gp"
     # config.wandb.entity = "jandylin"
 
