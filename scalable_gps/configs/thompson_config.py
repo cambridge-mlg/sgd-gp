@@ -10,7 +10,7 @@ def get_config():
     config.thompson.use_tpu = False
 
     config.thompson.seed = 0
-    config.thompson.D = 8 # try 8, 16
+    config.thompson.D = 8
 
     config.thompson.model_name = "SGDGP"
     config.thompson.kernel_name = "Matern32Kernel" # try 5/2
@@ -72,16 +72,18 @@ def get_config():
 
     # Optimisation Configs
 
-    config.train_config.iterations = 1000 # 10k, 50k
+    config.train_config.preempt_safe = False
+    config.train_config.iterations = 15000 # 15k, 75k
     config.train_config.batch_size = 500
     config.train_config.eval_every = 100
     config.train_config.time_budget_in_seconds = 0.
     config.train_config.eval_every_in_seconds = 0.
 
     config.train_config.iterative_idx = True
-    config.train_config.learning_rate = 5e-1
+    config.train_config.learning_rate = 3e-1
     config.train_config.momentum = 0.9
     config.train_config.nesterov = True
+    config.train_config.grad_variant = 'vanilla' # 'vanilla', 'batch_kvp', 'batch_err', 'random_kvp'
     config.train_config.polyak = 100 / config.train_config.iterations
     config.train_config.absolute_clipping = 0.1 # -1 to avoid clipping
     config.train_config.lr_schedule_name = None # "linear_schedule"
@@ -91,8 +93,7 @@ def get_config():
     config.sampling_config = ml_collections.ConfigDict()
     config.sampling_config = config.train_config.copy_and_resolve_references()
 
-    config.sampling_config.iterative_idx = True
-    config.sampling_config.learning_rate = 1e-3 # double learning rate
+    config.sampling_config.learning_rate = 3e-4
     config.sampling_config.loss_objective = 2
 
     # VI

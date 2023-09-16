@@ -12,6 +12,7 @@ from scalable_gps.linear_model import (
     grad_sample,
     improved_grad_sample_batch_kvp,
     improved_grad_sample_batch_err,
+    improved_grad_sample_batch_all,
     improved_grad_sample_random_kvp
 )
 from scalable_gps.inducing_linear_model import (
@@ -33,11 +34,14 @@ def get_stochastic_gradient_fn(x: Array, kernel_fn: Callable, noise_scale: float
     elif grad_variant == 'batch_err':
         def _fn(params, idx, features, target_tuple):
             return improved_grad_sample_batch_err(params, idx, x, features, target_tuple, kernel_fn, noise_scale)
+    elif grad_variant == 'batch_all':
+        def _fn(params, idx, features, target_tuple):
+            return improved_grad_sample_batch_all(params, idx, x, features, target_tuple, kernel_fn, noise_scale)
     elif grad_variant == 'random_kvp':
         def _fn(params, idx, features, target_tuple):
             return improved_grad_sample_random_kvp(params, idx, x, features, target_tuple, kernel_fn, noise_scale)
     else:
-        raise ValueError("grad_variant must be 'vanilla', 'batch_kvp', 'batch_err' or 'random_kvp'")
+        raise ValueError("grad_variant must be 'vanilla', 'batch_kvp', 'batch_err', 'batch_all', or 'random_kvp'")
 
     return jax.jit(_fn)
 

@@ -94,6 +94,7 @@ class GPModel:
                 n_features=n_features, 
                 n_input_dims=train_ds.D,
                 x=train_ds.x,
-                modulo_value=modulo_value,)
+                modulo_value=modulo_value)
         
-        return jax.jit(_fn, static_argnums=(1, 2, 3))    
+        return jax.jit(_fn)
+    

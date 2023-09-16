@@ -55,6 +55,16 @@ def improved_grad_sample_batch_err(params: Array, idx: Array, x: Array, features
     grad = err_grad + reg_grad
     return grad
 
+def improved_grad_sample_batch_all(params: Array, idx: Array, x: Array, features: Array, target_tuple: TargetTuple, kernel_fn: Callable, noise_scale: float):
+    K = kernel_fn(x[idx], x)
+    B, N = K.shape
+
+    batch_err_grad = K @ params - target_tuple.error_target[idx]
+    batch_reg_grad = (noise_scale ** 2) * params[idx] - target_tuple.regularizer_target[idx]
+    
+    grad = jnp.zeros_like(params)
+    return (N / B) * grad.at[idx].set(batch_err_grad + batch_reg_grad)
+
 def improved_grad_sample_random_kvp(params: Array, idx: Array, x: Array, features: Array, target_tuple: TargetTuple, kernel_fn: Callable, noise_scale: float):
     err_grad = features @ (features.T @ params) - target_tuple.error_target
     reg_grad = (noise_scale ** 2) * params - target_tuple.regularizer_target
