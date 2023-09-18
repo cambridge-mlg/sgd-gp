@@ -123,6 +123,7 @@ def main(config):
                 config.dataset_config.split,
                 config.override_noise_scale,
                 config.sampling_config.grad_variant,
+                config.train_config.learning_rate,
                 config.wandb.entity,
                 config.wandb.project,
             )
@@ -206,7 +207,7 @@ def main(config):
             artifact_name = f"samples_{config.dataset_name}_{config.model_name}_{config.dataset_config.split}"
             if config.override_noise_scale > 0.:
                 artifact_name += f"_noise_{config.override_noise_scale}"
-            artifact_name += f"_{config.sampling_config.grad_variant}"
+            artifact_name += f"_{config.sampling_config.grad_variant}_{config.sampling_config.learning_rate}"
 
             samples_artifact = wandb.Artifact(
                 artifact_name, type="samples",
@@ -215,7 +216,8 @@ def main(config):
                     "dataset_name": config.dataset_name,
                     "model_name": config.model_name,
                     "split": config.dataset_config.split,
-                    "grad_variant": config.sampling_config.grad_variant
+                    "grad_variant": config.sampling_config.grad_variant,
+                    "learning_rate": config.sampling_config.learning_rate
                     }},
                 )
             

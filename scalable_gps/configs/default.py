@@ -191,13 +191,10 @@ def get_config(config_string):
     # Wandb Configs
     config.wandb = ml_collections.ConfigDict()
     config.wandb.log = True
-    # config.wandb.project = "faster-sgd-gp"
-    # config.wandb.entity = "jandylin"
-
-    config.wandb.project = "faster-sscalable-gps"
-    config.wandb.entity = "shreyaspadhy"
+    config.wandb.log_artifact = True
+    config.wandb.project = "faster-sgd-gp"
+    config.wandb.entity = "jandylin"
     config.wandb.code_dir = "/home/jal232/Code/scalable-gaussian-processes" # TODO: use os utility to get this
     config.wandb.name = ""
-    config.wandb.log_artifact = False
 
     return config
