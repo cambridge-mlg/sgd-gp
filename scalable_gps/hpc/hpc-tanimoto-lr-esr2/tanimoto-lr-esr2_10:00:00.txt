@@ -1,0 +1,4 @@
+wandb agent --count 1 shreyaspadhy/faster-scalable-gps/al0r3hgn
+wandb agent --count 1 shreyaspadhy/faster-scalable-gps/al0r3hgn
+wandb agent --count 1 shreyaspadhy/faster-scalable-gps/al0r3hgn
+wandb agent --count 1 shreyaspadhy/faster-scalable-gps/al0r3hgn

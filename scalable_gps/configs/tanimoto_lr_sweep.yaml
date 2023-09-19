@@ -1,5 +1,5 @@
-entity: jandylin
-project: faster-sgd-gp
+entity: shreyaspadhy
+project: faster-scalable-gps
 program: scripts/obtain_mean.py
 
 method: grid
