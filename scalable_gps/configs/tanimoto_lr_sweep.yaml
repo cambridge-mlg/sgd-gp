@@ -6,14 +6,20 @@ method: grid
 parameters:
   model_name:
     values: ["sgd"]
+  kernel_name:
+    values: ["TanimotoKernel", "TanimotoL1Kernel"]
   train_config.grad_variant:
     values: ['vanilla']
   train_config.learning_rate:
-    values: [0.1, 0.5, 1., 5.]
+    values: [0.1, 0.5, 1.]
   train_config.iterations:
     values: [50000]
   train_config.eval_every:
     values: [500]
+  override_d_name:
+    values: ["tanimoto_ESR2", "tanimoto_KIT", "tanimoto_F2", "tanimoto_PARP1", "tanimoto_PGR"]
+  override_d_binarize:
+    values: [True, False]
 
 command:
   - python

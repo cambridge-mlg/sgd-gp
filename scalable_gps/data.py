@@ -257,7 +257,7 @@ def load_dockstring_dataset(
     return df_train, df_test
 
 
-def get_protein_dataset(target: str, dataset_dir: str = '', input_dim: int = 1, n_train: Optional[int] = None, **kwargs):
+def get_protein_dataset(target: str, dataset_dir: str = '', binarize=False, input_dim: int = 1, n_train: Optional[int] = None, **kwargs):
     df_train, df_test = load_dockstring_dataset(
         str(Path(dataset_dir)), limit_num_train=n_train
     )
@@ -274,7 +274,7 @@ def get_protein_dataset(target: str, dataset_dir: str = '', input_dim: int = 1, 
     y_train = np.minimum(y_train, 5.0)
     y_test = np.minimum(y_test, 5.0)
 
-    fp_kwargs = dict(use_counts=True, radius=1, nbits=input_dim)
+    fp_kwargs = dict(use_counts=True, radius=1, nbits=input_dim, binarize=binarize)
     fp_train = ff.smiles_to_fingerprint_arr(smiles_train, **fp_kwargs).astype(
         np.float64
     )

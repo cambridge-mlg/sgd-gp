@@ -22,6 +22,8 @@ from scalable_gps.utils import (
     setup_training,
     update_config_dict,
 )
+from scalable_gps.configs.default import get_dataset_config
+
 
 ml_collections.config_flags.DEFINE_config_file(
     "config",
@@ -47,7 +49,18 @@ def main(config):
     with wandb.init(**wandb_kwargs) as run:
         setup_training(run)
         # If there are any config values dependent on sweep values, recompute them here.
-        computed_configs = {}
+        
+
+        # Call dataset config again
+        
+        if run.config.override_d_name != "":
+            new_config = ml_collections.ConfigDict()
+            new_config.dataset_config = get_dataset_config(run.config.override_d_name)
+            computed_configs = {**new_config, **{"dataset_config.binarize": run.config.override_d_binarize,
+                                                 "dataset_config.normalise": True,
+                                                 "dataset_config.split": 0}}
+        else:
+            computed_configs = {}
         update_config_dict(config, run, computed_configs)
 
         print(config)

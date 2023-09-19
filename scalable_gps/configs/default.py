@@ -41,7 +41,7 @@ def get_dataset_config(name):
             config.data_target_mean = PROTEIN_DATASET_HPARAMS[name]['mean']
         else:
             config.data_target_mean = None
-
+        config.binarize = False
     return config
 
 
@@ -50,6 +50,9 @@ def get_config(config_string):
 
     d_name = config_string.split(".")[0]
 
+    config.override_d_name = ""
+    config.override_d_binarize = False
+    
     # Saving configs
     config.save_dir = f"results/{d_name}"
 
