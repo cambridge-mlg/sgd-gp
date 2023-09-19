@@ -1,5 +1,5 @@
-entity: shreyaspadhy
-project: scalable-gps
+entity: jandylin
+project: faster-sgd-gp
 program: scripts/thompson_sampling.py
 
 method: grid
@@ -12,8 +12,8 @@ parameters:
     values: [8]
   thompson.length_scale:
     values: [0.1, 0.2, 0.3, 0.4, 0.5]
-  vi_config.iterations:
-    values: [20000]
+  train_config.grad_variant:
+    values: ['vanilla', 'batch_kvp', 'batch_err', 'random_kvp']
 
 command:
   - python

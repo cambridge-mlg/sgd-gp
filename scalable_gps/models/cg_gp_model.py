@@ -167,7 +167,7 @@ class CGGPModel(ExactGPModel):
         
         ########### ADD PREEMPTIBLE SAFE CKPT LOADING AND SAVING ####################
         all_save_steps = list(jnp.arange(0, config.maxiter, config.maxiter // 10).astype(int))[1:]
-        print(f'All save steps: {all_save_steps}')
+        # print(f'All save steps: {all_save_steps}')
         most_recent_artifact_data = None
         if config.preempt_safe:
             most_recent_artifact_data = get_latest_saved_artifact(
