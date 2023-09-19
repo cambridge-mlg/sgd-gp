@@ -35,7 +35,7 @@ def get_dataset_config(name):
     elif 'tanimoto' in name:
         config.input_dim = 1024
         config.noise_scale = 0.5
-        config.dataset_dir = "/home/sp2058/scalable-gaussian-processes/scalable_gps/datafiles"
+        config.dataset_dir = "./datafiles"
         config.n_train = None
         if name in PROTEIN_DATASET_HPARAMS.keys():
             config.data_target_mean = PROTEIN_DATASET_HPARAMS[name]['mean']
