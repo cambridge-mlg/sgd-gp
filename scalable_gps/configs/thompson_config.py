@@ -69,21 +69,22 @@ def get_config():
     # RFF Configs
     config.train_config.n_features_optim = 100
     config.train_config.recompute_features = True
+    config.train_config.rff_modulo_value = 8
 
     # Optimisation Configs
 
     config.train_config.preempt_safe = False
-    config.train_config.iterations = 15000 # 15k, 75k
+    config.train_config.iterations = 75000 # 15k, 75k
     config.train_config.batch_size = 500
     config.train_config.eval_every = 100
     config.train_config.time_budget_in_seconds = 0.
     config.train_config.eval_every_in_seconds = 0.
 
     config.train_config.iterative_idx = True
-    config.train_config.learning_rate = 3e-1
+    config.train_config.learning_rate = 3.0
     config.train_config.momentum = 0.9
     config.train_config.nesterov = True
-    config.train_config.grad_variant = 'vanilla' # 'vanilla', 'batch_kvp', 'batch_err', 'random_kvp'
+    config.train_config.grad_variant = 'batch_all' # 'vanilla', 'batch_kvp', 'batch_err', 'random_kvp'
     config.train_config.polyak = 100 / config.train_config.iterations
     config.train_config.absolute_clipping = 0.1 # -1 to avoid clipping
     config.train_config.lr_schedule_name = None # "linear_schedule"
@@ -93,7 +94,7 @@ def get_config():
     config.sampling_config = ml_collections.ConfigDict()
     config.sampling_config = config.train_config.copy_and_resolve_references()
 
-    config.sampling_config.learning_rate = 3e-4
+    config.sampling_config.learning_rate = 3e-3
     config.sampling_config.loss_objective = 2
 
     # VI
@@ -112,8 +113,8 @@ def get_config():
     # WANDB
     config.wandb = ml_collections.ConfigDict()
     config.wandb.log = False
-    config.wandb.project = "scalable-gps"
-    config.wandb.entity = "shreyaspadhy"
+    config.wandb.project = "faster-sgd-gp"
+    config.wandb.entity = "jandylin"
     # TODO: change this to HPC dir
     config.wandb.code_dir = "/home/jal232/Code/scalable-gaussian-processes/"
     config.wandb.name = ""

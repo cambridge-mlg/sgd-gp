@@ -162,7 +162,7 @@ def get_thompson_step_fn(
                 train_ds=state.ds,
                 test_ds=test_ds,
                 config=inference_config_representer,
-                metrics_list=["loss", "err", "reg"],
+                metrics_list=[],
                 metrics_prefix="train",
                 exact_metrics=None,
                 recompute=True,
@@ -198,7 +198,7 @@ def get_thompson_step_fn(
                 use_rff=True,
                 L=L,
                 zero_mean=False,
-                metrics_list=["loss", "err", "reg"],
+                metrics_list=[],
                 metrics_prefix="sample",
             )
 
@@ -400,7 +400,7 @@ def find_besties(
 
         """
         return x[jnp.argsort(y)[-n_besties:]]
-
+    print(x_homies.shape)
     y_homies = acquisition_fn(x_homies)
 
     return top_args(x_homies, y_homies), trace
@@ -422,7 +422,13 @@ def get_acquisition_fn(
     acquisition_fn:   (n_samples, n_inputs, D) -> (n_samples, n_inputs)
     acquisition_grad: (n_samples, n_inputs, D) -> (n_samples, n_inputs, D)
     """
-
+    if jnp.ndim(alpha_map) > 2:
+        alpha_map = alpha_map.squeeze()
+    if jnp.ndim(alpha_samples) > 2:
+        alpha_samples = alpha_samples.squeeze()
+    if jnp.ndim(w_samples) > 2:
+        w_samples = w_samples.squeeze()
+        
     def _fn(x, alpha_sample, w_sample):
         # x: (D,)
         # alpha_sample: (n_train,)
@@ -433,7 +439,6 @@ def get_acquisition_fn(
             K = kernel.kernel_fn(x, state.ds.x, **kernel_kwargs)
         else:
             K = kernel.kernel_fn(x, inducing_inputs, **kernel_kwargs)
-
         return (L @ w_sample + K @ (alpha_map - alpha_sample)).squeeze()
 
     @jax.jit
