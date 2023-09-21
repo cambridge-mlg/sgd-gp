@@ -71,7 +71,6 @@ def main(config):
             n_samples=config.sampling_config.n_samples,
             train_ds=train_ds,
             test_ds=test_ds,
-            use_rff=False,
             n_features=config.sampling_config.n_features_prior_sample,
             zero_mean=True,
         )

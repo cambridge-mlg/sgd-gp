@@ -89,18 +89,13 @@ class ExactGPModel(GPModel):
         train_ds: Dataset,
         test_ds: Dataset,
         config: Optional[ConfigDict] = None,
-        use_rff: bool = True,
         n_features: int = 0,
-        chol_eps: float = 1e-5,
         L: Optional[Array] = None,
         zero_mean: bool = True,
         metrics_list: Optional[list] = None,
         metrics_prefix: Optional[str] = None,
     ):
         del config, metrics_list, metrics_prefix
-        if not use_rff:
-            raise DeprecationWarning("You are using the deprecated 'use_rff' flag.")
-        del use_rff
         """Computes n_samples posterior samples, and returns posterior_samples along with alpha_samples."""
         prior_covariance_key, prior_samples_key, _ = jr.split(key, 3)
 
@@ -109,14 +104,13 @@ class ExactGPModel(GPModel):
                 prior_covariance_key,
                 train_ds,
                 test_ds,
-                self.kernel.kernel_fn,
+                self.kernel.feature_params_fn,
                 self.kernel.feature_fn,
-                n_features=n_features,
-                chol_eps=chol_eps,
+                n_features=n_features
             )
 
         # Get vmapped functions for sampling from the prior and computing the posterior.
-        compute_prior_samples_fn = self.get_prior_samples_fn(train_ds.N, L, use_rff)
+        compute_prior_samples_fn = self.get_prior_samples_fn(train_ds.N, L)
         compute_alpha_samples_fn = self.get_alpha_samples_fn()
         compute_posterior_samples_fn = self.get_posterior_samples_fn(
             train_ds, test_ds, zero_mean

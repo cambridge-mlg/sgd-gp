@@ -24,13 +24,12 @@ def test_random_features():
 
     kernel = TanimotoKernel({'signal_scale': 1.0})
 
-    x1_features = kernel.feature_fn(
-        jr.PRNGKey(0), n_features=1000, n_input_dims=3, x=x1,
-        modulo_value=modulo_value)
+    feature_params = kernel.feature_params_fn(
+        jr.PRNGKey(0), n_features=1000, n_input_dims=3, modulo_value=modulo_value)
+
+    x1_features = kernel.feature_fn(x1, feature_params)
     
-    x2_features = kernel.feature_fn(
-        jr.PRNGKey(0), n_features=1000, n_input_dims=3, x=x2,
-        modulo_value=modulo_value)
+    x2_features = kernel.feature_fn(x2, feature_params)
     
     print(x1.shape, x2.shape, x1_features.shape, x2_features.shape)
 

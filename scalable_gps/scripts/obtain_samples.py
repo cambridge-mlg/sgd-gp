@@ -151,7 +151,6 @@ def main(config):
                 train_ds=train_ds,
                 test_ds=test_ds,
                 config=sampling_config,
-                use_rff=True,
                 n_features=config.sampling_config.n_features_prior_sample,
                 zero_mean=True,
                 metrics_list=metrics_list,
@@ -188,10 +187,6 @@ def main(config):
 
                 y_pred_variance = jnp.var(posterior_variance, axis=0) + hparams.noise_scale ** 2
             else:
-                # zero_mean_posterior_samples = model.compute_posterior_samples(
-                #     sampling_key, train_ds, test_ds, 64, L=L)
-                
-                # print(f'zero_mean_posterior_samples: {zero_mean_posterior_samples.shape}')
                 y_pred_variance = model.predictive_variance(
                     train_ds, test_ds, add_likelihood_noise=True, return_marginal_variance=True)
             test_llh = mean_LLH(

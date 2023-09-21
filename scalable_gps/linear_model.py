@@ -109,25 +109,3 @@ def marginal_likelihood(x: Array, targets: Array, kernel_fn: Callable, hparams_t
 @partial(jax.jit, backend='cpu')
 def exact_solution(targets, K, noise_scale):
     return jax.scipy.linalg.solve(K + (noise_scale**2) * jnp.identity(targets.shape[0]), targets, assume_a='pos')
-
-
-def draw_prior_function_sample(
-    feature_key: chex.PRNGKey,
-    prior_function_key: chex.PRNGKey,
-    M: int,
-    x: Array,
-    feature_fn: Callable,
-    K: Optional[Array] = None,
-    use_chol: bool = False,
-    chol_eps: float = 1e-5,
-):
-    """Returns prior fn sample along with either cholesky factorization of K or feature matrix R."""
-    N = x.shape[0]
-    if use_chol:
-        L = jnp.linalg.cholesky(K + chol_eps * jnp.identity(N))
-        eps = jr.normal(prior_function_key, (N,))
-    else:
-        L = feature_fn(feature_key, M, x)
-        eps = jr.normal(prior_function_key, (M,))
-
-    return L @ eps, L

@@ -227,18 +227,13 @@ class CGGPModel(ExactGPModel):
         train_ds: Dataset,
         test_ds: Dataset,
         config: ConfigDict,
-        use_rff: bool = True,
         n_features: int = 0,
-        chol_eps: float = 1e-5,
         L: Optional[Array] = None,
         zero_mean: bool = True,
         metrics_list: list = [],
         metrics_prefix: str = "",
         compare_exact: bool = False,
     ):
-        if not use_rff:
-            raise DeprecationWarning("You are using the deprecated 'use_rff' flag.")
-        del use_rff
         prior_covariance_key, prior_samples_key, _ = jr.split(key, 3)
 
         if L is None:
@@ -246,10 +241,9 @@ class CGGPModel(ExactGPModel):
                 prior_covariance_key,
                 train_ds,
                 test_ds,
-                self.kernel.kernel_fn,
+                self.kernel.feature_params_fn,
                 self.kernel.feature_fn,
-                n_features=n_features,
-                chol_eps=chol_eps,
+                n_features=n_features
             )
 
         # Get vmapped functions for sampling from the prior and computing the posterior.

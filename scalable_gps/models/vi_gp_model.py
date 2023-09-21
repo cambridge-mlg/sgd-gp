@@ -163,11 +163,6 @@ class SVGPModel:
                 variance -= self.noise_scale**2 * jnp.eye(variance.shape[0])
 
             return variance
-
-    # def compute_posterior_samples(self, key, num_samples):
-    #     raise NotImplementedError(
-    #         "compute_posterior_samples is broken in new minibatched prediction code -- speak to Javi if you really need a fix."
-    #     )
     
     def compute_posterior_samples(self, key, train_ds, test_ds, num_samples):
         (
@@ -203,9 +198,7 @@ class SVGPThompsonInterface(SVGPModel):
         train_ds: Dataset,
         test_ds: Dataset,
         config: ConfigDict,
-        use_rff: bool = True,
         n_features: int = 0,
-        chol_eps: float = 1e-5,
         L: Optional[Array] = None,
         zero_mean: bool = True,
         metrics_list=[],
@@ -216,15 +209,14 @@ class SVGPThompsonInterface(SVGPModel):
             train_ds,
             test_ds,
             config,
-            use_rff,
             n_features,
-            chol_eps,
             zero_mean,
             metrics_list,
             metrics_prefix,
             compare_exact,
         )
         # L is (num_inducing, num_features)
+        assert L.shape == (self.vi_params["variational_family"]["inducing_inputs"].shape[0], n_features)
 
         if self.vi_params is None:
             raise ValueError(
