@@ -62,8 +62,8 @@ class SGDGPModel(GPModel):
             feature_params_fn = lambda *args, **kwargs: None
             feature_fn = lambda *args, **kwargs: None
         elif config.grad_variant in ['vanilla', 'random_kvp']:
-            feature_params_fn = self.kernel.feature_params_fn
-            feature_fn = self.kernel.feature_fn
+            feature_params_fn = jax.jit(lambda key: self.kernel.feature_params_fn(key, n_features=config.n_features_optim, D=train_ds.D))
+            feature_fn = jax.jit(lambda feature_params: self.kernel.feature_fn(train_ds.x, feature_params))
         else:
             raise ValueError("grad_variant must be 'vanilla', 'batch_kvp', 'batch_err', 'batch_all', or 'random_kvp'")
         
@@ -87,8 +87,8 @@ class SGDGPModel(GPModel):
         # num_iterations per budget, this will have to be called once there.
         idx_key, feature_key = jr.split(key, 2)
         idx = idx_fn(0, idx_key)
-        feature_params = feature_params_fn(feature_key, config.n_features_optim, train_ds.D)
-        features = feature_fn(train_ds.x, feature_params)
+        feature_params = feature_params_fn(feature_key)
+        features = feature_fn(feature_params)
         update_fn(alpha, alpha_polyak, idx, features, opt_state, target_tuple)
         
         wall_clock_time = 0.
@@ -118,8 +118,8 @@ class SGDGPModel(GPModel):
             key, idx_key, feature_key = jr.split(key, 3)
             
             idx = idx_fn(i, idx_key)
-            feature_params = feature_params_fn(feature_key, config.n_features_optim, train_ds.D)
-            features = feature_fn(train_ds.x, feature_params)
+            feature_params = feature_params_fn(feature_key)
+            features = feature_fn(feature_params)
 
             alpha, alpha_polyak, opt_state = update_fn(alpha, alpha_polyak, idx, features, opt_state, target_tuple)
             alpha.block_until_ready()
@@ -198,8 +198,8 @@ class SGDGPModel(GPModel):
             feature_params_fn = lambda *args, **kwargs: None
             feature_fn = lambda *args, **kwargs: None
         elif config.grad_variant in ['vanilla', 'random_kvp']:
-            feature_params_fn = self.kernel.feature_params_fn
-            feature_fn = self.kernel.feature_fn
+            feature_params_fn = jax.jit(lambda key: self.kernel.feature_params_fn(key, n_features=config.n_features_optim, D=train_ds.D))
+            feature_fn = jax.jit(lambda feature_params: self.kernel.feature_fn(train_ds.x, feature_params))
         else:
             raise ValueError("grad_variant must be 'vanilla', 'batch_kvp', 'batch_err', 'batch_all', or 'random_kvp'")
  
@@ -285,8 +285,8 @@ class SGDGPModel(GPModel):
         # # force JIT
         idx_key, feature_key = jr.split(key, 2)
         idx = idx_fn(0, idx_key)
-        feature_params = feature_params_fn(feature_key, config.n_features_optim, train_ds.D)
-        features = feature_fn(train_ds.x, feature_params)
+        feature_params = feature_params_fn(feature_key)
+        features = feature_fn(feature_params)
         update_fn(alphas, alphas_polyak, idx, features, opt_states, target_tuples)
 
         aux = []
@@ -294,8 +294,8 @@ class SGDGPModel(GPModel):
             optim_key, idx_key, feature_key = jr.split(optim_key, 3)
 
             idx = idx_fn(i, idx_key)
-            feature_params = feature_params_fn(feature_key, config.n_features_optim, train_ds.D)
-            features = feature_fn(train_ds.x, feature_params)
+            feature_params = feature_params_fn(feature_key)
+            features = feature_fn(feature_params)
 
             # 0, 0, None, None, 0, 0
             alphas, alphas_polyak, opt_states = update_fn(alphas, alphas_polyak, idx, features, opt_states, target_tuples)
