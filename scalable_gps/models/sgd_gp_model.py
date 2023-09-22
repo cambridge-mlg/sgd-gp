@@ -62,7 +62,7 @@ class SGDGPModel(GPModel):
             feature_params_fn = lambda *args, **kwargs: None
             feature_fn = lambda *args, **kwargs: None
         elif config.grad_variant in ['vanilla', 'random_kvp']:
-            feature_params_fn = jax.jit(lambda key: self.kernel.feature_params_fn(key, n_features=config.n_features_optim, D=train_ds.D))
+            feature_params_fn = jax.jit(lambda key: self.kernel.feature_params_fn(key, n_features=config.n_features_optim, D=train_ds.x.shape[-1]))
             feature_fn = jax.jit(lambda feature_params: self.kernel.feature_fn(train_ds.x, feature_params))
         else:
             raise ValueError("grad_variant must be 'vanilla', 'batch_kvp', 'batch_err', 'batch_all', or 'random_kvp'")
@@ -198,7 +198,7 @@ class SGDGPModel(GPModel):
             feature_params_fn = lambda *args, **kwargs: None
             feature_fn = lambda *args, **kwargs: None
         elif config.grad_variant in ['vanilla', 'random_kvp']:
-            feature_params_fn = jax.jit(lambda key: self.kernel.feature_params_fn(key, n_features=config.n_features_optim, D=train_ds.D))
+            feature_params_fn = jax.jit(lambda key: self.kernel.feature_params_fn(key, n_features=config.n_features_optim, D=train_ds.x.shape[-1]))
             feature_fn = jax.jit(lambda feature_params: self.kernel.feature_fn(train_ds.x, feature_params))
         else:
             raise ValueError("grad_variant must be 'vanilla', 'batch_kvp', 'batch_err', 'batch_all', or 'random_kvp'")

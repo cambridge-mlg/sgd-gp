@@ -96,9 +96,9 @@ def update_state(key: PRNGKey, state: ThompsonState, x_besties: Array):
     # add besties to state dataset
     x = jnp.concatenate([state.ds.x, x_besties], axis=0)
     y = jnp.concatenate([state.ds.y, y_besties], axis=0)
-    N = state.ds.N + x_besties.shape[0]
+    N, D = x.shape
     # construct updated state dataset
-    ds = ThompsonDataset(x=x, y=y, N=N, D=state.ds.D)
+    ds = ThompsonDataset(x=x, y=y, N=N, D=D)
 
     # find maximum of besties
     idx = jnp.argmax(y_besties)
