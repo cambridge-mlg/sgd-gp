@@ -13,7 +13,17 @@ parameters:
   thompson.length_scale:
     values: [0.1, 0.2, 0.3, 0.4, 0.5]
   train_config.grad_variant:
-    values: ['vanilla', 'batch_kvp', 'batch_err', 'random_kvp']
+    values: ['vanilla']
+  sampling_config.grad_variant:
+    values: ['vanilla']
+  train_config.iterations:
+    values: [15000]
+  sampling_config.iterations:
+    values: [15000]
+  train_config.learning_rate:
+    values: [3e-1]
+  sampling_config.learning_rate:
+    values: [3e-4]
 
 command:
   - python

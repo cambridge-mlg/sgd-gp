@@ -109,8 +109,10 @@ def get_eval_fn(
     vmap_and_pmap: bool = False,
 ):
     def _fn(params, idx, features, target_tuple):
+        if not metrics_list:
+            return {}
+        
         # Calculate all quantities of interest here, and each metric_fn gets passed all quantities.
-
         if exact_metrics is not None:
             alpha_exact = exact_metrics.alpha
             y_pred_loc_exact = exact_metrics.y_pred_loc

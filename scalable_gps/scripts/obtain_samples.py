@@ -50,6 +50,7 @@ def main(config):
         setup_training(run)
         # If there are any config values dependent on sweep values, recompute them here.
         computed_configs = {}
+        computed_configs['sampling_config.polyak'] = 100 / run.config['sampling_config.iterations']
         update_config_dict(config, run, computed_configs)
 
         print(config)

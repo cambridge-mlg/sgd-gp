@@ -61,6 +61,7 @@ def main(config):
                                                  "dataset_config.split": 0}}
         else:
             computed_configs = {}
+        computed_configs['train_config.polyak'] = 100 / run.config['train_config.iterations']
         update_config_dict(config, run, computed_configs)
 
         print(config)
