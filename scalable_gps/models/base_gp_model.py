@@ -85,3 +85,17 @@ class GPModel:
             return jax.pmap(jax.vmap(_fn)) # (n_devices, n_samples_per_device)
         else:
             return jax.jit(jax.vmap(_fn))
+        
+    def get_feature_params_fn(self, n_features: int, D: int, **kwargs):
+        """Factory function that wraps feature_params_fn so that it is jittable."""
+        def _fn(key):
+            return self.kernel.feature_params_fn(key, n_features=n_features, D=D)
+
+        return jax.jit(_fn)
+    
+    def get_feature_fn(self, x: Array):
+        """Factory function that wraps feature_fn so that it is jittable."""
+        def _fn(feature_params):
+            return self.kernel.feature_fn(x, feature_params)
+
+        return jax.jit(_fn)
