@@ -51,7 +51,7 @@ class Kernel:
     def get_signal_scale(self, kwargs: Optional[dict] = None):
         return self._get_hparam("signal_scale", kwargs)
 
-    def feature_params(
+    def feature_params_fn(
         self,
         key: chex.PRNGKey,
         n_features: int,
@@ -60,26 +60,9 @@ class Kernel:
     ) -> NamedTuple:
         raise NotImplementedError("Subclasses should implement this method.")
 
-    def featurise(self, x: Array, params: NamedTuple) -> Array:
+    def feature_fn(self, x: Array, feature_params: NamedTuple) -> Array:
         raise NotImplementedError("Subclasses should implement this method.")
 
-    def feature_fn(
-        self,
-        key: chex.PRNGKey,
-        n_features: int,
-        n_input_dims: int,
-        x: Array,
-        **kwargs,
-    ):  
-        print(n_features, n_input_dims)
-        params = self.feature_params(
-            key,
-            n_features,
-            n_input_dims,
-            **kwargs,
-        )
-        return self.featurise(x, params)
-    
 
 class StationaryKernel(Kernel):
     def __init__(self, kernel_config=None):
@@ -90,6 +73,7 @@ class StationaryKernel(Kernel):
     def omega_fn(self, key: chex.PRNGKey, n_input_dims: int, n_features: int):
         raise NotImplementedError("Subclasses should implement this method.")
 
+    @partial(jax.jit, static_argnums=(0, 2))
     def phi_fn(self, key: chex.PRNGKey, n_features: int):
         return jr.uniform(key=key, shape=(1, n_features), minval=-jnp.pi, maxval=jnp.pi)
 
@@ -105,16 +89,8 @@ class StationaryKernel(Kernel):
 
         return length_scale
 
-    @partial(jax.jit, static_argnums=(0,))
-    def featurise(self, x: chex.Array, params: FourierFeatureParams):
-        return (
-            params.signal_scale
-            * jnp.sqrt(2.0 / params.M)
-            * jnp.cos((x / params.length_scale) @ params.omega + params.phi)
-        )
-
     @partial(jax.jit, static_argnums=(0, 2, 3))
-    def feature_params(
+    def feature_params_fn(
         self,
         key: chex.PRNGKey,
         n_features: int,
@@ -137,6 +113,14 @@ class StationaryKernel(Kernel):
             signal_scale=signal_scale,
             length_scale=length_scale,
         )
+    
+    @partial(jax.jit, static_argnums=(0,))
+    def feature_fn(self, x: chex.Array, feature_params: FourierFeatureParams):
+        return (
+            feature_params.signal_scale
+            * jnp.sqrt(2.0 / feature_params.M)
+            * jnp.cos((x / feature_params.length_scale) @ feature_params.omega + feature_params.phi)
+        )
 
 
 class RBFKernel(StationaryKernel):
@@ -148,7 +132,6 @@ class RBFKernel(StationaryKernel):
 
         return (signal_scale**2) * jnp.exp(-0.5 * self._sq_dist(x, y, length_scale))
 
-    @staticmethod
     @partial(jax.jit, static_argnums=(0,))
     def omega_fn(self, key: chex.PRNGKey, n_input_dims: int, n_features: int):
         return jr.normal(key, shape=(n_input_dims, n_features))
@@ -222,6 +205,7 @@ class TanimotoKernel(Kernel):
     def _pairwise_tanimoto(self, x: Array, y: Array):
         return jnp.sum(jnp.minimum(x, y), axis=-1) / jnp.sum(jnp.maximum(x, y), axis=-1)
 
+    @partial(jax.jit, static_argnums=(0,))
     def kernel_fn(self, x: Array, y: Array, **kwargs) -> Array:
         r"""
         Computes the following kernel between two non-negative vectors:
@@ -236,13 +220,13 @@ class TanimotoKernel(Kernel):
         return jax.vmap(
             jax.vmap(self._pairwise_tanimoto, in_axes=(None, 0)), in_axes=(0, None))(x, y)
     
-
-    def feature_params(
+    @partial(jax.jit, static_argnums=(0, 2, 3, 4))
+    def feature_params_fn(
         self,
         key: chex.PRNGKey,
         n_features: int,
         D: int,
-        modulo_value: int,
+        modulo_value: int = 8,
         **kwargs,
     ) -> TanimotoFeatureParams:
         M = n_features
@@ -263,7 +247,7 @@ class TanimotoKernel(Kernel):
             beta=beta,
         )
 
-    def _elementwise_featurise(
+    def _elementwise_feature_fn(
             self, x: Array, r: Array, c: Array, xi: Array, beta: Array, modulo_value: int) -> Array:
         t = jnp.floor(jnp.log(x) / r + beta)  # shape D (same as input x)
         ln_y = r * (t - beta)  # also shape D
@@ -277,15 +261,15 @@ class TanimotoKernel(Kernel):
         # Use this to index xi
         return xi[a_argmin, t_selected % modulo_value]
 
-
-    def featurise(self, x: Array, params: TanimotoFeatureParams) -> Array:
+    @partial(jax.jit, static_argnums=(0,))
+    def feature_fn(self, x: Array, feature_params: TanimotoFeatureParams) -> Array:
         chex.assert_rank(x, 2)
 
         features = jax.vmap(
             jax.vmap(
-                self._elementwise_featurise, in_axes=(0, None, None, None, None, None)
+                self._elementwise_feature_fn, in_axes=(0, None, None, None, None, None)
             ), in_axes=(None, 0, 0, 0, 0, None)
-        )(x, params.r, params.c, params.xi, params.beta, params.modulo_value)
+        )(x, feature_params.r, feature_params.c, feature_params.xi, feature_params.beta, feature_params.modulo_value)
 
         return features.T
 
@@ -297,5 +281,3 @@ class TanimotoL1Kernel(TanimotoKernel):
     def _pairwise_tanimoto(self, x: Array, y: Array):
         return (jnp.sum(x) + jnp.sum(y) - jnp.sum(jnp.abs(x - y))) / (
                 jnp.sum(x) + jnp.sum(y) + jnp.sum(jnp.abs(x - y)))
-    
-    

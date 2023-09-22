@@ -35,11 +35,11 @@ class ISGDGPModel(GPModel):
         """Factory function that wraps feature_fn so that it is jittable."""
 
         def _fn(key):
-            params = self.kernel.feature_params(
+            params = self.kernel.feature_params_fn(
                 key, n_features, train_ds.x.shape[-1]
             )
-            features_x = self.kernel.featurise(train_ds.x, params)
-            features_z = self.kernel.featurise(train_ds.z, params)
+            features_x = self.kernel.feature_fn(train_ds.x, params)
+            features_z = self.kernel.feature_fn(train_ds.z, params)
             return features_x, features_z
 
         return jax.jit(_fn)
@@ -167,21 +167,18 @@ class ISGDGPModel(GPModel):
         train_ds: Dataset,
         test_ds: Dataset,
         config: ConfigDict,
-        use_rff: bool = True,
         n_features: int = 0,
-        chol_eps: float = 1e-5,
         L: Optional[Array] = None,
         zero_mean: bool = True,
         metrics_list=[],
-        metrics_prefix="",
-        compare_exact=False,
+        metrics_prefix=""
     ):
         assert train_ds.z is not None
         prior_covariance_key, prior_samples_key, optim_key = jr.split(key, 3)
 
         if L is not None:
             raise ValueError("Inducing point SGD does not support")
-        feature_params = self.kernel.feature_params(
+        feature_params = self.kernel.feature_params_fn(
             key, n_features, train_ds.x.shape[-1]
         )
         features_x = self.kernel.featurise(train_ds.x, feature_params)
@@ -210,6 +207,10 @@ class ISGDGPModel(GPModel):
         update_fn = optim_utils.get_update_fn(
             grad_fn, optimizer, config.polyak, vmap_and_pmap=True
         )
+        idx_fn = optim_utils.get_idx_fn(
+            config.batch_size, train_ds.N, config.iterative_idx, share_idx=False
+        )
+
         feature_fn = self.get_inducing_feature_fn(
             train_ds, config.n_features_optim, config.recompute_features
         )
@@ -247,14 +248,6 @@ class ISGDGPModel(GPModel):
         opt_states = optimizer.init(alphas)
 
         idx_key, feature_key = jr.split(key, 2)
-
-        if config.batch_size == 0:
-            raise NotImplementedError("dynamic batch size deprecated")
-
-        assert config.batch_size > 0
-        idx_fn = optim_utils.get_idx_fn(
-            config.batch_size, train_ds.N, config.iterative_idx, share_idx=False
-        )
 
         # force JIT
         idx = idx_fn(0, idx_key)

@@ -132,7 +132,6 @@ for dataset in datasets:
                 #     n_samples=n_samples,
                 #     train_ds=data_train_subset,
                 #     test_ds=data_test,
-                #     use_rff=False,
                 #     zero_mean=True,
                 # )
             

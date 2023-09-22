@@ -56,11 +56,14 @@ class SGDGPModel(GPModel):
         # Define the gradient function
         grad_fn = optim_utils.get_stochastic_gradient_fn(train_ds.x, self.kernel.kernel_fn, self.noise_scale, config.grad_variant)
         update_fn = optim_utils.get_update_fn(grad_fn, optimizer, config.polyak)
+        idx_fn = optim_utils.get_idx_fn(config.batch_size, train_ds.N, config.iterative_idx, share_idx=False)
 
         if config.grad_variant in ['batch_kvp', 'batch_err', 'batch_all']:
-            feature_fn = lambda _: None
+            feature_params_fn = lambda *args, **kwargs: None
+            feature_fn = lambda *args, **kwargs: None
         elif config.grad_variant in ['vanilla', 'random_kvp']:
-            feature_fn = self.get_feature_fn(train_ds, config.n_features_optim, modulo_value=config.rff_modulo_value)
+            feature_params_fn = self.get_feature_params_fn(n_features=config.n_features_optim, D=train_ds.x.shape[-1])
+            feature_fn = self.get_feature_fn(x=train_ds.x)
         else:
             raise ValueError("grad_variant must be 'vanilla', 'batch_kvp', 'batch_err', 'batch_all', or 'random_kvp'")
         
@@ -77,36 +80,15 @@ class SGDGPModel(GPModel):
 
         # Initialise alpha and alpha_polyak
         alpha, alpha_polyak = jnp.zeros((train_ds.N,)), jnp.zeros((train_ds.N,))
-
         opt_state = optimizer.init(alpha)
-
-        idx_key, feature_key = jr.split(key, 2)
-        features = feature_fn(feature_key)
-        if config.batch_size == 0:
-
-            def partial_fn(batch_size):
-                idx_fn = optim_utils.get_idx_fn(
-                    batch_size, train_ds.N, config.iterative_idx, share_idx=False
-                )
-                idx = idx_fn(0, idx_key)
-                update_fn(alpha, alpha_polyak, idx, features, opt_state, target_tuple)
-
-            config.batch_size = optim_utils.select_dynamic_batch_size(
-                train_ds.N, partial_fn
-            )
-            print(
-                f"Selected batch size: {config.batch_size}, (N = {train_ds.N}, D = {train_ds.D}, "
-                f"length_scale dims: {self.kernel.get_length_scale().shape[-1]})"
-            )
-        assert config.batch_size > 0
-        idx_fn = optim_utils.get_idx_fn(
-            config.batch_size, train_ds.N, config.iterative_idx, share_idx=False
-        )
 
         # force JIT by running a single step
         # TODO: Wrap this in something we can call outside this function potentially. When we run 10 steps to calculate
         # num_iterations per budget, this will have to be called once there.
+        idx_key, feature_key = jr.split(key, 2)
         idx = idx_fn(0, idx_key)
+        feature_params = feature_params_fn(feature_key)
+        features = feature_fn(feature_params)
         update_fn(alpha, alpha_polyak, idx, features, opt_state, target_tuple)
         
         wall_clock_time = 0.
@@ -128,16 +110,17 @@ class SGDGPModel(GPModel):
 
             wall_clock_time = most_recent_artifact_data["wall_clock_time"]
         
-    
-
         aux = []
         for i in tqdm(range(config.iterations)):
             if most_recent_artifact_data is not None and i < restart_step:
                 continue
             start_time = time.time()
             key, idx_key, feature_key = jr.split(key, 3)
-            features = feature_fn(feature_key)
+            
             idx = idx_fn(i, idx_key)
+            feature_params = feature_params_fn(feature_key)
+            features = feature_fn(feature_params)
+
             alpha, alpha_polyak, opt_state = update_fn(alpha, alpha_polyak, idx, features, opt_state, target_tuple)
             alpha.block_until_ready()
             end_time = time.time()
@@ -181,18 +164,13 @@ class SGDGPModel(GPModel):
         train_ds: Dataset,
         test_ds: Dataset,
         config: ConfigDict,
-        use_rff: bool = True,
         n_features: int = 0,
-        chol_eps: float = 1e-5,
         L: Optional[Array] = None,
         zero_mean: bool = True,
         metrics_list: list = [],
         metrics_prefix: str = "",
         compare_exact: bool = False):
         
-        if not use_rff:
-            raise DeprecationWarning("You are using the deprecated 'use_rff' flag.")
-        del use_rff
         prior_covariance_key, prior_samples_key, optim_key = jr.split(key, 3)
 
         if L is None:
@@ -200,10 +178,9 @@ class SGDGPModel(GPModel):
                 prior_covariance_key,
                 train_ds,
                 test_ds,
-                self.kernel.kernel_fn,
+                self.kernel.feature_params_fn,
                 self.kernel.feature_fn,
-                n_features=n_features,
-                chol_eps=chol_eps,
+                n_features=n_features
             )
 
         # Get vmapped functions for sampling from the prior and computing the posterior.
@@ -215,11 +192,14 @@ class SGDGPModel(GPModel):
         
         grad_fn = optim_utils.get_stochastic_gradient_fn(train_ds.x, self.kernel.kernel_fn, self.noise_scale, config.grad_variant)
         update_fn = optim_utils.get_update_fn(grad_fn, optimizer, config.polyak, vmap_and_pmap=True)
+        idx_fn = optim_utils.get_idx_fn(config.batch_size, train_ds.N, config.iterative_idx, share_idx=False)
 
         if config.grad_variant in ['batch_kvp', 'batch_err', 'batch_all']:
-            feature_fn = lambda _: None
+            feature_params_fn = lambda *args, **kwargs: None
+            feature_fn = lambda *args, **kwargs: None
         elif config.grad_variant in ['vanilla', 'random_kvp']:
-            feature_fn = self.get_feature_fn(train_ds, config.n_features_optim, modulo_value=config.rff_modulo_value)
+            feature_params_fn = self.get_feature_params_fn(n_features=config.n_features_optim, D=train_ds.x.shape[-1])
+            feature_fn = self.get_feature_fn(x=train_ds.x)
         else:
             raise ValueError("grad_variant must be 'vanilla', 'batch_kvp', 'batch_err', 'batch_all', or 'random_kvp'")
  
@@ -261,7 +241,6 @@ class SGDGPModel(GPModel):
         del L
         w_samples = jnp.concatenate(w_samples, axis=-1)
         
-        
         exact_samples_tuple = None
         if compare_exact:
             print('Computing exact samples tuple')
@@ -301,32 +280,22 @@ class SGDGPModel(GPModel):
 
         alphas = jnp.zeros((n_devices, n_samples_per_device, train_ds.N))
         alphas_polyak = jnp.zeros((n_devices, n_samples_per_device, train_ds.N))
-
         opt_states = optimizer.init(alphas)
 
-        idx_key, feature_key = jr.split(key, 2)
-        features = feature_fn(feature_key)
-        # if config.batch_size == 0:
-        #     def partial_fn(batch_size):
-        #         idx_fn = optim_utils.get_idx_fn(batch_size, train_ds.N, config.iterative_idx, share_idx=False)
-        #         idx = idx_fn(0, idx_key)
-        #         update_fn(alphas, alphas_polyak, idx, features, opt_states, target_tuples)
-        #     config.batch_size = optim_utils.select_dynamic_batch_size(train_ds.N, partial_fn)
-        #     print(f"Selected batch size: {config.batch_size}, (N = {train_ds.N}, D = {train_ds.D}, "
-        #           f"length_scale dims: {self.kernel.get_length_scale().shape[-1]})")
-        # assert config.batch_size > 0
-        idx_fn = optim_utils.get_idx_fn(config.batch_size, train_ds.N, config.iterative_idx, share_idx=False)
-
         # # force JIT
+        idx_key, feature_key = jr.split(key, 2)
         idx = idx_fn(0, idx_key)
+        feature_params = feature_params_fn(feature_key)
+        features = feature_fn(feature_params)
         update_fn(alphas, alphas_polyak, idx, features, opt_states, target_tuples)
 
         aux = []
         for i in tqdm(range(config.iterations)):
             optim_key, idx_key, feature_key = jr.split(optim_key, 3)
-            features = feature_fn(feature_key)
 
             idx = idx_fn(i, idx_key)
+            feature_params = feature_params_fn(feature_key)
+            features = feature_fn(feature_params)
 
             # 0, 0, None, None, 0, 0
             alphas, alphas_polyak, opt_states = update_fn(alphas, alphas_polyak, idx, features, opt_states, target_tuples)

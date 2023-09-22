@@ -33,15 +33,14 @@ def compute_prior_covariance_factor(
     key: chex.PRNGKey, 
     train_ds: Dataset, 
     test_ds: Dataset, 
-    kernel_fn: Callable,
+    feature_params_fn: Callable,
     feature_fn: Callable,
-    n_features: int = 0,
-    chol_eps: float = 1e-5):
+    n_features: int = 0):
     """Compute prior_covariance factor L as either chol(K) or Phi Phi^T."""
     x_full = jnp.vstack((train_ds.x, test_ds.x))
-    N_full, N = x_full.shape[0], train_ds.N
 
-    L = feature_fn(key, n_features, train_ds.D, x_full)
+    feature_params = feature_params_fn(key, n_features, train_ds.D)
+    L = feature_fn(x_full, feature_params)
     
     return L
 
