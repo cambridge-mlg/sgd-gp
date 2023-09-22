@@ -11,7 +11,6 @@ from scalable_gps.data import ThompsonDataset
 from scalable_gps.models.base_gp_model import GPModel
 import chex
 from functools import partial
-import wandb
 
 
 class ThompsonState(NamedTuple):
@@ -23,6 +22,7 @@ class ThompsonState(NamedTuple):
     noise_scale: float
 
 
+@jax.jit
 def featurise(x: chex.Array, params: FourierFeatureParams):
     return (
         params.signal_scale
@@ -60,7 +60,7 @@ def init(
         x_init = jr.truncated_normal(data_key, lower=minval, upper=maxval, shape=(n_init, D))
     else:
         raise NotImplementedError(f"Thompson sampling init_method '{init_method}' is not implemented.")
-    params = kernel.feature_params(feature_key, n_features, x_init.shape[-1])
+    params = kernel.feature_params_fn(feature_key, n_features, x_init.shape[-1])
 
     w = jr.normal(w_key, shape=(n_features,))
     y_init = featurise(x_init, params) @ w
@@ -98,7 +98,7 @@ def update_state(key: PRNGKey, state: ThompsonState, x_besties: Array):
     y = jnp.concatenate([state.ds.y, y_besties], axis=0)
     N = state.ds.N + x_besties.shape[0]
     # construct updated state dataset
-    ds = ThompsonDataset(x, y, N, state.ds.D)
+    ds = ThompsonDataset(x=x, y=y, N=N, D=state.ds.D)
 
     # find maximum of besties
     idx = jnp.argmax(y_besties)
@@ -195,7 +195,6 @@ def get_thompson_step_fn(
                 train_ds=state.ds,
                 test_ds=test_ds,
                 config=inference_config_sample,
-                use_rff=True,
                 L=L,
                 zero_mean=False,
                 metrics_list=[],
@@ -266,7 +265,7 @@ def gp_sample_argmax(
         .transpose(1, 0, 2)  # (friends_iterations*n_friends, samples, D)
     )
 
-    x_besties, _ = find_besties(
+    x_besties = find_besties(
         x_homies,
         acquisition_fn,
         acquisition_grad,
@@ -340,7 +339,7 @@ def find_besties(
     learning_rate: float = 1e-3,
     iterations: int = 100,
     n_besties: int = 1,
-    optim_trace: bool = False,
+    optim_trace: bool = False, # uncomment code below to use this
     minval: float = 0.0,
     maxval: float = 1.0,
     i: Optional[int] = None,
@@ -364,30 +363,36 @@ def find_besties(
         return x, opt_state
 
     opt_state = optimiser.init(x_homies)
-
     scan_idx = jnp.arange(iterations)
 
     def scan_fn(scan_state, _):
-        x_homies, opt_state = scan_state
-        x_homies, opt_state = update(x_homies, opt_state)
-        if optim_trace:
-            y_homies = acquisition_fn(x_homies)
-            trace_tuple = (x_homies, y_homies)
-        else:
-            trace_tuple = None
-        return (x_homies, opt_state), trace_tuple
+        x_homies, opt_state = update(*scan_state)
+        return (x_homies, opt_state), 0
 
-    (x_homies, _), trace = jax.lax.scan(scan_fn, (x_homies, opt_state), scan_idx)
+    x_homies, _ = jax.lax.scan(scan_fn, (x_homies, opt_state), scan_idx)[0]
 
-    if wandb.run is not None and optim_trace:
-        for ii, step_data in enumerate(trace):
-            _, y_homies = step_data
-            wandb.log(
-                {
-                    **{f"Thompson_{i}/bestie_y": y_homies}
-                    ** {f"Thompson_{i}/bestie_step": ii},
-                }
-            )
+    # USE THIS CODE TO SUPPORT optim_trace !!!
+    # def scan_fn(scan_state, _):
+    #     x_homies, opt_state = scan_state
+    #     x_homies, opt_state = update(x_homies, opt_state)
+    #     if optim_trace:
+    #         y_homies = acquisition_fn(x_homies)
+    #         trace_tuple = (x_homies, y_homies)
+    #     else:
+    #         trace_tuple = None
+    #     return (x_homies, opt_state), trace_tuple
+
+    # (x_homies, _), trace = jax.lax.scan(scan_fn, (x_homies, opt_state), scan_idx)
+
+    # if wandb.run is not None and optim_trace:
+    #     for ii, step_data in enumerate(trace):
+    #         _, y_homies = step_data
+    #         wandb.log(
+    #             {
+    #                 **{f"Thompson_{i}/bestie_y": y_homies}
+    #                 ** {f"Thompson_{i}/bestie_step": ii},
+    #             }
+    #         )
 
     @jax.vmap
     def top_args(x, y):
@@ -400,10 +405,9 @@ def find_besties(
 
         """
         return x[jnp.argsort(y)[-n_besties:]]
-    print(x_homies.shape)
     y_homies = acquisition_fn(x_homies)
 
-    return top_args(x_homies, y_homies), trace
+    return top_args(x_homies, y_homies)#, trace
 
 
 def get_acquisition_fn(
@@ -422,8 +426,6 @@ def get_acquisition_fn(
     acquisition_fn:   (n_samples, n_inputs, D) -> (n_samples, n_inputs)
     acquisition_grad: (n_samples, n_inputs, D) -> (n_samples, n_inputs, D)
     """
-    if jnp.ndim(alpha_map) > 2:
-        alpha_map = alpha_map.squeeze()
     if jnp.ndim(alpha_samples) > 2:
         alpha_samples = alpha_samples.squeeze()
     if jnp.ndim(w_samples) > 2:
