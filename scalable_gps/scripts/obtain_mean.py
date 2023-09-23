@@ -58,7 +58,8 @@ def main(config):
             new_config.dataset_config = get_dataset_config(run.config.override_d_name)
             computed_configs = {**new_config, **{"dataset_config.binarize": run.config.override_d_binarize,
                                                  "dataset_config.normalise": True,
-                                                 "dataset_config.split": 0}}
+                                                 "dataset_config.split": 0,
+                                                 "dataset_name": run.config.override_d_name}}
         else:
             computed_configs = {}
         computed_configs['train_config.polyak'] = 100 / run.config['train_config.iterations']
@@ -229,10 +230,10 @@ if __name__ == "__main__":
     import os
     import sys
 
-    if sys.argv:
+    # if sys.argv:
         # pass wandb API as argv[1] and set environment variable
         # 'python mll_optim.py MY_API_KEY'
-        os.environ["WANDB_API_KEY"] = sys.argv[1]
+        # os.environ["WANDB_API_KEY"] = sys.argv[1]
 
     # Adds jax flags to the program.
     jax.config.config_with_absl()
