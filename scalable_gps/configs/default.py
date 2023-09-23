@@ -91,7 +91,7 @@ def get_config(config_string):
     config.vi_config.annoy_pre_clustering = False
     config.vi_config.clustering_length_scale_ratio = 1.0
     config.vi_config.learning_rate = 1e-3
-    config.vi_config.absolute_clipping = 0.1
+    config.vi_config.absolute_clipping = -1
     config.vi_config.use_exact_pred_variance = False
     config.train_config = ml_collections.ConfigDict()
 
@@ -116,7 +116,7 @@ def get_config(config_string):
     config.train_config.grad_variant = 'vanilla' # 'vanilla', 'batch_kvp', 'batch_err', 'batch_all', 'random_kvp'
     # TODO: Calculate polyak dynamically.
     config.train_config.polyak = 100 / config.train_config.iterations
-    config.train_config.absolute_clipping = 0.1  # -1 to avoid clipping
+    config.train_config.absolute_clipping = -1  # -1 to avoid clipping
 
     config.train_config.lr_schedule_name = None  # "linear_schedule"
     config.train_config.lr_schedule_config = ml_collections.ConfigDict()
@@ -149,7 +149,7 @@ def get_config(config_string):
     config.sampling_config.loss_objective = 2
     config.sampling_config.use_cholesky_prior_sample = False
 
-    config.sampling_config.absolute_clipping = 0.1  # -1 to avoid clipping
+    config.sampling_config.absolute_clipping = -1  # -1 to avoid clipping
 
     config.mll_config = ml_collections.ConfigDict()
     config.mll_config.learning_rate = 0.1

@@ -260,8 +260,9 @@ def get_lr_and_schedule(
     if optim_name == "adam":
         optimizer = optimizer(learning_rate=lr)
 
-    if absolute_clipping is not None and absolute_clipping > 0:
-        optimizer = optax.chain(optax.clip_by_global_norm(absolute_clipping), optimizer)
+    # NOTE: I'm just globally disabling gradient clipping
+    # if absolute_clipping is not None and absolute_clipping > 0:
+    #     optimizer = optax.chain(optax.clip_by_global_norm(absolute_clipping), optimizer)
 
     return optimizer
 

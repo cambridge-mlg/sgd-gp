@@ -63,10 +63,10 @@ class SVGPModel:
         del metrics_list, metrics_prefix, exact_metrics, recompute
 
         optimizer = optax.adam(learning_rate=config.learning_rate)
-        absolute_clipping = config.absolute_clipping
-        optimizer = optax.chain(
-            optax.zero_nans(), optax.clip_by_global_norm(absolute_clipping), optimizer
-        )
+        # absolute_clipping = config.absolute_clipping
+        # optimizer = optax.chain(
+        #     optax.zero_nans(), optax.clip_by_global_norm(absolute_clipping), optimizer
+        # )
 
         init_key, fit_key = jax.random.split(key, 2)
 

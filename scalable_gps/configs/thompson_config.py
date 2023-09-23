@@ -86,7 +86,7 @@ def get_config():
     config.train_config.nesterov = True
     config.train_config.grad_variant = 'batch_all' # 'vanilla', 'batch_kvp', 'batch_err', 'random_kvp'
     config.train_config.polyak = 100 / config.train_config.iterations
-    config.train_config.absolute_clipping = 0.1 # -1 to avoid clipping
+    config.train_config.absolute_clipping = -1 # -1 to avoid clipping
     config.train_config.lr_schedule_name = None # "linear_schedule"
     config.train_config.lr_schedule_config = ml_collections.ConfigDict()
 
@@ -107,7 +107,7 @@ def get_config():
     config.vi_config.num_inducing_points = 1024
     config.vi_config.inducing_init = "kmeans"
     config.vi_config.learning_rate = 5e-4
-    config.vi_config.absolute_clipping = 0.1
+    config.vi_config.absolute_clipping = -1
     config.kernel_name = config.thompson.kernel_name
 
     # WANDB
