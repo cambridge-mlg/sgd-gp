@@ -7,11 +7,11 @@ parameters:
   model_name:
     values: ["sgd"]
   train_config.grad_variant:
-    values: ['batch_all']
+    values: ['vanilla']
   kernel_name:
     values: ["TanimotoKernel", "TanimotoL1Kernel"]
   train_config.learning_rate:
-    values: [0.1, 1.]
+    values: [0.1]
   train_config.iterations:
     values: [50000]
   train_config.eval_every:
