@@ -164,11 +164,8 @@ def main(config):
             if not config.vi_config.use_exact_pred_variance:
                 # Calculate Inducing points.
                 inducing_inputs = model.vi_params["variational_family"]["inducing_inputs"]
-                feature_params = kernel.feature_params(key, 2000, inducing_inputs.shape[-1])
-                L = kernel.featurise(
-                    inducing_inputs,
-                    feature_params
-                    )
+                feature_params = kernel.feature_params_fn(key, 2000, inducing_inputs.shape[-1])
+                L = kernel.feature_fn(inducing_inputs, feature_params)
                 alpha_map = jnp.zeros(inducing_inputs.shape[0])
 
                 aux_vi_model = SVGPThompsonInterface(hparams.noise_scale, kernel, config)

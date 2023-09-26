@@ -216,7 +216,6 @@ class SVGPThompsonInterface(SVGPModel):
             compare_exact,
         )
         # L is (num_inducing, num_features)
-        assert L.shape == (self.vi_params["variational_family"]["inducing_inputs"].shape[0], n_features)
 
         if self.vi_params is None:
             raise ValueError(

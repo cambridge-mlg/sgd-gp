@@ -1,21 +1,22 @@
-entity: shreyaspadhy
+entity: jandylin
 project: scalable-gps
 program: scripts/obtain_samples.py
 
 method: grid
 parameters:
   dataset_config.split:
-    values: [0, 1, 2, 4]
+    values: [0, 1, 2, 3, 4]
   model_name:
     values: ["vi"]
   vi_config.num_inducing_points:
-    values: [4096]
+    values: [3000]
 
 command:
   - python
   - ${program}
   - 17bb59c7a4e186597fe98347175642c99c8403e2
   - --config
-  - configs/default.py:3droad
+  - configs/default.py:pol
   - --config.wandb.log
+  - --noconfig.wandb.log_artifact
   - --noconfig.compute_exact_soln
