@@ -1,0 +1,7 @@
+numpy
+scipy
+matplotlib
+wandb
+opt_einsum
+tqdm
+gpjax
