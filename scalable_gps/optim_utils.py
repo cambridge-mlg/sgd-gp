@@ -13,7 +13,7 @@ from scalable_gps.linear_model import (
     improved_grad_sample_batch_kvp,
     improved_grad_sample_batch_err,
     improved_grad_sample_batch_all,
-    improved_grad_sample_random_kvp
+    improved_grad_sample_random_kvp,
 )
 from scalable_gps.inducing_linear_model import (
     i_error_grad_sample,
@@ -24,28 +24,50 @@ from scalable_gps.utils import TargetTuple
 PyTree = Any
 
 
-def get_stochastic_gradient_fn(x: Array, kernel_fn: Callable, noise_scale: float, grad_variant: str):
-    if grad_variant == 'vanilla':
+def get_stochastic_gradient_fn(
+    x: Array, kernel_fn: Callable, noise_scale: float, grad_variant: str
+):
+    if grad_variant == "vanilla":
+
         def _fn(params, idx, features, target_tuple):
-            return grad_sample(params, idx, x, features, target_tuple, kernel_fn, noise_scale)
-    elif grad_variant == 'batch_kvp':
+            return grad_sample(
+                params, idx, x, features, target_tuple, kernel_fn, noise_scale
+            )
+    elif grad_variant == "batch_kvp":
+
         def _fn(params, idx, features, target_tuple):
-            return improved_grad_sample_batch_kvp(params, idx, x, features, target_tuple, kernel_fn, noise_scale)
-    elif grad_variant == 'batch_err':
+            return improved_grad_sample_batch_kvp(
+                params, idx, x, features, target_tuple, kernel_fn, noise_scale
+            )
+    elif grad_variant == "batch_err":
+
         def _fn(params, idx, features, target_tuple):
-            return improved_grad_sample_batch_err(params, idx, x, features, target_tuple, kernel_fn, noise_scale)
-    elif grad_variant == 'batch_all':
+            return improved_grad_sample_batch_err(
+                params, idx, x, features, target_tuple, kernel_fn, noise_scale
+            )
+    elif grad_variant == "batch_all":
+
         def _fn(params, idx, features, target_tuple):
-            return improved_grad_sample_batch_all(params, idx, x, features, target_tuple, kernel_fn, noise_scale)
-    elif grad_variant == 'random_kvp':
+            return improved_grad_sample_batch_all(
+                params, idx, x, features, target_tuple, kernel_fn, noise_scale
+            )
+    elif grad_variant == "random_kvp":
+
         def _fn(params, idx, features, target_tuple):
-            return improved_grad_sample_random_kvp(params, idx, x, features, target_tuple, kernel_fn, noise_scale)
+            return improved_grad_sample_random_kvp(
+                params, idx, x, features, target_tuple, kernel_fn, noise_scale
+            )
     else:
-        raise ValueError("grad_variant must be 'vanilla', 'batch_kvp', 'batch_err', 'batch_all', or 'random_kvp'")
+        raise ValueError(
+            "grad_variant must be 'vanilla', 'batch_kvp', 'batch_err', 'batch_all', or 'random_kvp'"
+        )
 
     return jax.jit(_fn)
 
-def get_inducing_stochastic_gradient_fn(x: Array, z: Array, kernel_fn: Callable, noise_scale: float):
+
+def get_inducing_stochastic_gradient_fn(
+    x: Array, z: Array, kernel_fn: Callable, noise_scale: float
+):
     def _fn(params, idx, features, target_tuple):
         features_x, features_z = features
         error_grad = i_error_grad_sample(
@@ -75,11 +97,14 @@ def get_update_fn(
         new_params_polyak = optax.incremental_update(
             new_params, params_polyak, step_size=polyak_step_size
         )
-        
+
         return new_params, new_params_polyak, opt_state
 
     if vmap_and_pmap:
-        return jax.pmap(jax.vmap(_fn, in_axes=(0, 0, None, None, 0, 0)), in_axes=(0, 0, None, None, 0, 0))
+        return jax.pmap(
+            jax.vmap(_fn, in_axes=(0, 0, None, None, 0, 0)),
+            in_axes=(0, 0, None, None, 0, 0),
+        )
     return jax.jit(_fn)
 
 
@@ -125,6 +150,7 @@ def get_uniform_idx_fn(batch_size: int, n_train: int, share_idx: bool = False):
 # TODO: implement dataset shuffle
 def get_iterative_idx_fn(batch_size: int, n_train: int):
     n_steps_per_epoch = n_train // batch_size
+
     def _fn(iter, _):
         epoch_id = iter // n_steps_per_epoch
         epoch_key = jr.PRNGKey(epoch_id)

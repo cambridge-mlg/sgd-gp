@@ -6,7 +6,7 @@ def _load(runs, config_keys, metric_keys, page_size=100000000):
     configs_and_metrics = []
 
     for run in tqdm(runs):
-        if run.state != 'finished':
+        if run.state != "finished":
             print(f"Skipping run '{run.id}' because it '{run.state}'.")
             continue
         # retrieve desired configs
@@ -24,20 +24,26 @@ def _load(runs, config_keys, metric_keys, page_size=100000000):
         #             metrics[k].append(d[k])
 
         metrics = {k: [d[k] for d in history] for k in metric_keys}
-        
+
         configs_and_metrics.append((configs, metrics))
 
     return configs_and_metrics
 
 
-def load_runs_from_sweep(sweep_id, config_keys, metric_keys, entity = "shreyaspadhy", project="scalable-gps"):
+def load_runs_from_sweep(
+    sweep_id, config_keys, metric_keys, entity="shreyaspadhy", project="scalable-gps"
+):
     api = wandb.Api()
     sweep = api.sweep(f"{entity}/{project}/{sweep_id}")
     runs = sweep.runs
     return _load(runs, config_keys, metric_keys)
 
 
-def load_runs_from_regex(regex, config_keys, metric_keys, entity = "shreyaspadhy", project="scalable-gps"):
+def load_runs_from_regex(
+    regex, config_keys, metric_keys, entity="shreyaspadhy", project="scalable-gps"
+):
     api = wandb.Api()
-    runs = api.runs(path=f"{entity}/{project}", filters={"display_name": {"$regex": regex}})
+    runs = api.runs(
+        path=f"{entity}/{project}", filters={"display_name": {"$regex": regex}}
+    )
     return _load(runs, config_keys, metric_keys)

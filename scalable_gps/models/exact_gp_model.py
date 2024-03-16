@@ -47,7 +47,12 @@ class ExactGPModel(GPModel):
         return self.alpha, None
 
     def predictive_variance(
-        self, train_ds: Dataset, test_ds: Dataset, add_likelihood_noise: bool=False, return_marginal_variance: bool = True) -> Array:
+        self,
+        train_ds: Dataset,
+        test_ds: Dataset,
+        add_likelihood_noise: bool = False,
+        return_marginal_variance: bool = True,
+    ) -> Array:
         """Compute the posterior variance of the test points."""
         K_test = self.kernel.kernel_fn(test_ds.x, test_ds.x)  # N_test, N_test
         K_train_test = self.kernel.kernel_fn(train_ds.x, test_ds.x)  # N_train, N_test
@@ -61,12 +66,12 @@ class ExactGPModel(GPModel):
         )
 
         variance = K_test - K_train_test.T @ K_inv_K_train_test
-        
+
         if add_likelihood_noise:
-            variance += self.noise_scale ** 2 * jnp.eye(variance.shape[0])
+            variance += self.noise_scale**2 * jnp.eye(variance.shape[0])
         if return_marginal_variance:
             return jnp.diag(variance)  # (N_test, 1)
-        return variance # (N_test, N_test)
+        return variance  # (N_test, N_test)
 
     def get_alpha_samples_fn(self):
         """Vmap factory function that returns a function that computes alpha samples from f0 and eps0 samples."""
@@ -106,7 +111,7 @@ class ExactGPModel(GPModel):
                 test_ds,
                 self.kernel.feature_params_fn,
                 self.kernel.feature_fn,
-                n_features=n_features
+                n_features=n_features,
             )
 
         # Get vmapped functions for sampling from the prior and computing the posterior.

@@ -84,9 +84,7 @@ class ISGDGPModel(GPModel):
         grad_fn = optim_utils.get_inducing_stochastic_gradient_fn(
             train_ds.x, train_ds.z, self.kernel.kernel_fn, self.noise_scale
         )
-        update_fn = optim_utils.get_update_fn(
-            grad_fn, optimizer, config.polyak
-        )
+        update_fn = optim_utils.get_update_fn(grad_fn, optimizer, config.polyak)
         feature_fn = self.get_inducing_feature_fn(
             train_ds, config.n_features_optim, config.recompute_features
         )
@@ -171,7 +169,7 @@ class ISGDGPModel(GPModel):
         L: Optional[Array] = None,
         zero_mean: bool = True,
         metrics_list=[],
-        metrics_prefix=""
+        metrics_prefix="",
     ):
         assert train_ds.z is not None
         prior_covariance_key, prior_samples_key, optim_key = jr.split(key, 3)
@@ -217,13 +215,20 @@ class ISGDGPModel(GPModel):
 
         # Call the vmapped functions -- NOTE: eps0 samples need to be from Sig^-1
 
-         # Call the pmapped and vmapped functions
+        # Call the pmapped and vmapped functions
         n_devices = jax.device_count()
         assert n_samples % n_devices == 0
         n_samples_per_device = n_samples // n_devices
-        pmappable_keys = jr.split(prior_samples_key, n_samples).reshape((n_devices, n_samples_per_device, -1))
+        pmappable_keys = jr.split(prior_samples_key, n_samples).reshape(
+            (n_devices, n_samples_per_device, -1)
+        )
         # (n_devices, n_samples_per_device, n_train), (n_devices, n_samples_per_device, n_test)
-        f0_samples_train, f0_samples_test, eps0_samples, w_samples = compute_prior_samples_fn(pmappable_keys)
+        (
+            f0_samples_train,
+            f0_samples_test,
+            eps0_samples,
+            w_samples,
+        ) = compute_prior_samples_fn(pmappable_keys)
 
         eval_fn = eval_utils.get_inducing_eval_fn(
             metrics_list,
@@ -234,7 +239,7 @@ class ISGDGPModel(GPModel):
             grad_fn=grad_fn,
             metrics_prefix=metrics_prefix,
             exact_samples=None,  # exact_samples_tuple if compare_exact else None,
-            vmap_and_pmap=True
+            vmap_and_pmap=True,
         )
 
         target_tuples = compute_target_tuples_fn(
@@ -244,7 +249,7 @@ class ISGDGPModel(GPModel):
         N_inducing = len(train_ds.z)
         alphas = jnp.zeros((n_devices, n_samples_per_device, N_inducing))
         alphas_polyak = jnp.zeros((n_devices, n_samples_per_device, N_inducing))
-        
+
         opt_states = optimizer.init(alphas)
 
         idx_key, feature_key = jr.split(key, 2)
@@ -280,7 +285,7 @@ class ISGDGPModel(GPModel):
                     )
                     y_pred_variance = self.predictive_variance_samples(
                         zero_mean_posterior_samples.reshape(n_samples, test_ds.N),
-                        add_likelihood_noise=True
+                        add_likelihood_noise=True,
                     )
                     del zero_mean_posterior_samples
                     if "test_llh" in metrics_list:
@@ -300,7 +305,9 @@ class ISGDGPModel(GPModel):
                 if wandb.run is not None:
                     wandb.log(
                         {
-                            **process_pmapped_and_vmapped_metrics(pmapped_and_vmapped_eval_metrics),
+                            **process_pmapped_and_vmapped_metrics(
+                                pmapped_and_vmapped_eval_metrics
+                            ),
                             **{"sample_step": i},
                             **aux_metrics,
                         }

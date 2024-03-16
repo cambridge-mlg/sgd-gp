@@ -40,7 +40,7 @@ seed = 12345
 key = jr.PRNGKey(seed)
 # datasets = ['protein', 'keggdirected']
 # datasets = ['3droad', 'song', 'buzz', 'houseelectric']
-datasets = ['buzz', 'houseelectric']
+datasets = ["buzz", "houseelectric"]
 kernel_name = "Matern32Kernel"
 
 n_subsets = 6
@@ -49,14 +49,13 @@ n_samples = 64
 file = "./SoD_big_datasets.txt"
 
 for dataset in datasets:
-
-    if dataset == '3droad':
+    if dataset == "3droad":
         splits = [0, 1, 2, 4]
-    elif dataset == 'houseelectric':
+    elif dataset == "houseelectric":
         splits = [0, 1, 2]
     else:
         splits = [0, 1, 2, 3, 4]
-    
+
     normalised_test_rmse = np.zeros((len(splits), n_subsets, n_seeds))
     normalised_test_nll = np.zeros((len(splits), n_subsets, n_seeds))
     normalised_test_nll_samples = np.zeros((len(splits), n_subsets, n_seeds))
@@ -72,11 +71,15 @@ for dataset in datasets:
         try:
             hparams = get_tuned_hparams(dataset, split)
         except wandb.CommError:
-            print(f"Could not fetch hparams from wandb for dataset '{dataset}', split '{split}'.")
+            print(
+                f"Could not fetch hparams from wandb for dataset '{dataset}', split '{split}'."
+            )
 
         # init kernel
         kernel_init_fn = getattr(kernels, kernel_name)
-        kernel = kernel_init_fn({'signal_scale': hparams.signal_scale, 'length_scale': hparams.length_scale})
+        kernel = kernel_init_fn(
+            {"signal_scale": hparams.signal_scale, "length_scale": hparams.length_scale}
+        )
 
         for j, subset_size in enumerate(subset_sizes):
             # select subset of data
@@ -94,7 +97,8 @@ for dataset in datasets:
                     mu_x=data_train.mu_x,
                     mu_y=data_train.mu_y,
                     sigma_x=data_train.sigma_x,
-                    sigma_y=data_train.sigma_y)
+                    sigma_y=data_train.sigma_y,
+                )
 
                 exact_model = ExactGPModel(hparams.noise_scale, kernel)
                 exact_model.compute_representer_weights(data_train_subset)
@@ -112,20 +116,24 @@ for dataset in datasets:
                     data_test_batch = Dataset(
                         x=data_test.x[start:end],
                         y=data_test.y[start:end],
-                        N=end-start,
+                        N=end - start,
                         D=data_test.D,
                         mu_x=data_test.mu_x,
                         mu_y=data_test.mu_y,
                         sigma_x=data_test.sigma_x,
-                        sigma_y=data_test.sigma_y
+                        sigma_y=data_test.sigma_y,
                     )
 
-                    y_pred_variance_batch = exact_model.predictive_variance(data_train_subset, data_test_batch, add_likelihood_noise=True)
+                    y_pred_variance_batch = exact_model.predictive_variance(
+                        data_train_subset, data_test_batch, add_likelihood_noise=True
+                    )
                     y_pred_variance = jnp.append(y_pred_variance, y_pred_variance_batch)
 
                 # y_pred_variance = exact_model.predictive_variance(data_train_subset, data_test, add_likelihood_noise=True)
 
-                normalised_test_nll[i, j, k] = -mean_LLH(data_test.y, y_pred, y_pred_variance)
+                normalised_test_nll[i, j, k] = -mean_LLH(
+                    data_test.y, y_pred, y_pred_variance
+                )
 
                 # posterior_samples, _, _ = exact_model.compute_posterior_samples(
                 #     sampling_key,
@@ -134,11 +142,12 @@ for dataset in datasets:
                 #     test_ds=data_test,
                 #     zero_mean=True,
                 # )
-            
+
                 # y_pred_variance_samples = exact_model.predictive_variance_samples(posterior_samples, add_likelihood_noise=True)
-                normalised_test_nll_samples[i, j, k] = 0#-mean_LLH(data_test.y, y_pred, y_pred_variance_samples)
-        
-        
+                normalised_test_nll_samples[
+                    i, j, k
+                ] = 0  # -mean_LLH(data_test.y, y_pred, y_pred_variance_samples)
+
     rmse_mean = np.mean(normalised_test_rmse, axis=(0, 2))
     rmse_stderr = np.std(normalised_test_rmse, axis=(0, 2)) / np.sqrt(len(splits))
 
@@ -146,15 +155,21 @@ for dataset in datasets:
     nll_stderr = np.std(normalised_test_nll, axis=(0, 2)) / np.sqrt(len(splits))
 
     nll_samples_mean = np.mean(normalised_test_nll_samples, axis=(0, 2))
-    nll_samples_stderr = np.std(normalised_test_nll_samples, axis=(0, 2)) / np.sqrt(len(splits))
+    nll_samples_stderr = np.std(normalised_test_nll_samples, axis=(0, 2)) / np.sqrt(
+        len(splits)
+    )
 
     print(f"dataset: {dataset}")
     for j, subset_size in enumerate(subset_sizes):
-        print(f"  subset_size: {subset_size}, rmse: {rmse_mean[j]:.2f} +/- {rmse_stderr[j]:.2f}, nll: {nll_mean[j]:.2f} +/- {nll_stderr[j]:.2f}, nll_samples: {nll_samples_mean[j]:.2f} +/- {nll_samples_stderr[j]:.2f}")
+        print(
+            f"  subset_size: {subset_size}, rmse: {rmse_mean[j]:.2f} +/- {rmse_stderr[j]:.2f}, nll: {nll_mean[j]:.2f} +/- {nll_stderr[j]:.2f}, nll_samples: {nll_samples_mean[j]:.2f} +/- {nll_samples_stderr[j]:.2f}"
+        )
     print()
 
-    with open(file, 'a') as f:
+    with open(file, "a") as f:
         f.write(f"dataset: {dataset}\n")
         for j, subset_size in enumerate(subset_sizes):
-            f.write(f"  subset_size: {subset_size}, rmse: {rmse_mean[j]:.2f} +/- {rmse_stderr[j]:.2f}, nll: {nll_mean[j]:.2f} +/- {nll_stderr[j]:.2f}, nll_samples: {nll_samples_mean[j]:.2f} +/- {nll_samples_stderr[j]:.2f}\n")
+            f.write(
+                f"  subset_size: {subset_size}, rmse: {rmse_mean[j]:.2f} +/- {rmse_stderr[j]:.2f}, nll: {nll_mean[j]:.2f} +/- {nll_stderr[j]:.2f}, nll_samples: {nll_samples_mean[j]:.2f} +/- {nll_samples_stderr[j]:.2f}\n"
+            )
         f.write("\n")

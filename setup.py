@@ -16,9 +16,7 @@ try:
 except:
     reqs = [str(ir.requirement) for ir in install_reqs]
 
-git_reqs = [
-    "uci_datasets @ git+https://github.com/treforevans/uci_datasets.git"
-]
+git_reqs = ["uci_datasets @ git+https://github.com/treforevans/uci_datasets.git"]
 
 
 setup(

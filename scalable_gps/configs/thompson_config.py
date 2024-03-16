@@ -13,9 +13,9 @@ def get_config():
     config.thompson.D = 8
 
     config.thompson.model_name = "SGDGP"
-    config.thompson.kernel_name = "Matern32Kernel" # try 5/2
+    config.thompson.kernel_name = "Matern32Kernel"  # try 5/2
     config.thompson.signal_scale = 1.0
-    config.thompson.length_scale = 0.5 # try 0.1, 0.2, 0.3, 0.4, 0.5
+    config.thompson.length_scale = 0.5  # try 0.1, 0.2, 0.3, 0.4, 0.5
 
     config.thompson.noise_scale = 1e-3
 
@@ -23,8 +23,8 @@ def get_config():
 
     config.thompson.n_features = 5000
 
-    config.thompson.n_init = 50000 # 50k
-    config.thompson.init_method = "uniform" # try "trunc_normal"
+    config.thompson.n_init = 50000  # 50k
+    config.thompson.init_method = "uniform"  # try "trunc_normal"
 
     config.thompson.friends_iterations = 30
     config.thompson.n_friends = 50000
@@ -33,9 +33,9 @@ def get_config():
 
     config.thompson.n_samples = 1000
 
-    config.thompson.find_friends_method = "nearby" # uniform
+    config.thompson.find_friends_method = "nearby"  # uniform
 
-    config.thompson.optim_lr = 1e-3 # try cosine annealing
+    config.thompson.optim_lr = 1e-3  # try cosine annealing
     config.thompson.optim_iters = 100
 
     config.thompson.grid_search = config.thompson.D == 2
@@ -49,7 +49,7 @@ def get_config():
     config.cg_config = ml_collections.ConfigDict()
 
     config.cg_config.batch_size = 1
-    config.cg_config.maxiter = 10 # 10, 50
+    config.cg_config.maxiter = 10  # 10, 50
     config.cg_config.eval_every = 1
 
     config.cg_config.tol = 0.0
@@ -74,20 +74,22 @@ def get_config():
     # Optimisation Configs
 
     config.train_config.preempt_safe = False
-    config.train_config.iterations = 75000 # 15k, 75k
+    config.train_config.iterations = 75000  # 15k, 75k
     config.train_config.batch_size = 500
     config.train_config.eval_every = 100
-    config.train_config.time_budget_in_seconds = 0.
-    config.train_config.eval_every_in_seconds = 0.
+    config.train_config.time_budget_in_seconds = 0.0
+    config.train_config.eval_every_in_seconds = 0.0
 
     config.train_config.iterative_idx = True
     config.train_config.learning_rate = 3.0
     config.train_config.momentum = 0.9
     config.train_config.nesterov = True
-    config.train_config.grad_variant = 'batch_all' # 'vanilla', 'batch_kvp', 'batch_err', 'random_kvp'
+    config.train_config.grad_variant = (
+        "batch_all"
+    )  # 'vanilla', 'batch_kvp', 'batch_err', 'random_kvp'
     config.train_config.polyak = 100 / config.train_config.iterations
-    config.train_config.absolute_clipping = -1 # -1 to avoid clipping
-    config.train_config.lr_schedule_name = None # "linear_schedule"
+    config.train_config.absolute_clipping = -1  # -1 to avoid clipping
+    config.train_config.lr_schedule_name = None  # "linear_schedule"
     config.train_config.lr_schedule_config = ml_collections.ConfigDict()
 
     # Sampling
@@ -102,7 +104,7 @@ def get_config():
     config.vi_config = ml_collections.ConfigDict()
     config.vi_config = config.thompson.copy_and_resolve_references()
 
-    config.vi_config.iterations = 50000 # small compute: 20k, large compute 100x
+    config.vi_config.iterations = 50000  # small compute: 20k, large compute 100x
     config.vi_config.batch_size = 500
     config.vi_config.num_inducing_points = 1024
     config.vi_config.inducing_init = "kmeans"
@@ -113,10 +115,9 @@ def get_config():
     # WANDB
     config.wandb = ml_collections.ConfigDict()
     config.wandb.log = False
-    config.wandb.project = "faster-sgd-gp"
-    config.wandb.entity = "jandylin"
-    # TODO: change this to HPC dir
-    config.wandb.code_dir = "/home/jal232/Code/scalable-gaussian-processes/"
+    config.wandb.project = ".."
+    config.wandb.entity = ".."
+    config.wandb.code_dir = "/./../"
     config.wandb.name = ""
 
     return config

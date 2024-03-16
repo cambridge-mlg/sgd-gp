@@ -17,7 +17,12 @@ from scalable_gps.utils import (
     revert_z_score,
 )
 from scalable_gps.optim_utils import get_uniform_idx_fn
-from scalable_gps.utils import ExactPredictionsTuple, ExactSamplesTuple, TargetTuple, revert_z_score
+from scalable_gps.utils import (
+    ExactPredictionsTuple,
+    ExactSamplesTuple,
+    TargetTuple,
+    revert_z_score,
+)
 
 
 def grad_var_fn(
@@ -51,6 +56,7 @@ def grad_var_fn(
 def hilbert_space_RMSE(x: Array, x_hat: Array, K: Array):
     return jnp.sqrt(jnp.mean((x - x_hat).T * (K @ (x - x_hat))))
 
+
 def pred_space_RMSE(x: Array, x_hat: Array, K: Array):
     return jnp.sqrt(jnp.mean((K @ (x - x_hat)).T * (K @ (x - x_hat))))
 
@@ -65,7 +71,11 @@ def RMSE(
 
 
 def mean_LLH(
-    x: Array, loc: Array, variance: Array, mu: Optional[Array] = None, sigma: Optional[Array] = None
+    x: Array,
+    loc: Array,
+    variance: Array,
+    mu: Optional[Array] = None,
+    sigma: Optional[Array] = None,
 ):
     """Calculate the log-likelihood of x given loc and scale."""
     scale = jnp.sqrt(variance)
@@ -83,17 +93,14 @@ def R2_score(
     if mu is not None and sigma is not None:
         x = revert_z_score(x, mu, sigma)
         x_hat = revert_z_score(x_hat, mu, sigma)
-    
+
     y_diff_avg = jnp.average(x - x_hat, axis=0)
-    numerator = jnp.average(
-        (x - x_hat - y_diff_avg) ** 2, axis=0
-    )
+    numerator = jnp.average((x - x_hat - y_diff_avg) ** 2, axis=0)
 
     y_true_avg = jnp.average(x_hat, axis=0)
     denominator = jnp.average((x_hat - y_true_avg) ** 2, axis=0)
 
-    return jnp.mean(1. - numerator / denominator)
-
+    return jnp.mean(1.0 - numerator / denominator)
 
 
 def get_eval_fn(
@@ -111,44 +118,61 @@ def get_eval_fn(
     def _fn(params, idx, features, target_tuple):
         if not metrics_list:
             return {}
-        
+
         # Calculate all quantities of interest here, and each metric_fn gets passed all quantities.
         if exact_metrics is not None:
             alpha_exact = exact_metrics.alpha
             y_pred_loc_exact = exact_metrics.y_pred_loc
 
-
         if exact_samples is not None and vmap_and_pmap:
             # Exact samples needs to be vmapped, so we can access vmap_idx
             vmap_idx = jax.lax.axis_index("sample")
             pmap_idx = jax.lax.axis_index("device")
-            
+
             # Reshape exact_samples from (n_samples, ...) to (n_devices, n_samples_per_device, ...)
             n_devices = jax.device_count()
             n_samples = exact_samples.alpha_sample.shape[0]
             n_samples_per_device = n_samples // n_devices
 
             exact_samples_reshaped = jax.tree_map(
-                lambda x: jnp.reshape(x, (n_devices, n_samples_per_device, -1)), exact_samples)
-            
+                lambda x: jnp.reshape(x, (n_devices, n_samples_per_device, -1)),
+                exact_samples,
+            )
+
             alpha_exact = exact_samples_reshaped.alpha_sample[pmap_idx, vmap_idx]
             # y_pred_exact = (K(·)x(Kxx + Σ)^{−1} y) + f0(·) − K(·) (Kxx + Σ)^{−1} (f0(x) + ε0).
-            y_pred_loc_exact = exact_samples_reshaped.posterior_sample[pmap_idx, vmap_idx]
+            y_pred_loc_exact = exact_samples_reshaped.posterior_sample[
+                pmap_idx, vmap_idx
+            ]
             alpha_map = exact_samples_reshaped.alpha_map[pmap_idx, vmap_idx]
             f0_sample_test = exact_samples_reshaped.f0_sample_test[pmap_idx, vmap_idx]
-            
-            y_pred_loc_sgd = f0_sample_test + KvP(test_ds.x, train_ds.x, alpha_map - params, kernel_fn=kernel_fn)
-            
-            print(f'alpha_exact.shape: {alpha_exact.shape}')
+
+            y_pred_loc_sgd = f0_sample_test + KvP(
+                test_ds.x, train_ds.x, alpha_map - params, kernel_fn=kernel_fn
+            )
+
+            print(f"alpha_exact.shape: {alpha_exact.shape}")
         else:
             y_pred_loc_sgd = KvP(test_ds.x, train_ds.x, params, kernel_fn=kernel_fn)
 
         # TODO: Add normalised_test_rmse_Diff and test_rmse_Diff
 
         # Define all metric function calls here for now, refactor later.
-        
-        all_metrics = ['loss', 'err', 'reg', 'grad_var', 'test_rmse', 'normalised_test_rmse', 
-                       'alpha_diff', 'alpha_rkhs_diff', 'y_pred_diff', "R2", "y_pred_test_diff"]
+
+        all_metrics = [
+            "loss",
+            "err",
+            "reg",
+            "grad_var",
+            "test_rmse",
+            "normalised_test_rmse",
+            "alpha_diff",
+            "alpha_rkhs_diff",
+            "y_pred_diff",
+            "R2",
+            "y_pred_test_diff",
+        ]
+
         def _get_metric(metric):
             if metric == "loss":
                 return loss_fn(
@@ -162,18 +186,11 @@ def get_eval_fn(
                 )
             elif metric == "err":
                 return error(
-                    params,
-                    idx,
-                    train_ds.x,
-                    target_tuple.error_target,
-                    kernel_fn
+                    params, idx, train_ds.x, target_tuple.error_target, kernel_fn
                 )
             elif metric == "reg":
                 return regularizer(
-                    params,
-                    features,
-                    target_tuple.regularizer_target,
-                    noise_scale
+                    params, features, target_tuple.regularizer_target, noise_scale
                 )
             elif metric == "grad_var":
                 return grad_var_fn(params, grad_fn, idx, features, target_tuple)
@@ -219,11 +236,15 @@ def get_eval_fn(
                 metrics_update_dict[f"{metrics_prefix}/{metric}"] = _get_metric(metric)
 
         return metrics_update_dict
-    
+
     if vmap_and_pmap:
-        return jax.jit(jax.pmap(
-                jax.vmap(_fn, in_axes=(0, None, None, 0), axis_name='sample'),
-                in_axes=(0, None, None, 0), axis_name='device'))
+        return jax.jit(
+            jax.pmap(
+                jax.vmap(_fn, in_axes=(0, None, None, 0), axis_name="sample"),
+                in_axes=(0, None, None, 0),
+                axis_name="device",
+            )
+        )
     return jax.jit(_fn)
 
 
@@ -240,6 +261,7 @@ def get_inducing_eval_fn(
     vmap_and_pmap: bool = False,
 ):
     del exact_samples, grad_fn
+
     def _fn(params, idx, features_x, features_z, target_tuple):
         # Calculate all quantities of interest here, and each metric_fn gets passed all quantities.
 
@@ -321,9 +343,13 @@ def get_inducing_eval_fn(
         return metrics_update_dict
 
     if vmap_and_pmap:
-        return jax.jit(jax.pmap(
-                jax.vmap(_fn, in_axes=(0, None, None, 0), axis_name='sample'),
-                in_axes=(0, None, None, 0), axis_name='device'))
+        return jax.jit(
+            jax.pmap(
+                jax.vmap(_fn, in_axes=(0, None, None, 0), axis_name="sample"),
+                in_axes=(0, None, None, 0),
+                axis_name="device",
+            )
+        )
     return jax.jit(_fn)
 
 

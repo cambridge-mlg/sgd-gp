@@ -177,13 +177,14 @@ def _normalise_dataset(train_ds: Dataset, test_ds: Dataset) -> Tuple[Dataset, Da
     return train_ds, test_ds
 
 
-def _normalise_protein_dataset(train_ds: Dataset, test_ds: Dataset, mean) -> Tuple[Dataset, Dataset]:
+def _normalise_protein_dataset(
+    train_ds: Dataset, test_ds: Dataset, mean
+) -> Tuple[Dataset, Dataset]:
     # Don't normalise hashed features for protein datasets.
     train_ds.mu_y, test_ds.mu_y = mean, mean
-    train_ds.sigma_y, test_ds.sigma_y = 1., 1.
+    train_ds.sigma_y, test_ds.sigma_y = 1.0, 1.0
     train_ds.y = apply_z_score(train_ds.y, mu=train_ds.mu_y, sigma=train_ds.sigma_y)
     test_ds.y = apply_z_score(test_ds.y, mu=train_ds.mu_y, sigma=train_ds.sigma_y)
-
 
     return train_ds, test_ds
 
@@ -193,10 +194,10 @@ def get_dataset(dataset_name, **kwargs):
         train_ds, test_ds = get_expanding_toy_sin_dataset(**kwargs)
     elif dataset_name in all_datasets.keys():
         train_ds, test_ds = get_uci_dataset(dataset_name, **kwargs)
-    elif 'tanimoto' in dataset_name:
-        target = dataset_name.split('_')[1]
+    elif "tanimoto" in dataset_name:
+        target = dataset_name.split("_")[1]
         train_ds, test_ds = get_protein_dataset(target, **kwargs)
-        
+
     else:
         raise ValueError(f"Unknown dataset {dataset_name}")
 
@@ -205,11 +206,13 @@ def get_dataset(dataset_name, **kwargs):
     chex.assert_rank([train_ds.y, test_ds.y], [1, 1])
 
     if kwargs.get("normalise", False):
-        if 'tanimoto' in dataset_name:
-            mean_y = kwargs.get('data_target_mean', None)
-            print(f'mean y is {mean_y}')
+        if "tanimoto" in dataset_name:
+            mean_y = kwargs.get("data_target_mean", None)
+            print(f"mean y is {mean_y}")
             if mean_y is not None:
-                train_ds, test_ds = _normalise_protein_dataset(train_ds, test_ds, mean_y)
+                train_ds, test_ds = _normalise_protein_dataset(
+                    train_ds, test_ds, mean_y
+                )
         else:
             train_ds, test_ds = _normalise_dataset(train_ds, test_ds)
 
@@ -257,7 +260,14 @@ def load_dockstring_dataset(
     return df_train, df_test
 
 
-def get_protein_dataset(target: str, dataset_dir: str = '', binarize=False, input_dim: int = 1, n_train: Optional[int] = None, **kwargs):
+def get_protein_dataset(
+    target: str,
+    dataset_dir: str = "",
+    binarize=False,
+    input_dim: int = 1,
+    n_train: Optional[int] = None,
+    **kwargs,
+):
     df_train, df_test = load_dockstring_dataset(
         str(Path(dataset_dir)), limit_num_train=n_train
     )
@@ -285,7 +295,6 @@ def get_protein_dataset(target: str, dataset_dir: str = '', binarize=False, inpu
     y_train = jnp.array(y_train)
     y_test = jnp.array(y_test)
 
-    
     train_ds = Dataset(fp_train, y_train, len(y_train), input_dim)
     test_ds = Dataset(fp_test, y_test, len(y_test), input_dim)
     return train_ds, test_ds

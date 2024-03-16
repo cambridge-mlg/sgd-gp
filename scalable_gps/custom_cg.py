@@ -14,8 +14,8 @@ _vdot = partial(jnp.vdot, precision=lax.Precision.HIGHEST)
 # aliases for working with pytrees
 def _vdot_real_part(x, y):
     """Vector dot-product guaranteed to have a real valued result despite
-        possibly complex input. Thus neglects the real-imaginary cross-terms.
-        The result is a real float.
+    possibly complex input. Thus neglects the real-imaginary cross-terms.
+    The result is a real float.
     """
     # all our uses of vdot() in CG are for computing an operator of the form
     #  z^H M z
@@ -52,24 +52,26 @@ def _normalize_matvec(f):
     elif isinstance(f, (np.ndarray, jax.Array)):
         if f.ndim != 2 or f.shape[0] != f.shape[1]:
             raise ValueError(
-                f'linear operator must be a square matrix, but has shape: {f.shape}')
+                f"linear operator must be a square matrix, but has shape: {f.shape}"
+            )
         return partial(_dot, f)
-    elif hasattr(f, '__matmul__'):
-        if hasattr(f, 'shape') and len(f.shape) != 2 or f.shape[0] != f.shape[1]:
+    elif hasattr(f, "__matmul__"):
+        if hasattr(f, "shape") and len(f.shape) != 2 or f.shape[0] != f.shape[1]:
             raise ValueError(
-                f'linear operator must be a square matrix, but has shape: {f.shape}')
+                f"linear operator must be a square matrix, but has shape: {f.shape}"
+            )
         return partial(operator.matmul, f)
     else:
-        raise TypeError(
-            f'linear operator must be either a function or ndarray: {f}')
+        raise TypeError(f"linear operator must be either a function or ndarray: {f}")
 
 
 def _shapes(pytree):
     return map(jnp.shape, tree_leaves(pytree))
 
 
-def _cg_solve(A, b, x0=None, cg_state=None, *, maxiter, tol=1e-5, atol=0.0, M=_identity):
-
+def _cg_solve(
+    A, b, x0=None, cg_state=None, *, maxiter, tol=1e-5, atol=0.0, M=_identity
+):
     # tolerance handling uses the "non-legacy" behavior of scipy.sparse.linalg.cg
     bs = _vdot_real_tree(b, b)
     atol2 = jnp.maximum(jnp.square(tol) * bs, jnp.square(atol))
@@ -109,8 +111,19 @@ def _cg_solve(A, b, x0=None, cg_state=None, *, maxiter, tol=1e-5, atol=0.0, M=_i
     return x, (x, r, gamma, p, k)
 
 
-def _isolve(_isolve_solve, A, b, x0=None, *, cg_state=None, tol=1e-5, atol=0.0,
-            maxiter=None, M=None, check_symmetric=False):
+def _isolve(
+    _isolve_solve,
+    A,
+    b,
+    x0=None,
+    *,
+    cg_state=None,
+    tol=1e-5,
+    atol=0.0,
+    maxiter=None,
+    M=None,
+    check_symmetric=False,
+):
     if x0 is None:
         x0 = tree_map(jnp.zeros_like, b)
 
@@ -127,8 +140,9 @@ def _isolve(_isolve_solve, A, b, x0=None, *, cg_state=None, tol=1e-5, atol=0.0,
 
     if tree_structure(x0) != tree_structure(b):
         raise ValueError(
-            'x0 and b must have matching tree structure: '
-            f'{tree_structure(x0)} vs {tree_structure(b)}')
+            "x0 and b must have matching tree structure: "
+            f"{tree_structure(x0)} vs {tree_structure(b)}"
+        )
 
     # if _shapes(x0) != _shapes(b):
     #     raise ValueError(
@@ -136,21 +150,35 @@ def _isolve(_isolve_solve, A, b, x0=None, *, cg_state=None, tol=1e-5, atol=0.0,
     #         f'{_shapes(x0)} vs {_shapes(b)}')
 
     isolve_solve = partial(
-        _isolve_solve, x0=x0, cg_state=cg_state, tol=tol, atol=atol, maxiter=maxiter, M=M)
+        _isolve_solve,
+        x0=x0,
+        cg_state=cg_state,
+        tol=tol,
+        atol=atol,
+        maxiter=maxiter,
+        M=M,
+    )
 
     # real-valued positive-definite linear operators are symmetric
     def real_valued(x):
         return not issubclass(x.dtype.type, np.complexfloating)
-    symmetric = all(map(real_valued, tree_leaves(b))) \
-        if check_symmetric else False
+
+    symmetric = all(map(real_valued, tree_leaves(b))) if check_symmetric else False
     x, cg_state = lax.custom_linear_solve(
-        A, b, solve=isolve_solve, transpose_solve=isolve_solve,
-        symmetric=symmetric, has_aux=True)
+        A,
+        b,
+        solve=isolve_solve,
+        transpose_solve=isolve_solve,
+        symmetric=symmetric,
+        has_aux=True,
+    )
 
     return x, cg_state
 
 
-def custom_cg(A, b, x0=None, *, cg_state=None, tol=1e-5, atol=0.0, maxiter=None, M=None):
+def custom_cg(
+    A, b, x0=None, *, cg_state=None, tol=1e-5, atol=0.0, maxiter=None, M=None
+):
     """Use Conjugate Gradient iteration to solve ``Ax = b``.
 
     The numerics of JAX's ``cg`` should exact match SciPy's ``cg`` (up to
@@ -203,6 +231,15 @@ def custom_cg(A, b, x0=None, *, cg_state=None, tol=1e-5, atol=0.0, maxiter=None,
     scipy.sparse.linalg.cg
     jax.lax.custom_linear_solve
     """
-    return _isolve(_cg_solve,
-                    A=A, b=b, x0=x0, cg_state=cg_state, tol=tol, atol=atol,
-                    maxiter=maxiter, M=M, check_symmetric=True)
+    return _isolve(
+        _cg_solve,
+        A=A,
+        b=b,
+        x0=x0,
+        cg_state=cg_state,
+        tol=tol,
+        atol=atol,
+        maxiter=maxiter,
+        M=M,
+        check_symmetric=True,
+    )

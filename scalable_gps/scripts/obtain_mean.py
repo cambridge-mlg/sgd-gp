@@ -6,6 +6,7 @@ import wandb
 from absl import app, flags
 
 from scalable_gps import kernels
+from scalable_gps.configs.default import get_dataset_config
 from scalable_gps.data import get_dataset
 from scalable_gps.eval_utils import RMSE, R2_score
 from scalable_gps.linear_model import marginal_likelihood
@@ -22,8 +23,6 @@ from scalable_gps.utils import (
     setup_training,
     update_config_dict,
 )
-from scalable_gps.configs.default import get_dataset_config
-
 
 ml_collections.config_flags.DEFINE_config_file(
     "config",
@@ -49,20 +48,26 @@ def main(config):
     with wandb.init(**wandb_kwargs) as run:
         setup_training(run)
         # If there are any config values dependent on sweep values, recompute them here.
-        
 
         # Call dataset config again
-        
+
         if run.config.override_d_name != "":
             new_config = ml_collections.ConfigDict()
             new_config.dataset_config = get_dataset_config(run.config.override_d_name)
-            computed_configs = {**new_config, **{"dataset_config.binarize": run.config.override_d_binarize,
-                                                 "dataset_config.normalise": True,
-                                                 "dataset_config.split": 0,
-                                                 "dataset_name": run.config.override_d_name}}
+            computed_configs = {
+                **new_config,
+                **{
+                    "dataset_config.binarize": run.config.override_d_binarize,
+                    "dataset_config.normalise": True,
+                    "dataset_config.split": 0,
+                    "dataset_name": run.config.override_d_name,
+                },
+            }
         else:
             computed_configs = {}
-        computed_configs['train_config.polyak'] = 100 / run.config['train_config.iterations']
+        computed_configs["train_config.polyak"] = (
+            100 / run.config["train_config.iterations"]
+        )
         update_config_dict(config, run, computed_configs)
 
         print(config)
@@ -70,8 +75,8 @@ def main(config):
         # Obtain Dataset and HParams
         train_ds, test_ds = get_dataset(config.dataset_name, **config.dataset_config)
 
-        print(f'N: {train_ds.N}, D: {train_ds.D}, N_test: {test_ds.N}')
-        print(f'x_train: {train_ds.x.shape}, y_train: {train_ds.y.shape}')
+        print(f"N: {train_ds.N}, D: {train_ds.D}, N_test: {test_ds.N}")
+        print(f"x_train: {train_ds.x.shape}, y_train: {train_ds.y.shape}")
 
         try:
             hparams = get_tuned_hparams(
@@ -168,14 +173,16 @@ def main(config):
         # metrics_list = ["loss", "err", "reg", "normalised_test_rmse", "test_rmse"]
         metrics_list = ["normalised_test_rmse", "test_rmse", "R2"]
         if config.compute_exact_soln:
-            metrics_list.extend(["alpha_diff", "alpha_rkhs_diff", "y_pred_diff", "y_pred_test_diff"])
+            metrics_list.extend(
+                ["alpha_diff", "alpha_rkhs_diff", "y_pred_diff", "y_pred_test_diff"]
+            )
 
         # Compute the SGD MAP solution for representer weights.
-        
+
         artifact_name = f"alpha_{config.dataset_name}_{config.model_name}_{config.dataset_config.split}"
         if config.override_noise_scale > 0.0:
             artifact_name += f"_noise_{config.override_noise_scale}"
-    
+
         alpha, aux = model.compute_representer_weights(
             optim_key,
             train_ds,
@@ -213,7 +220,7 @@ def main(config):
                         "model_name": config.model_name,
                         "split": config.dataset_config.split,
                         "grad_variant": config.train_config.grad_variant,
-                        "learning_rate": config.train_config.learning_rate
+                        "learning_rate": config.train_config.learning_rate,
                     }
                 },
             )
@@ -228,12 +235,6 @@ def main(config):
 
 if __name__ == "__main__":
     import os
-    import sys
-
-    if sys.argv:
-        # pass wandb API as argv[1] and set environment variable
-        # 'python mll_optim.py MY_API_KEY'
-        os.environ["WANDB_API_KEY"] = sys.argv[1]
 
     # Adds jax flags to the program.
     jax.config.config_with_absl()
@@ -242,6 +243,7 @@ if __name__ == "__main__":
     def _main(argv):
         del argv
         config = FLAGS.config
+        os.environ["WANDB_API_KEY"] = config.wandb.api_key
         main(config)
 
     app.run(_main)

@@ -1,24 +1,35 @@
+import jax.numpy as jnp
 import ml_collections
 from uci_datasets import all_datasets
-import jax.numpy as jnp
 
 PROTEIN_DATASET_HPARAMS = {
-    'tanimoto_ESR2': {'mean': -6.73,
-                      'noise_scale': jnp.sqrt(0.261),
-                       'signal_scale': 0.706},
-    'tanimoto_F2': {'mean': -6.14,
-                    'noise_scale': jnp.sqrt(0.0899),
-                    'signal_scale': 0.356},
-    'tanimoto_KIT': {'mean': -6.39,
-                    'noise_scale': jnp.sqrt(0.112),
-                    'signal_scale': 0.679},
-    'tanimoto_PARP1': {'mean': -6.95,
-                    'noise_scale': jnp.sqrt(0.0238),
-                    'signal_scale': 0.56},
-    'tanimoto_PGR': {'mean': -7.08,
-                    'noise_scale': jnp.sqrt(0.332),
-                    'signal_scale': 0.63},
+    "tanimoto_ESR2": {
+        "mean": -6.73,
+        "noise_scale": jnp.sqrt(0.261),
+        "signal_scale": 0.706,
+    },
+    "tanimoto_F2": {
+        "mean": -6.14,
+        "noise_scale": jnp.sqrt(0.0899),
+        "signal_scale": 0.356,
+    },
+    "tanimoto_KIT": {
+        "mean": -6.39,
+        "noise_scale": jnp.sqrt(0.112),
+        "signal_scale": 0.679,
+    },
+    "tanimoto_PARP1": {
+        "mean": -6.95,
+        "noise_scale": jnp.sqrt(0.0238),
+        "signal_scale": 0.56,
+    },
+    "tanimoto_PGR": {
+        "mean": -7.08,
+        "noise_scale": jnp.sqrt(0.332),
+        "signal_scale": 0.63,
+    },
 }
+
 
 def get_dataset_config(name):
     config = ml_collections.ConfigDict()
@@ -32,13 +43,13 @@ def get_dataset_config(name):
     elif name in all_datasets.keys():
         config.input_dim = all_datasets[name][-1]
         config.noise_scale = 1.0
-    elif 'tanimoto' in name:
+    elif "tanimoto" in name:
         config.input_dim = 1024
         config.noise_scale = 0.5
         config.dataset_dir = "./datafiles"
         config.n_train = None
         if name in PROTEIN_DATASET_HPARAMS.keys():
-            config.data_target_mean = PROTEIN_DATASET_HPARAMS[name]['mean']
+            config.data_target_mean = PROTEIN_DATASET_HPARAMS[name]["mean"]
         else:
             config.data_target_mean = None
         config.binarize = False
@@ -52,7 +63,7 @@ def get_config(config_string):
 
     config.override_d_name = ""
     config.override_d_binarize = False
-    
+
     # Saving configs
     config.save_dir = f"results/{d_name}"
 
@@ -91,7 +102,7 @@ def get_config(config_string):
     config.vi_config.annoy_pre_clustering = False
     config.vi_config.clustering_length_scale_ratio = 1.0
     config.vi_config.learning_rate = 1e-3
-    config.vi_config.absolute_clipping = -1.
+    config.vi_config.absolute_clipping = -1.0
     config.vi_config.use_exact_pred_variance = False
     config.train_config = ml_collections.ConfigDict()
 
@@ -113,10 +124,12 @@ def get_config(config_string):
     config.train_config.learning_rate = 5e-1
     config.train_config.momentum = 0.9
     config.train_config.nesterov = True
-    config.train_config.grad_variant = 'vanilla' # 'vanilla', 'batch_kvp', 'batch_err', 'batch_all', 'random_kvp'
+    config.train_config.grad_variant = (
+        "vanilla"
+    )  # 'vanilla', 'batch_kvp', 'batch_err', 'batch_all', 'random_kvp'
     # TODO: Calculate polyak dynamically.
     config.train_config.polyak = 100 / config.train_config.iterations
-    config.train_config.absolute_clipping = -1.  # -1 to avoid clipping
+    config.train_config.absolute_clipping = -1.0  # -1 to avoid clipping
 
     config.train_config.lr_schedule_name = None  # "linear_schedule"
     config.train_config.lr_schedule_config = ml_collections.ConfigDict()
@@ -137,7 +150,9 @@ def get_config(config_string):
     config.sampling_config.learning_rate = 1e-1
     config.sampling_config.momentum = 0.9
     config.sampling_config.nesterov = True
-    config.sampling_config.grad_variant = 'vanilla' # 'vanilla', 'batch_kvp', 'batch_err', 'batch_all', 'random_kvp'
+    config.sampling_config.grad_variant = (
+        "vanilla"
+    )  # 'vanilla', 'batch_kvp', 'batch_err', 'batch_all', 'random_kvp'
     config.sampling_config.polyak = 100 / config.sampling_config.iterations
     config.sampling_config.iterations = 100000
     config.sampling_config.batch_size = 512
@@ -149,7 +164,7 @@ def get_config(config_string):
     config.sampling_config.loss_objective = 2
     config.sampling_config.use_cholesky_prior_sample = False
 
-    config.sampling_config.absolute_clipping = -1.  # -1 to avoid clipping
+    config.sampling_config.absolute_clipping = -1.0  # -1 to avoid clipping
 
     config.mll_config = ml_collections.ConfigDict()
     config.mll_config.learning_rate = 0.1
@@ -195,9 +210,10 @@ def get_config(config_string):
     config.wandb = ml_collections.ConfigDict()
     config.wandb.log = True
     config.wandb.log_artifact = True
-    config.wandb.project = "faster-sgd-gp"
-    config.wandb.entity = "jandylin"
-    config.wandb.code_dir = "/home/jal232/Code/scalable-gaussian-processes" # TODO: use os utility to get this
+    config.wandb.project = ".."
+    config.wandb.entity = ".."
+    config.wandb.code_dir = "./../"  # TODO: use os utility to get this
     config.wandb.name = ""
+    config.wandb.api_key = ".."
 
     return config

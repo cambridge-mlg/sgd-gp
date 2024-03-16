@@ -40,13 +40,9 @@ class SVGPModel:
             inducing_init=config.vi_config.inducing_init,
         )
 
-    
-    def reinit_get_predictive(
-        self, train_ds, key):
+    def reinit_get_predictive(self, train_ds, key):
         init_key, _ = jax.random.split(key, 2)
-        _, _, _, self.get_predictive = self.regression_fn(
-            train_ds, init_key
-        )
+        _, _, _, self.get_predictive = self.regression_fn(train_ds, init_key)
 
     def compute_representer_weights(
         self,
@@ -84,12 +80,11 @@ class SVGPModel:
             batch_size=config.batch_size,
             verbose=False,
         )
-        
+
         self.vi_params, loss = optimised_state.unpack()
-        
+
         y_pred = self.predictive_mean(train_ds, test_ds)
         wall_clock_time = time.time() - wall_clock_time
-        
 
         if wandb.run is not None:
             for loss_val in loss:
@@ -142,7 +137,7 @@ class SVGPModel:
                     _,
                     predictive_dist,
                 ) = self.get_predictive(self.vi_params, x)
-                
+
                 y_var = predictive_dist.variance()
 
                 test_preds.append(y_var)
@@ -163,17 +158,16 @@ class SVGPModel:
                 variance -= self.noise_scale**2 * jnp.eye(variance.shape[0])
 
             return variance
-    
-    def compute_posterior_samples(self, key, train_ds, test_ds, num_samples):
-        (
-                function_dist,
-                predictive_dist
-        ) = self.get_predictive(self.vi_params, train_ds.x)
-        posterior_samples = function_dist.sample(
-            seed=key, sample_shape=(num_samples,)
-        )
 
-        zero_mean_posterior_samples = posterior_samples - self.predictive_mean(train_ds, test_ds)
+    def compute_posterior_samples(self, key, train_ds, test_ds, num_samples):
+        (function_dist, predictive_dist) = self.get_predictive(
+            self.vi_params, train_ds.x
+        )
+        posterior_samples = function_dist.sample(seed=key, sample_shape=(num_samples,))
+
+        zero_mean_posterior_samples = posterior_samples - self.predictive_mean(
+            train_ds, test_ds
+        )
 
         return zero_mean_posterior_samples
 
@@ -233,11 +227,15 @@ class SVGPThompsonInterface(SVGPModel):
 
         jit_solve = jax.jit(partial(jax.scipy.linalg.solve, assume_a="pos"))
 
-        alpha_means = jit_solve(K + 1e-3 * jnp.eye(K.shape[0]), u_samples)  # (num_inducing, num_samples)
+        alpha_means = jit_solve(
+            K + 1e-3 * jnp.eye(K.shape[0]), u_samples
+        )  # (num_inducing, num_samples)
 
         w_samples = jax.random.normal(w_sample_key, shape=(n_samples, L.shape[1]))
         f0_samples = L @ w_samples.T  # (num_inducing, n_samples)
-        alpha_samples = jit_solve(K + 1e-3 * jnp.eye(K.shape[0]), f0_samples)  # (num_inducing, num_samples)
+        alpha_samples = jit_solve(
+            K + 1e-3 * jnp.eye(K.shape[0]), f0_samples
+        )  # (num_inducing, num_samples)
 
         pseudo_representer_weights = -(
             alpha_means - alpha_samples

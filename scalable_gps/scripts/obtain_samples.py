@@ -50,34 +50,41 @@ def main(config):
         setup_training(run)
         # If there are any config values dependent on sweep values, recompute them here.
         computed_configs = {}
-        computed_configs['sampling_config.polyak'] = 100 / run.config['sampling_config.iterations']
+        computed_configs["sampling_config.polyak"] = (
+            100 / run.config["sampling_config.iterations"]
+        )
         update_config_dict(config, run, computed_configs)
 
         print(config)
-        
+
         # Obtain Dataset and HParams
         train_ds, test_ds = get_dataset(config.dataset_name, **config.dataset_config)
 
         try:
-            hparams = get_tuned_hparams(config.dataset_name, config.dataset_config.split)
+            hparams = get_tuned_hparams(
+                config.dataset_name, config.dataset_config.split
+            )
         except wandb.CommError:
             print("Could not fetch hparams from wandb. Using default values.")
-        
+
             hparams = HparamsTuple(
                 length_scale=jnp.array(config.kernel_config.length_scale),
                 signal_scale=config.kernel_config.signal_scale,
                 noise_scale=config.dataset_config.noise_scale,
-                )
-        if config.override_noise_scale > 0.:
+            )
+        if config.override_noise_scale > 0.0:
             hparams = HparamsTuple(
                 length_scale=hparams.length_scale,
                 signal_scale=hparams.signal_scale,
-                noise_scale=config.override_noise_scale)
+                noise_scale=config.override_noise_scale,
+            )
         print(hparams)
-        
+
         # Initialise Kernel
         kernel_init_fn = getattr(kernels, config.kernel_name)
-        kernel = kernel_init_fn({'signal_scale': hparams.signal_scale, 'length_scale': hparams.length_scale})
+        kernel = kernel_init_fn(
+            {"signal_scale": hparams.signal_scale, "length_scale": hparams.length_scale}
+        )
 
         key = jr.PRNGKey(config.seed)
         optim_key, sampling_key, key = jr.split(key, 3)
@@ -113,14 +120,19 @@ def main(config):
             model.reinit_get_predictive(train_ds, optim_key)
 
         # metrics_list = ["loss", "err", "reg", "normalised_test_rmse", "test_rmse", "test_llh", "normalised_test_llh"]
-        metrics_list = ["normalised_test_rmse", "test_rmse", "test_llh", "normalised_test_llh"]
+        metrics_list = [
+            "normalised_test_rmse",
+            "test_rmse",
+            "test_llh",
+            "normalised_test_llh",
+        ]
         if config.compute_exact_soln:
             metrics_list.extend(["alpha_diff", "y_pred_diff", "alpha_rkhs_diff"])
 
         try:
             data = get_map_solution(
-                config.dataset_name, 
-                config.model_name, 
+                config.dataset_name,
+                config.model_name,
                 config.dataset_config.split,
                 config.override_noise_scale,
                 config.sampling_config.grad_variant,
@@ -128,12 +140,12 @@ def main(config):
                 config.wandb.entity,
                 config.wandb.project,
             )
-            
+
             if config.model_name == "vi":
-                model.vi_params = data['alpha']
+                model.vi_params = data["alpha"]
             else:
-                model.alpha = data['alpha']
-            print('loaded in mean alpha from WANDB server.')
+                model.alpha = data["alpha"]
+            print("loaded in mean alpha from WANDB server.")
         except:
             model.compute_representer_weights(
                 optim_key,
@@ -142,10 +154,10 @@ def main(config):
                 train_config,
                 metrics_list=metrics_list,
                 metrics_prefix="train",
-                exact_metrics=exact_metrics if config.compute_exact_soln else None
+                exact_metrics=exact_metrics if config.compute_exact_soln else None,
             )
-        
-        if config.model_name != 'vi':
+
+        if config.model_name != "vi":
             zero_mean_samples, alpha_samples, _ = model.compute_posterior_samples(
                 sampling_key,
                 n_samples=config.sampling_config.n_samples,
@@ -156,68 +168,110 @@ def main(config):
                 zero_mean=True,
                 metrics_list=metrics_list,
                 metrics_prefix="sampling",
-                compare_exact=config.compute_exact_soln
+                compare_exact=config.compute_exact_soln,
             )
         else:
             y_pred_loc = model.predictive_mean(train_ds, test_ds)
-            
+
             if not config.vi_config.use_exact_pred_variance:
                 # Calculate Inducing points.
-                inducing_inputs = model.vi_params["variational_family"]["inducing_inputs"]
-                feature_params = kernel.feature_params_fn(key, 2000, inducing_inputs.shape[-1])
+                inducing_inputs = model.vi_params["variational_family"][
+                    "inducing_inputs"
+                ]
+                feature_params = kernel.feature_params_fn(
+                    key, 2000, inducing_inputs.shape[-1]
+                )
                 L = kernel.feature_fn(inducing_inputs, feature_params)
                 alpha_map = jnp.zeros(inducing_inputs.shape[0])
 
-                aux_vi_model = SVGPThompsonInterface(hparams.noise_scale, kernel, config)
+                aux_vi_model = SVGPThompsonInterface(
+                    hparams.noise_scale, kernel, config
+                )
                 aux_vi_model.vi_params = model.vi_params
-                _, pseudo_representer_weights, w_samples = aux_vi_model.compute_posterior_samples(
-                    sampling_key, config.sampling_config.n_samples, train_ds, test_ds, train_config, L=L)
-                
+                (
+                    _,
+                    pseudo_representer_weights,
+                    w_samples,
+                ) = aux_vi_model.compute_posterior_samples(
+                    sampling_key,
+                    config.sampling_config.n_samples,
+                    train_ds,
+                    test_ds,
+                    train_config,
+                    L=L,
+                )
+
                 class DummyState(NamedTuple):
                     feature_params: Array
-                
+
                 state = DummyState(feature_params)
                 acq_fn, _, _ = get_acquisition_fn(
-                    state, kernel, alpha_map, pseudo_representer_weights, 
-                    w_samples, inducing_inputs=inducing_inputs)
-                
+                    state,
+                    kernel,
+                    alpha_map,
+                    pseudo_representer_weights,
+                    w_samples,
+                    inducing_inputs=inducing_inputs,
+                )
+
                 posterior_variance = acq_fn(test_ds.x)
 
-                y_pred_variance = jnp.var(posterior_variance, axis=0) + hparams.noise_scale ** 2
+                y_pred_variance = (
+                    jnp.var(posterior_variance, axis=0) + hparams.noise_scale**2
+                )
             else:
                 y_pred_variance = model.predictive_variance(
-                    train_ds, test_ds, add_likelihood_noise=True, return_marginal_variance=True)
+                    train_ds,
+                    test_ds,
+                    add_likelihood_noise=True,
+                    return_marginal_variance=True,
+                )
             test_llh = mean_LLH(
-                test_ds.y, y_pred_loc, y_pred_variance, mu=train_ds.mu_y, sigma=train_ds.sigma_y)
+                test_ds.y,
+                y_pred_loc,
+                y_pred_variance,
+                mu=train_ds.mu_y,
+                sigma=train_ds.sigma_y,
+            )
             normalised_test_llh = mean_LLH(test_ds.y, y_pred_loc, y_pred_variance)
-            
-            wandb.log({"test_llh": test_llh, "normalised_test_llh": normalised_test_llh})
-            print(f'test_llh: {test_llh}')
-            print(f'normalised_test_llh: {normalised_test_llh}')
+
+            wandb.log(
+                {"test_llh": test_llh, "normalised_test_llh": normalised_test_llh}
+            )
+            print(f"test_llh: {test_llh}")
+            print(f"normalised_test_llh: {normalised_test_llh}")
 
         if config.wandb.log_artifact:
             # Use wandb artifacts to save model hparams for a given dataset split and subsample_idx.
             artifact_name = f"samples_{config.dataset_name}_{config.model_name}_{config.dataset_config.split}"
-            if config.override_noise_scale > 0.:
+            if config.override_noise_scale > 0.0:
                 artifact_name += f"_noise_{config.override_noise_scale}"
             artifact_name += f"_{config.sampling_config.grad_variant}_{config.sampling_config.learning_rate}"
 
             samples_artifact = wandb.Artifact(
-                artifact_name, type="samples",
+                artifact_name,
+                type="samples",
                 description=f"Saved samples for {config.dataset_name} dataset with method {config.model_name} on split {config.dataset_config.split}.",
-                metadata={**{
-                    "dataset_name": config.dataset_name,
-                    "model_name": config.model_name,
-                    "split": config.dataset_config.split,
-                    "grad_variant": config.sampling_config.grad_variant,
-                    "learning_rate": config.sampling_config.learning_rate
-                    }},
-                )
-            
+                metadata={
+                    **{
+                        "dataset_name": config.dataset_name,
+                        "model_name": config.model_name,
+                        "split": config.dataset_config.split,
+                        "grad_variant": config.sampling_config.grad_variant,
+                        "learning_rate": config.sampling_config.learning_rate,
+                    }
+                },
+            )
+
             with samples_artifact.new_file("samples.pkl", "wb") as f:
-                pickle.dump({'zero_mean_samples': zero_mean_samples, 'alpha_samples': alpha_samples}, f)
-            
-                
+                pickle.dump(
+                    {
+                        "zero_mean_samples": zero_mean_samples,
+                        "alpha_samples": alpha_samples,
+                    },
+                    f,
+                )
+
             wandb.log_artifact(samples_artifact)
 
         return
@@ -231,7 +285,7 @@ if __name__ == "__main__":
         # pass wandb API as argv[1] and set environment variable
         # 'python mll_optim.py MY_API_KEY'
         os.environ["WANDB_API_KEY"] = sys.argv[1]
-        
+
     # Adds jax flags to the program.
     jax.config.config_with_absl()
 

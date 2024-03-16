@@ -117,7 +117,7 @@ def get_tuned_hparams(d_name: str, split: int):
             mean_hparams = HparamsTuple(
                 noise_scale=hparams["noise_scale"],
                 signal_scale=hparams["signal_scale"],
-                length_scale=1. # Doesn't matter
+                length_scale=1.0,  # Doesn't matter
             )
         except:
             raise ValueError(f"No hparams found for {d_name} dataset")
@@ -171,8 +171,14 @@ def get_clustered_indices(d_name: str, split: int, lengthscale_ratio: float):
 
 # TODO: refactor to use this in obtain mean to get correct artifact name
 def get_map_solution(
-    d_name: str, method_name: str, split: int, override_noise_scale: float, grad_variant: str, learning_rate: float,
-    entity: str, project: str
+    d_name: str,
+    method_name: str,
+    split: int,
+    override_noise_scale: float,
+    grad_variant: str,
+    learning_rate: float,
+    entity: str,
+    project: str,
 ):
     api = wandb.Api()
     import pickle
@@ -189,12 +195,11 @@ def get_map_solution(
 
     artifact = api.artifact(f"{entity}/{project}/{artifact_name}:latest")
     data = pickle.load(open(artifact.file(), "rb"))
-    print(f'loaded {artifact_name}')
+    print(f"loaded {artifact_name}")
     return data
 
-def get_latest_saved_artifact(
-    artifact_name: str, all_save_steps: List[int]):
-    
+
+def get_latest_saved_artifact(artifact_name: str, all_save_steps: List[int]):
     api = wandb.Api()
     import pickle
     import sys
@@ -202,31 +207,32 @@ def get_latest_saved_artifact(
     from scalable_gps import utils
 
     sys.modules["utils"] = utils
-    
+
     data = None
     artifact_loaded = False
 
     for i in all_save_steps:
         saved_artifact_name = f"{artifact_name}_{i}"
-        
+
         try:
-            artifact = api.artifact(f"shreyaspadhy/scalable-gps/{saved_artifact_name}:latest")
+            artifact = api.artifact(
+                f"shreyaspadhy/scalable-gps/{saved_artifact_name}:latest"
+            )
             data = pickle.load(open(artifact.file(), "rb"))
             artifact_loaded = True
-            print(f'Loaded {saved_artifact_name}')
+            print(f"Loaded {saved_artifact_name}")
         except wandb.CommError:
-            print(f'Failed to load {saved_artifact_name}')
+            print(f"Failed to load {saved_artifact_name}")
             if artifact_loaded:
                 break
 
     if data is None:
         print("No artifacts found.")
-    
+
     return data
 
-def save_latest_artifact(
-    artifact_data, artifact_name):
-    
+
+def save_latest_artifact(artifact_data, artifact_name):
     import pickle
     import sys
 
@@ -237,12 +243,14 @@ def save_latest_artifact(
     save_artifact = wandb.Artifact(
         artifact_name,
         type="saved_ckpt",
-        description="saved checkpoint",)
-                
+        description="saved checkpoint",
+    )
+
     with save_artifact.new_file("saved_ckpt.pkl", "wb") as f:
         pickle.dump(artifact_data, f)
-    
+
     wandb.log_artifact(save_artifact)
+
 
 def process_pmapped_and_vmapped_metrics(pmapped_and_vmapped_metrics):
     mean_metrics, std_metrics = {}, {}

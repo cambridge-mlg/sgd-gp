@@ -41,7 +41,7 @@ def init(
     n_init: int = 1000,
     minval: float = 0.0,
     maxval: float = 1.0,
-    init_method: str = "uniform"
+    init_method: str = "uniform",
 ):
     """
     Initialise thompson sampling in the hypercube [minval, maxval]^D
@@ -53,13 +53,17 @@ def init(
         w_key,
         noise_key,
     ) = jr.split(key, 4)
-    
+
     if init_method == "uniform":
         x_init = jr.uniform(data_key, shape=(n_init, D), minval=minval, maxval=maxval)
     elif init_method == "trunc_normal":
-        x_init = jr.truncated_normal(data_key, lower=minval, upper=maxval, shape=(n_init, D))
+        x_init = jr.truncated_normal(
+            data_key, lower=minval, upper=maxval, shape=(n_init, D)
+        )
     else:
-        raise NotImplementedError(f"Thompson sampling init_method '{init_method}' is not implemented.")
+        raise NotImplementedError(
+            f"Thompson sampling init_method '{init_method}' is not implemented."
+        )
     params = kernel.feature_params_fn(feature_key, n_features, x_init.shape[-1])
 
     w = jr.normal(w_key, shape=(n_features,))
@@ -150,6 +154,7 @@ def get_thompson_step_fn(
         gp_sample_argmax_f = jax.jit(
             partial(gp_sample_argmax, config=thompson_config, kernel=model.kernel)
         )
+
         def _fn(key: PRNGKey, state: ThompsonState, i: Optional[int] = None):
             representer_key, noise_key, friends_key, samples_key = jr.split(key, 4)
 
@@ -307,14 +312,18 @@ def find_friends(
         )
         # TODO: consider making this uniform between - lengthscale[None, :] / 4 and lengthscale[None, :] / 4
         x_friends_localised_noise = jr.normal(key_nearby, shape=(num_exploit, ndims))
-        x_friends_localised_noise = x_friends_localised_noise * length_scale[None, :] / 2
+        x_friends_localised_noise = (
+            x_friends_localised_noise * length_scale[None, :] / 2
+        )
 
         scores = state.ds.y + state.ds.y.min() + 1e-6
         scores = scores / scores.sum()
         indices = jax.random.choice(
             key_selector, len(scores), shape=(num_exploit,), replace=True, p=scores
         )
-        x_friends_localised = state.ds.x[indices] + x_friends_localised_noise # num_exploit, ndims
+        x_friends_localised = (
+            state.ds.x[indices] + x_friends_localised_noise
+        )  # num_exploit, ndims
         x_friends = jnp.concatenate([x_friends_uniform, x_friends_localised], axis=0)
         x_friends = jnp.clip(x_friends, a_min=minval, a_max=maxval)
     else:
@@ -339,7 +348,7 @@ def find_besties(
     learning_rate: float = 1e-3,
     iterations: int = 100,
     n_besties: int = 1,
-    optim_trace: bool = False, # uncomment code below to use this
+    optim_trace: bool = False,  # uncomment code below to use this
     minval: float = 0.0,
     maxval: float = 1.0,
     i: Optional[int] = None,
@@ -405,9 +414,10 @@ def find_besties(
 
         """
         return x[jnp.argsort(y)[-n_besties:]]
+
     y_homies = acquisition_fn(x_homies)
 
-    return top_args(x_homies, y_homies)#, trace
+    return top_args(x_homies, y_homies)  # , trace
 
 
 def get_acquisition_fn(
@@ -430,7 +440,7 @@ def get_acquisition_fn(
         alpha_samples = alpha_samples.squeeze()
     if jnp.ndim(w_samples) > 2:
         w_samples = w_samples.squeeze()
-        
+
     def _fn(x, alpha_sample, w_sample):
         # x: (D,)
         # alpha_sample: (n_train,)

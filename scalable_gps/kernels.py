@@ -46,7 +46,6 @@ class Kernel:
             raise ValueError(
                 f"Required hyperparameter '{hparam_name}' must be present in config dict or specified in kwargs"
             )
-        
 
     def get_signal_scale(self, kwargs: Optional[dict] = None):
         return self._get_hparam("signal_scale", kwargs)
@@ -99,9 +98,10 @@ class StationaryKernel(Kernel):
     ) -> FourierFeatureParams:
         M = n_features
 
-        signal_scale, length_scale = self.get_signal_scale(
-            kwargs
-        ), self.get_length_scale(kwargs)
+        signal_scale, length_scale = (
+            self.get_signal_scale(kwargs),
+            self.get_length_scale(kwargs),
+        )
 
         omega_key, phi_key = jr.split(key, 2)
         omega = self.omega_fn(omega_key, D, M)
@@ -113,22 +113,26 @@ class StationaryKernel(Kernel):
             signal_scale=signal_scale,
             length_scale=length_scale,
         )
-    
+
     @partial(jax.jit, static_argnums=(0,))
     def feature_fn(self, x: chex.Array, feature_params: FourierFeatureParams):
         return (
             feature_params.signal_scale
             * jnp.sqrt(2.0 / feature_params.M)
-            * jnp.cos((x / feature_params.length_scale) @ feature_params.omega + feature_params.phi)
+            * jnp.cos(
+                (x / feature_params.length_scale) @ feature_params.omega
+                + feature_params.phi
+            )
         )
 
 
 class RBFKernel(StationaryKernel):
     @partial(jax.jit, static_argnums=(0,))
     def kernel_fn(self, x: Array, y: Array, **kwargs):
-        signal_scale, length_scale = self.get_signal_scale(
-            kwargs
-        ), self.get_length_scale(kwargs)
+        signal_scale, length_scale = (
+            self.get_signal_scale(kwargs),
+            self.get_length_scale(kwargs),
+        )
 
         return (signal_scale**2) * jnp.exp(-0.5 * self._sq_dist(x, y, length_scale))
 
@@ -138,12 +142,12 @@ class RBFKernel(StationaryKernel):
 
 
 class MaternKernel(StationaryKernel):
-
     @partial(jax.jit, static_argnums=(0,))
     def kernel_fn(self, x: Array, y: Array, **kwargs):
-        signal_scale, length_scale = self.get_signal_scale(
-            kwargs
-        ), self.get_length_scale(kwargs)
+        signal_scale, length_scale = (
+            self.get_signal_scale(kwargs),
+            self.get_length_scale(kwargs),
+        )
 
         sq_dist = self._sq_dist(x, y, length_scale)
         sq_dist = jnp.clip(sq_dist, a_min=1e-10, a_max=None)
@@ -168,7 +172,6 @@ class MaternKernel(StationaryKernel):
 
 
 class Matern12Kernel(MaternKernel):
-
     @property
     def _df(self):
         return 1.0
@@ -179,7 +182,6 @@ class Matern12Kernel(MaternKernel):
 
 
 class Matern32Kernel(MaternKernel):
-
     @property
     def _df(self):
         return 3.0
@@ -190,7 +192,6 @@ class Matern32Kernel(MaternKernel):
 
 
 class Matern52Kernel(MaternKernel):
-
     @property
     def _df(self):
         return 5.0
@@ -201,7 +202,6 @@ class Matern52Kernel(MaternKernel):
 
 
 class TanimotoKernel(Kernel):
-
     def _pairwise_tanimoto(self, x: Array, y: Array):
         return jnp.sum(jnp.minimum(x, y), axis=-1) / jnp.sum(jnp.maximum(x, y), axis=-1)
 
@@ -218,8 +218,9 @@ class TanimotoKernel(Kernel):
         chex.assert_rank(y, 2)
 
         return jax.vmap(
-            jax.vmap(self._pairwise_tanimoto, in_axes=(None, 0)), in_axes=(0, None))(x, y)
-    
+            jax.vmap(self._pairwise_tanimoto, in_axes=(None, 0)), in_axes=(0, None)
+        )(x, y)
+
     @partial(jax.jit, static_argnums=(0, 2, 3, 4))
     def feature_params_fn(
         self,
@@ -248,13 +249,16 @@ class TanimotoKernel(Kernel):
         )
 
     def _elementwise_feature_fn(
-            self, x: Array, r: Array, c: Array, xi: Array, beta: Array, modulo_value: int) -> Array:
+        self, x: Array, r: Array, c: Array, xi: Array, beta: Array, modulo_value: int
+    ) -> Array:
         t = jnp.floor(jnp.log(x) / r + beta)  # shape D (same as input x)
         ln_y = r * (t - beta)  # also shape D
         ln_a = jnp.log(c) - ln_y - r  # also shape D
 
         # argmin
-        a_argmin = jnp.argmin(ln_a)  # this only works for 1D inputs, vectorizing will break
+        a_argmin = jnp.argmin(
+            ln_a
+        )  # this only works for 1D inputs, vectorizing will break
 
         print(a_argmin.shape, t.shape)
         t_selected = t[a_argmin].astype(jnp.int32)
@@ -268,8 +272,16 @@ class TanimotoKernel(Kernel):
         features = jax.vmap(
             jax.vmap(
                 self._elementwise_feature_fn, in_axes=(0, None, None, None, None, None)
-            ), in_axes=(None, 0, 0, 0, 0, None)
-        )(x, feature_params.r, feature_params.c, feature_params.xi, feature_params.beta, feature_params.modulo_value)
+            ),
+            in_axes=(None, 0, 0, 0, 0, None),
+        )(
+            x,
+            feature_params.r,
+            feature_params.c,
+            feature_params.xi,
+            feature_params.beta,
+            feature_params.modulo_value,
+        )
 
         return features.T
 
@@ -277,7 +289,7 @@ class TanimotoKernel(Kernel):
 
 
 class TanimotoL1Kernel(TanimotoKernel):
-
     def _pairwise_tanimoto(self, x: Array, y: Array):
         return (jnp.sum(x) + jnp.sum(y) - jnp.sum(jnp.abs(x - y))) / (
-                jnp.sum(x) + jnp.sum(y) + jnp.sum(jnp.abs(x - y)))
+            jnp.sum(x) + jnp.sum(y) + jnp.sum(jnp.abs(x - y))
+        )
