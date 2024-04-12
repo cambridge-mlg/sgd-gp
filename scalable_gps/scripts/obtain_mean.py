@@ -1,3 +1,4 @@
+"""Calculates posterior mean of a GP model using different methods."""
 import jax
 import jax.numpy as jnp
 import jax.random as jr

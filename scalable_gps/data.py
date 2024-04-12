@@ -18,6 +18,16 @@ KwArgs = Any
 
 
 class ThompsonDataset(NamedTuple):
+    """
+    Represents a dataset for Thompson sampling.
+
+    Attributes:
+        x (Array): The input data.
+        y (Array): The target data.
+        N (int): The number of data points.
+        D (int): The number of features.
+        z (Optional[Array]): An optional array of additional data.
+    """
     x: Array
     y: Array
     N: int
@@ -28,6 +38,22 @@ class ThompsonDataset(NamedTuple):
 
 @dataclass
 class Dataset:
+    """
+    Represents a dataset with input features (x) and corresponding labels (y).
+
+    Attributes:
+        x (Array): The input features of the dataset.
+        y (Array): The corresponding labels of the dataset.
+        N (int): The number of data points in the dataset.
+        D (int): The dimensionality of the input features.
+
+    Optional Attributes:
+        z (Optional[Array]): An optional array representing additional information associated with the dataset.
+        mu_x (Optional[Array]): An optional array representing the mean of the input features.
+        sigma_x (Optional[Array]): An optional array representing the standard deviation of the input features.
+        mu_y (Optional[Array]): An optional array representing the mean of the labels.
+        sigma_y (Optional[Array]): An optional array representing the standard deviation of the labels.
+    """
     x: Array
     y: Array
     N: int
@@ -42,6 +68,18 @@ class Dataset:
 
 
 def subsample(key: chex.PRNGKey, ds: Dataset, n_subsample: int = 10000):
+    """
+    Subsamples a dataset by randomly selecting a subset of data points.
+
+    Args:
+        key (chex.PRNGKey): The random key for generating random numbers.
+        ds (Dataset): The input dataset to be subsampled.
+        n_subsample (int, optional): The number of data points to subsample. Defaults to 10000.
+
+    Returns:
+        Dataset: The subsampled dataset.
+
+    """
     # return full dataset if it is smaller than subsample size
     if ds.N <= n_subsample:
         return ds
@@ -77,6 +115,20 @@ def get_concentrating_toy_sin_dataset(
     x_std: float = 1.0,
     **kwargs: KwArgs,
 ) -> Tuple[Dataset, Dataset]:
+    """
+    Generate a toy dataset for a concentrating sine function.
+
+    Args:
+        seed (int): The seed for random number generation.
+        n (int): The number of training samples.
+        noise_scale (float): The scale of the noise added to the signal.
+        n_test (int): The number of test samples.
+        x_std (float, optional): The standard deviation of the input samples. Defaults to 1.0.
+        **kwargs: Additional keyword arguments.
+
+    Returns:
+        Tuple[Dataset, Dataset]: A tuple containing the training and test datasets.
+    """
     key = jr.PRNGKey(seed)  # Required because configdict can't pass jr.PRNGKey as seed
     k1, k2, key = jr.split(key, 3)
 
@@ -106,6 +158,22 @@ def get_split_toy_sin_dataset(
     separation: float = 0.0,
     **kwargs: KwArgs,
 ) -> Tuple[Dataset, Dataset]:
+    """
+    Generate a split toy sin dataset.
+
+    Args:
+        seed (int): The seed for random number generation.
+        n (int): The number of training data points.
+        noise_scale (float): The scale of the noise added to the signal.
+        n_test (int): The number of test data points.
+        x_std (float, optional): The standard deviation of the input data. Defaults to 1.0.
+        separation (float, optional): The separation between the two halves of the input data. Defaults to 0.0.
+        **kwargs: Additional keyword arguments.
+
+    Returns:
+        Tuple[Dataset, Dataset]: A tuple containing the training dataset and the test dataset.
+    """
+    
     key = jr.PRNGKey(seed)  # Required because configdict can't pass jr.PRNGKey as seed
     k1, k2, key = jr.split(key, 3)
 
@@ -136,6 +204,21 @@ def get_expanding_toy_sin_dataset(
     n_periods: int = 25,
     **kwargs: KwArgs,
 ) -> Tuple[Dataset, Dataset]:
+    """
+    Generate an expanding toy sin dataset.
+
+    Args:
+        seed (int): The seed for random number generation.
+        n (int): The number of training data points.
+        noise_scale (float): The scale of the noise added to the signal.
+        n_test (int): The number of test data points.
+        n_periods (int, optional): The number of periods in the sin function. Defaults to 25.
+        **kwargs: Additional keyword arguments.
+
+    Returns:
+        Tuple[Dataset, Dataset]: A tuple containing the training and test datasets.
+    """
+
     x = jnp.linspace(-n / n_periods, n / n_periods, num=n).reshape(-1, 1)
 
     def f(x):
@@ -157,6 +240,18 @@ def get_expanding_toy_sin_dataset(
 def get_uci_dataset(
     dataset_name: str, split: int = 0, **kwargs: KwArgs
 ) -> Tuple[Dataset, Dataset]:
+    """
+    Retrieves the UCI dataset with the specified name and split.
+
+    Args:
+        dataset_name (str): The name of the UCI dataset.
+        split (int, optional): The split index of the dataset. Defaults to 0.
+        **kwargs: Additional keyword arguments.
+
+    Returns:
+        Tuple[Dataset, Dataset]: A tuple containing the training and testing datasets.
+
+    """
     dataset = uci_dataset(dataset_name)
     x_train, y_train, x_test, y_test = dataset.get_split(split)
     N, D = x_train.shape
@@ -190,6 +285,21 @@ def _normalise_protein_dataset(
 
 
 def get_dataset(dataset_name, **kwargs):
+    """
+    Retrieves the specified dataset.
+
+    Args:
+        dataset_name (str): The name of the dataset to retrieve.
+        **kwargs: Additional keyword arguments for dataset retrieval.
+
+    Returns:
+        tuple: A tuple containing the training and testing datasets.
+
+    Raises:
+        ValueError: If the dataset name is unknown.
+
+    """
+    
     if dataset_name == "toy_sin":
         train_ds, test_ds = get_expanding_toy_sin_dataset(**kwargs)
     elif dataset_name in all_datasets.keys():
@@ -197,7 +307,6 @@ def get_dataset(dataset_name, **kwargs):
     elif "tanimoto" in dataset_name:
         target = dataset_name.split("_")[1]
         train_ds, test_ds = get_protein_dataset(target, **kwargs)
-
     else:
         raise ValueError(f"Unknown dataset {dataset_name}")
 
@@ -268,6 +377,21 @@ def get_protein_dataset(
     n_train: Optional[int] = None,
     **kwargs,
 ):
+    """
+    Get the protein dataset.
+
+    Args:
+        target (str): The target variable to predict.
+        dataset_dir (str): The directory where the dataset is located.
+        binarize (bool): Whether to binarize the dataset.
+        input_dim (int): The input dimension for the fingerprint.
+        n_train (Optional[int]): The number of training samples to use.
+        **kwargs: Additional keyword arguments.
+
+    Returns:
+        Tuple[Dataset, Dataset]: A tuple containing the training and testing datasets.
+    """
+    
     df_train, df_test = load_dockstring_dataset(
         str(Path(dataset_dir)), limit_num_train=n_train
     )

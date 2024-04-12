@@ -1,3 +1,4 @@
+"""Calculate posterior samples for a GP Model using different methods."""
 from typing import NamedTuple
 
 import jax

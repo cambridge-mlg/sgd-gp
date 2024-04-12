@@ -23,6 +23,26 @@ from scalable_gps.utils import (
 
 
 class ExactGPModel(GPModel):
+    """
+    A class representing an Exact Gaussian Process (GP) model.
+
+    This class extends the `GPModel` base class and provides methods for computing
+    representer weights, predictive variance, posterior samples, and performing
+    maximum likelihood optimization for hyperparameter estimation.
+
+    Attributes:
+        K (Array): The Gram matrix of the training data.
+        alpha (Array): The representer weights alpha.
+
+    Methods:
+        compute_representer_weights: Computes the representer weights alpha.
+        predictive_variance: Computes the posterior variance of the test points.
+        get_alpha_samples_fn: Returns a function that computes alpha samples.
+        compute_posterior_samples: Computes posterior samples.
+        get_mll_loss_fn: Returns a function that computes the negative marginal log-likelihood loss.
+        get_mll_update_fn: Returns a function that performs MLL optimization update.
+        compute_mll_optim: Performs maximum likelihood optimization for hyperparameter estimation.
+    """
     def compute_representer_weights(
         self,
         train_ds: Dataset,
@@ -34,8 +54,23 @@ class ExactGPModel(GPModel):
         exact_metrics: Optional[List] = None,
         key: Optional[chex.PRNGKey] = None,
     ) -> Tuple[Array, Optional[HparamsTuple]]:
+        """
+        Compute the representer weights alpha by solving alpha = (K + sigma^2 I)^{-1} y exactly.
+
+        Args:
+            train_ds (Dataset): The training dataset.
+            recompute (bool, optional): Whether to recompute the kernel matrix. Defaults to False.
+            test_ds (Optional[Dataset], optional): The test dataset. Defaults to None.
+            config (Optional[ConfigDict], optional): Configuration dictionary. Defaults to None.
+            metrics_list (Optional[List[str]], optional): List of metrics. Defaults to None.
+            metrics_prefix (Optional[str], optional): Prefix for metrics. Defaults to None.
+            exact_metrics (Optional[List], optional): List of exact metrics. Defaults to None.
+            key (Optional[chex.PRNGKey], optional): PRNG key. Defaults to None.
+
+        Returns:
+            Tuple[Array, Optional[HparamsTuple]]: The computed representer weights alpha and None.
+        """
         del test_ds, config, metrics_list, metrics_prefix, exact_metrics, key
-        """Compute the representer weights alpha by solving alpha = (K + sigma^2 I)^{-1} y"""
 
         # Compute Kernel exactly
         if recompute or self.K is None:
@@ -53,7 +88,19 @@ class ExactGPModel(GPModel):
         add_likelihood_noise: bool = False,
         return_marginal_variance: bool = True,
     ) -> Array:
-        """Compute the posterior variance of the test points."""
+        """
+        Compute the posterior variance of the test points.
+
+        Args:
+            train_ds (Dataset): The training dataset.
+            test_ds (Dataset): The test dataset.
+            add_likelihood_noise (bool, optional): Whether to add likelihood noise to the variance calculation. Defaults to False.
+            return_marginal_variance (bool, optional): Whether to return the marginal variance. Defaults to True.
+
+        Returns:
+            Array: The computed posterior variance.
+
+        """
         K_test = self.kernel.kernel_fn(test_ds.x, test_ds.x)  # N_test, N_test
         K_train_test = self.kernel.kernel_fn(train_ds.x, test_ds.x)  # N_train, N_test
         # Compute Kernel exactly
@@ -74,8 +121,11 @@ class ExactGPModel(GPModel):
         return variance  # (N_test, N_test)
 
     def get_alpha_samples_fn(self):
-        """Vmap factory function that returns a function that computes alpha samples from f0 and eps0 samples."""
+        """Vmap factory function that returns a function that computes alpha samples from f0 and eps0 samples.
 
+        Returns:
+            A function that takes in `f0_sample_train` and `eps0_sample` as inputs and computes `alpha_sample`.
+        """
         def _fn(f0_sample_train, eps0_sample):
             # (K + noise_scale**2 I)^{-1} (f0_sample_train + eps0_sample)
             alpha_sample = solve_K_inv_v(
@@ -100,8 +150,26 @@ class ExactGPModel(GPModel):
         metrics_list: Optional[list] = None,
         metrics_prefix: Optional[str] = None,
     ):
+        """Computes n_samples posterior samples, and returns posterior_samples along with alpha_samples.
+
+        Args:
+            key: The PRNG key.
+            n_samples: The number of posterior samples to compute.
+            train_ds: The training dataset.
+            test_ds: The test dataset.
+            config: Optional configuration dictionary.
+            n_features: The number of features.
+            L: Optional array representing the prior covariance factor.
+            zero_mean: Boolean indicating whether to use zero mean.
+            metrics_list: Optional list of metrics.
+            metrics_prefix: Optional prefix for metrics.
+
+        Returns:
+            A tuple containing the posterior samples, alpha samples, and w samples.
+
+        """
         del config, metrics_list, metrics_prefix
-        """Computes n_samples posterior samples, and returns posterior_samples along with alpha_samples."""
+
         prior_covariance_key, prior_samples_key, _ = jr.split(key, 3)
 
         if L is None:
@@ -149,8 +217,16 @@ class ExactGPModel(GPModel):
         kernel_fn: Callable,
         transform: Optional[Callable] = None,
     ):
-        """Factory function that wraps mll_loss_fn so that it is jittable."""
+        """Factory function that wraps mll_loss_fn so that it is jittable.
 
+        Args:
+            train_ds (Dataset): The training dataset.
+            kernel_fn (Callable): The kernel function.
+            transform (Optional[Callable], optional): The transformation function. Defaults to None.
+
+        Returns:
+            Callable: The jitted version of the mll_loss_fn.
+        """
         def _fn(log_hparams):
             return -marginal_likelihood(
                 train_ds.x,
@@ -163,11 +239,18 @@ class ExactGPModel(GPModel):
         return jax.jit(_fn, device=get_gpu_or_cpu_device())
 
     def get_mll_update_fn(self, mll_loss_fn, optimizer):
-        """Factory function that wraps mll_update_fn so that it is jittable."""
+        """Factory function that wraps mll_update_fn so that it is jittable.
 
+        Args:
+            mll_loss_fn: The loss function used to compute the loss and gradients.
+            optimizer: The optimizer used to update the model parameters.
+
+        Returns:
+            A jittable function that computes the loss, gradients, and updates the model parameters.
+
+        """
         def _fn(log_hparams, opt_state):
             value, grad = jax.value_and_grad(mll_loss_fn)(log_hparams)
-            # print(grad)
             updates, opt_state = optimizer.update(grad, opt_state)
             return value, optax.apply_updates(log_hparams, updates), opt_state
 
@@ -183,6 +266,21 @@ class ExactGPModel(GPModel):
         transform: Optional[Callable] = None,
         perform_eval: bool = True,
     ):
+        """
+        Computes the maximum log-likelihood (MLL) optimization for the exact GP model.
+
+        Args:
+            init_hparams (HparamsTuple): Initial hyperparameters for the GP model.
+            train_ds (Dataset): Training dataset.
+            config (ConfigDict): Configuration dictionary.
+            test_ds: Test dataset.
+            full_train_ds (Optional[Dataset], optional): Full training dataset. Defaults to None.
+            transform (Optional[Callable], optional): Transformation function for hyperparameters. Defaults to None.
+            perform_eval (bool, optional): Flag to perform evaluation. Defaults to True.
+
+        Returns:
+            HparamsTuple: Final optimized hyperparameters.
+        """
         log_hparams = init_hparams
         hparams = None
 

@@ -28,6 +28,17 @@ from scalable_gps.utils import (
 
 
 class SGDGPModel(GPModel):
+    """
+    A class representing a GP model trained using Stochastic Gradient Descent (SGD).
+
+    Args:
+        noise_scale (float): The scale of the noise in the Gaussian Process.
+        kernel (Kernel): The kernel function used in the Gaussian Process.
+        **kwargs: Additional keyword arguments.
+
+    Attributes:
+        alpha (ndarray): The representer weights of the model.
+    """
     def __init__(self, noise_scale: float, kernel: Kernel, **kwargs):
         super().__init__(noise_scale=noise_scale, kernel=kernel, **kwargs)
 
@@ -44,7 +55,24 @@ class SGDGPModel(GPModel):
         artifact_name: Optional[str] = None,
     ):
         del recompute
-        """Compute the representer weights alpha by solving alpha = (K + sigma^2 I)^{-1} y using SGD."""
+        """
+        Compute the representer weights alpha by solving alpha = (K + sigma^2 I)^{-1} y using SGD.
+
+        Args:
+            key (chex.PRNGKey): The random key used for generating random numbers.
+            train_ds (Dataset): The training dataset.
+            test_ds (Dataset): The test dataset.
+            config (ConfigDict): The configuration dictionary.
+            metrics_list (List[str]): The list of metrics to evaluate.
+            metrics_prefix (str, optional): The prefix for the metric names. Defaults to "".
+            exact_metrics (Optional[ExactPredictionsTuple], optional): The exact metrics for evaluation. Defaults to None.
+            recompute (Optional[bool], optional): Whether to recompute the representer weights. Defaults to None.
+            artifact_name (Optional[str], optional): The name of the artifact. Defaults to None.
+
+        Returns:
+            alpha (ndarray): The computed representer weights.
+            aux (list): The list of evaluation metrics during training.
+        """
         target_tuple = TargetTuple(
             error_target=train_ds.y, regularizer_target=jnp.zeros_like(train_ds.y)
         )
@@ -185,6 +213,27 @@ class SGDGPModel(GPModel):
         metrics_prefix: str = "",
         compare_exact: bool = False,
     ):
+        """
+        Compute posterior samples from the trained model.
+
+        Args:
+            key (chex.PRNGKey): The random key used for generating random numbers.
+            n_samples (int): The number of posterior samples to generate.
+            train_ds (Dataset): The training dataset.
+            test_ds (Dataset): The test dataset.
+            config (ConfigDict): The configuration dictionary.
+            n_features (int, optional): The number of features. Defaults to 0.
+            L (Optional[Array], optional): The covariance factor. Defaults to None.
+            zero_mean (bool, optional): Whether to use zero mean. Defaults to True.
+            metrics_list (list, optional): The list of metrics to evaluate. Defaults to [].
+            metrics_prefix (str, optional): The prefix for the metric names. Defaults to "".
+            compare_exact (bool, optional): Whether to compare with exact predictions. Defaults to False.
+        
+        Returns:
+            posterior_samples (ndarray): The posterior samples.
+            alphas_polyak (ndarray): The representer weights.
+            w_samples (ndarray): The samples from the prior.
+        """
         prior_covariance_key, prior_samples_key, optim_key = jr.split(key, 3)
 
         if L is None:

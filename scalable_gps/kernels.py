@@ -17,6 +17,7 @@ class FourierFeatureParams(NamedTuple):
 
 
 class TanimotoFeatureParams(NamedTuple):
+    
     M: int
     r: chex.Array
     c: chex.Array
@@ -26,13 +27,47 @@ class TanimotoFeatureParams(NamedTuple):
 
 
 class Kernel:
+    """
+    Base class for kernels in Gaussian processes.
+    """
+
     def __init__(self, kernel_config=None):
+        """
+        Initialize the Kernel object.
+
+        Args:
+            kernel_config (dict, optional): Configuration dictionary for the kernel. Defaults to None.
+        """
         self.kernel_config = kernel_config or {}
 
     def kernel_fn(self, x: Array, y: Array, **kwargs) -> Array:
+        """
+        Compute the kernel function between two input arrays.
+
+        Args:
+            x (Array): Input array x.
+            y (Array): Input array y.
+            **kwargs: Additional keyword arguments.
+
+        Returns:
+            Array: Result of the kernel function.
+        """
         raise NotImplementedError("Subclasses should implement this method.")
 
     def _get_hparam(self, hparam_name: str, kwargs: Optional[dict]):
+        """
+        Get the value of a hyperparameter.
+
+        Args:
+            hparam_name (str): Name of the hyperparameter.
+            kwargs (dict, optional): Additional keyword arguments. Defaults to None.
+
+        Returns:
+            The value of the hyperparameter.
+        
+        Raises:
+            ValueError: If the required hyperparameter is not present in the config dict or specified in kwargs.
+        """
         try:
             hparam = kwargs[hparam_name]
             return hparam
@@ -48,6 +83,15 @@ class Kernel:
             )
 
     def get_signal_scale(self, kwargs: Optional[dict] = None):
+        """
+        Get the value of the signal scale hyperparameter.
+
+        Args:
+            kwargs (dict, optional): Additional keyword arguments. Defaults to None.
+
+        Returns:
+            The value of the signal scale hyperparameter.
+        """
         return self._get_hparam("signal_scale", kwargs)
 
     def feature_params_fn(
@@ -57,31 +101,111 @@ class Kernel:
         D: int,
         **kwargs,
     ) -> NamedTuple:
+        """
+        Compute the feature parameters for the kernel.
+
+        Args:
+            key (chex.PRNGKey): PRNG key.
+            n_features (int): Number of features.
+            D (int): Dimensionality of the input.
+            **kwargs: Additional keyword arguments.
+
+        Returns:
+            NamedTuple: Result of the feature parameters computation.
+        """
         raise NotImplementedError("Subclasses should implement this method.")
 
     def feature_fn(self, x: Array, feature_params: NamedTuple) -> Array:
+        """
+        Compute the features for the input array.
+
+        Args:
+            x (Array): Input array.
+            feature_params (NamedTuple): Feature parameters.
+
+        Returns:
+            Array: Result of the feature computation.
+        """
         raise NotImplementedError("Subclasses should implement this method.")
 
 
 class StationaryKernel(Kernel):
+    """
+    Represents a stationary kernel.
+
+    Attributes:
+        kernel_config (dict): Configuration parameters for the kernel.
+        omega (None): Placeholder for the omega parameter.
+        phi (None): Placeholder for the phi parameter.
+    """
+
     def __init__(self, kernel_config=None):
+        """
+        Initializes a StationaryKernel object.
+
+        Args:
+            kernel_config (dict, optional): Configuration parameters for the kernel. Defaults to None.
+        """
         self.kernel_config = kernel_config or {}
         self.omega = None
         self.phi = None
 
     def omega_fn(self, key: chex.PRNGKey, n_input_dims: int, n_features: int):
+        """
+        Computes the omega parameter.
+
+        This method should be implemented by subclasses.
+
+        Args:
+            key (chex.PRNGKey): The random key for generating random numbers.
+            n_input_dims (int): The number of input dimensions.
+            n_features (int): The number of features.
+
+        Raises:
+            NotImplementedError: Subclasses should implement this method.
+        """
         raise NotImplementedError("Subclasses should implement this method.")
 
     @partial(jax.jit, static_argnums=(0, 2))
     def phi_fn(self, key: chex.PRNGKey, n_features: int):
+        """
+        Computes the phi parameter.
+
+        Args:
+            key (chex.PRNGKey): The random key for generating random numbers.
+            n_features (int): The number of features.
+
+        Returns:
+            Array: The computed phi parameter.
+        """
         return jr.uniform(key=key, shape=(1, n_features), minval=-jnp.pi, maxval=jnp.pi)
 
     def _sq_dist(self, x: Array, y: Array, length_scale: Array):
+        """
+        Computes the squared distance between two arrays.
+
+        Args:
+            x (Array): The first array.
+            y (Array): The second array.
+            length_scale (Array): The length scale.
+
+        Returns:
+            Array: The computed squared distance.
+        """
         x, y = x / length_scale, y / length_scale
 
         return jnp.sum((x[:, None] - y[None, :]) ** 2, axis=-1)
 
     def get_length_scale(self, kwargs: Optional[dict] = None):
+        """
+        Gets the length scale from the given keyword arguments.
+
+        Args:
+            kwargs (dict, optional): Optional keyword arguments. Defaults to None.
+
+        Returns:
+            Array: The computed length scale.
+        """
         length_scale = self._get_hparam("length_scale", kwargs)
         length_scale = length_scale[None, :]
         chex.assert_rank(length_scale, 2)
@@ -96,6 +220,18 @@ class StationaryKernel(Kernel):
         D: int,
         **kwargs,
     ) -> FourierFeatureParams:
+        """
+        Computes the feature parameters.
+
+        Args:
+            key (chex.PRNGKey): The random key for generating random numbers.
+            n_features (int): The number of features.
+            D (int): The dimensionality of the input.
+            kwargs (dict): Optional keyword arguments.
+
+        Returns:
+            FourierFeatureParams: The computed feature parameters.
+        """
         M = n_features
 
         signal_scale, length_scale = (
@@ -116,6 +252,16 @@ class StationaryKernel(Kernel):
 
     @partial(jax.jit, static_argnums=(0,))
     def feature_fn(self, x: chex.Array, feature_params: FourierFeatureParams):
+        """
+        Computes the features.
+
+        Args:
+            x (chex.Array): The input array.
+            feature_params (FourierFeatureParams): The feature parameters.
+
+        Returns:
+            chex.Array: The computed features.
+        """
         return (
             feature_params.signal_scale
             * jnp.sqrt(2.0 / feature_params.M)
@@ -127,8 +273,39 @@ class StationaryKernel(Kernel):
 
 
 class RBFKernel(StationaryKernel):
+    """
+    Radial Basis Function (RBF) Kernel.
+
+    This kernel computes the covariance between two input arrays `x` and `y`
+    using the RBF kernel function. It also provides a method to generate random
+    features for the kernel.
+
+    Args:
+        StationaryKernel: Base class for stationary kernels.
+
+    Attributes:
+        None
+
+    Methods:
+        kernel_fn: Computes the covariance between `x` and `y` using the RBF kernel function.
+        omega_fn: Generates random features for the kernel.
+
+    """
+
     @partial(jax.jit, static_argnums=(0,))
     def kernel_fn(self, x: Array, y: Array, **kwargs):
+        """
+        Computes the covariance between `x` and `y` using the RBF kernel function.
+
+        Args:
+            x: Input array of shape (n_samples, n_features).
+            y: Input array of shape (n_samples, n_features).
+            **kwargs: Additional keyword arguments.
+
+        Returns:
+            Covariance matrix of shape (n_samples, n_samples).
+
+        """
         signal_scale, length_scale = (
             self.get_signal_scale(kwargs),
             self.get_length_scale(kwargs),
@@ -138,12 +315,46 @@ class RBFKernel(StationaryKernel):
 
     @partial(jax.jit, static_argnums=(0,))
     def omega_fn(self, key: chex.PRNGKey, n_input_dims: int, n_features: int):
+        """
+        Generates random features for the kernel.
+
+        Args:
+            key: PRNGKey for random number generation.
+            n_input_dims: Number of input dimensions.
+            n_features: Number of random features to generate.
+
+        Returns:
+            Random features of shape (n_input_dims, n_features).
+
+        """
         return jr.normal(key, shape=(n_input_dims, n_features))
 
 
 class MaternKernel(StationaryKernel):
+    """
+    MaternKernel is a subclass of StationaryKernel that represents the Matern kernel.
+
+    The Matern kernel is a popular choice for Gaussian process regression. It is a stationary kernel
+    that is characterized by its smoothness parameter, which controls the smoothness of the resulting
+    Gaussian process.
+
+    Attributes:
+        _df: The degrees of freedom parameter for the Matern kernel.
+    """
+
     @partial(jax.jit, static_argnums=(0,))
     def kernel_fn(self, x: Array, y: Array, **kwargs):
+        """
+        Computes the value of the Matern kernel function for the given inputs.
+
+        Args:
+            x: The input array of shape (n_samples, n_features).
+            y: The input array of shape (n_samples, n_features).
+            **kwargs: Additional keyword arguments.
+
+        Returns:
+            The value of the Matern kernel function for the given inputs.
+        """
         signal_scale, length_scale = (
             self.get_signal_scale(kwargs),
             self.get_length_scale(kwargs),
@@ -160,14 +371,41 @@ class MaternKernel(StationaryKernel):
 
     @partial(jax.jit, static_argnums=(0, 2, 3))
     def omega_fn(self, key: chex.PRNGKey, n_input_dims: int, n_features: int):
+        """
+        Generates a random matrix from the Matern kernel.
+
+        Args:
+            key: The PRNGKey used for random number generation.
+            n_input_dims: The number of input dimensions.
+            n_features: The number of features.
+
+        Returns:
+            A random matrix generated from the Matern kernel.
+        """
         return jr.t(key, df=self._df, shape=(n_input_dims, n_features))
 
     @property
     def _df(self):
+        """
+        Returns the degrees of freedom parameter for the Matern kernel.
+
+        Raises:
+            NotImplementedError: Subclasses should implement this method.
+        """
         raise NotImplementedError("Subclasses should implement this method.")
 
     @staticmethod
     def _normaliser(dist: Array, sq_dist: Array):
+        """
+        Computes the normalizer term for the Matern kernel.
+
+        Args:
+            dist: The distance array.
+            sq_dist: The squared distance array.
+
+        Raises:
+            NotImplementedError: Subclasses should implement this method.
+        """
         raise NotImplementedError("Subclasses should implement this method.")
 
 

@@ -26,6 +26,27 @@ from scalable_gps.utils import (
 
 
 class ISGDGPModel(GPModel):
+    """
+    Implementation of the Inducing SGD GP Model.
+
+    Args:
+        noise_scale (float): The scale of the noise.
+        kernel (Kernel): The kernel function.
+        **kwargs: Additional keyword arguments.
+
+    Attributes:
+        alpha (Array): The representer weights.
+        y_pred (Array): The cached predictive mean.
+
+    Methods:
+        get_inducing_feature_fn: Factory function that wraps feature_fn so that it is jittable.
+        predictive_mean: Computes the predictive mean for the given test dataset using the inducing SGD GP model.
+        compute_representer_weights: Computes the representer weights alpha by solving alpha = (K + sigma^2 I)^{-1} y using SGD.
+        compute_posterior_samples: Computes posterior samples using the inducing SGD GP model.
+
+    Raises:
+        ValueError: If alpha is None. Please call compute_representer_weights() first.
+    """
     def __init__(self, noise_scale: float, kernel: Kernel, **kwargs):
         super().__init__(noise_scale=noise_scale, kernel=kernel, **kwargs)
 
@@ -45,18 +66,33 @@ class ISGDGPModel(GPModel):
         return jax.jit(_fn)
 
     def predictive_mean(
-        self, train_ds: Dataset, test_ds: Dataset, recompute: bool = True
-    ) -> Array:
-        if self.alpha is None:
-            raise ValueError(
-                "alpha is None. Please call compute_representer_weights() first."
-            )
-        if recompute or self.y_pred is None:
-            self.y_pred = KvP(
-                test_ds.x, train_ds.z, self.alpha, kernel_fn=self.kernel.kernel_fn
-            )
+            self, train_ds: Dataset, test_ds: Dataset, recompute: bool = True
+        ) -> Array:
+            """
+            Computes the predictive mean for the given test dataset using the inducing SGD GP model.
 
-        return self.y_pred  # (N_test, 1)
+            Args:
+                train_ds (Dataset): The training dataset.
+                test_ds (Dataset): The test dataset.
+                recompute (bool, optional): Whether to recompute the predictive mean or use the cached value. 
+                    Defaults to True.
+
+            Returns:
+                Array: The predictive mean for the test dataset. Shape: (N_test, 1)
+
+            Raises:
+                ValueError: If alpha is None. Please call compute_representer_weights() first.
+            """
+            if self.alpha is None:
+                raise ValueError(
+                    "alpha is None. Please call compute_representer_weights() first."
+                )
+            if recompute or self.y_pred is None:
+                self.y_pred = KvP(
+                    test_ds.x, train_ds.z, self.alpha, kernel_fn=self.kernel.kernel_fn
+                )
+
+            return self.y_pred  # (N_test, 1)
 
     def compute_representer_weights(
         self,
@@ -69,9 +105,29 @@ class ISGDGPModel(GPModel):
         exact_metrics: Optional[ExactPredictionsTuple] = None,
         recompute: Optional[bool] = None,
     ):
+        """
+        Compute the representer weights alpha by solving alpha = (K + sigma^2 I)^{-1} y using SGD.
+
+        Args:
+            key: The PRNG key.
+            train_ds: The training dataset.
+            test_ds: The test dataset.
+            config: The configuration dictionary.
+            metrics_list: The list of metrics to evaluate.
+            metrics_prefix: The prefix for metric names.
+            exact_metrics: The exact predictions tuple.
+            recompute: Whether to recompute the features.
+
+        Returns:
+            Tuple: The computed representer weights alpha and the evaluation metrics.
+
+        Raises:
+            NotImplementedError: If dynamic batch size is used (deprecated).
+
+        """
         del recompute
         assert train_ds.z is not None
-        """Compute the representer weights alpha by solving alpha = (K + sigma^2 I)^{-1} y using SGD."""
+
         target_tuple = TargetTuple(
             error_target=train_ds.y, regularizer_target=jnp.zeros_like(train_ds.y)
         )
@@ -158,6 +214,7 @@ class ISGDGPModel(GPModel):
         self.alpha = alpha_polyak
         return self.alpha, aux
 
+
     def compute_posterior_samples(
         self,
         key: chex.PRNGKey,
@@ -171,6 +228,28 @@ class ISGDGPModel(GPModel):
         metrics_list=[],
         metrics_prefix="",
     ):
+        """
+        Computes posterior samples using the inducing point stochastic gradient descent (SGD) Gaussian process model.
+
+        Args:
+            key (chex.PRNGKey): The random key for generating random numbers.
+            n_samples (int): The number of posterior samples to compute.
+            train_ds (Dataset): The training dataset.
+            test_ds (Dataset): The test dataset.
+            config (ConfigDict): The configuration dictionary.
+            n_features (int, optional): The number of features. Defaults to 0.
+            L (Optional[Array], optional): The array of inducing points. Defaults to None.
+            zero_mean (bool, optional): Whether to use zero mean. Defaults to True.
+            metrics_list (List, optional): The list of metrics to compute. Defaults to [].
+            metrics_prefix (str, optional): The prefix for metric names. Defaults to "".
+
+        Returns:
+            Tuple[Array, Array, Array, List[Dict[str, float]]]: A tuple containing the posterior samples, alphas_polyak, w_samples, and auxiliary metrics.
+
+        Raises:
+            ValueError: If L is not None.
+
+        """
         assert train_ds.z is not None
         prior_covariance_key, prior_samples_key, optim_key = jr.split(key, 3)
 

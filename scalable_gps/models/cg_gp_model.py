@@ -26,6 +26,25 @@ from scalable_gps.utils import (
 
 
 class CGGPModel(ExactGPModel):
+    """
+    A class representing a CGGP (Conjugate Gradients Gaussian Process) model.
+
+    Args:
+        noise_scale (float): The scale of the noise in the model.
+        kernel (Kernel): The kernel function to use in the model.
+        **kwargs: Additional keyword arguments.
+
+    Attributes:
+        pivoted_chol (None or Array): The pivoted Cholesky decomposition of the kernel matrix.
+
+    Methods:
+        get_cg_closure_fn: Returns a closure function for the CG (Conjugate Gradients) method.
+        get_cg_solve_fn: Returns a function for solving a linear system using CG.
+        get_cg_preconditioner_solve_fn: Returns a function for solving a linear system using CG with a preconditioner.
+        compute_representer_weights: Computes the representer weights alpha by solving a linear system using CG.
+        compute_posterior_samples: Computes posterior samples from the model.
+
+    """
     def __init__(self, noise_scale: float, kernel: Kernel, **kwargs):
         super().__init__(noise_scale=noise_scale, kernel=kernel, **kwargs)
 
@@ -34,7 +53,20 @@ class CGGPModel(ExactGPModel):
     from jax._src.ad_checkpoint import _optimization_barrier
 
     def get_cg_closure_fn(self, noise_std, train_ds, batch_size):
-        # (K(x, x) + noise_std**2 * I) * params = y # (n_train)
+        """
+        Returns a closure function that computes the expression (K(x, x) + noise_std**2 * I) * params - y,
+        where K(x, x) is the kernel matrix, params are the model parameters, and y is the target values.
+
+        Args:
+            noise_std (float): The standard deviation of the noise.
+            train_ds (Dataset): The training dataset.
+            batch_size (int): The batch size for computing the kernel matrix.
+
+        Returns:
+            closure_fn: A closure function that takes in the model parameters and returns the expression
+                        (K(x, x) + noise_std**2 * I) * params - y.
+
+        """
         def _fn(params):
             return (
                 KvP(
@@ -50,6 +82,20 @@ class CGGPModel(ExactGPModel):
         return jax.jit(_fn)
 
     def get_cg_solve_fn(self, cg_closure_fn, tol, atol, M=None, pmap_and_vmap=False):
+        """
+        Returns a function that performs conjugate gradient (CG) optimization.
+
+        Args:
+            cg_closure_fn: The closure function that defines the CG optimization problem.
+            tol: The tolerance for convergence.
+            atol: The absolute tolerance for convergence.
+            M: The preconditioner matrix (optional).
+            pmap_and_vmap: A flag indicating whether to use pmap and vmap for parallelization.
+
+        Returns:
+            A function that performs CG optimization.
+
+        """
         def _fn(v, cg_state, maxiter):
             return custom_cg(
                 cg_closure_fn,
@@ -67,26 +113,35 @@ class CGGPModel(ExactGPModel):
             return jax.jit(_fn)
 
     def get_cg_preconditioner_solve_fn(self, pivoted_chol):
-        def _fn(v):
-            """Woodbury identity-based matvec."""
-            A_inv = self.noise_scale**-2
+            """
+            Returns a function that performs a solve operation using the CG preconditioner.
 
-            U = pivoted_chol  # N, k
-            V = pivoted_chol.T  # k, N
-            C_inv = jnp.eye(U.shape[1])  # k, k
-            # (A+U C V)^{-1} = A^{-1}- A^{-1} U (C^{-1} + V A^{-1} U )^{-1} V A^{-1}
-            # (A+U C V)^{-1} v = A^{-1} v - A^{-1} U (C^{-1} + V A^{-1} U )^{-1} V A^{-1} v
-            first_term = A_inv * v  # (N, )
+            Args:
+                pivoted_chol (ndarray): The pivoted Cholesky decomposition of the matrix.
 
-            inner_inv = C_inv + A_inv * V @ U  # k, k
+            Returns:
+                callable: A function that takes a vector as input and returns the result of the solve operation.
+            """
+            def _fn(v):
+                """Woodbury identity-based matvec."""
+                A_inv = self.noise_scale**-2
 
-            inner_solve = jax.scipy.linalg.solve(inner_inv, V @ v, assume_a="pos")  # k,
+                U = pivoted_chol  # N, k
+                V = pivoted_chol.T  # k, N
+                C_inv = jnp.eye(U.shape[1])  # k, k
+                # (A+U C V)^{-1} = A^{-1}- A^{-1} U (C^{-1} + V A^{-1} U )^{-1} V A^{-1}
+                # (A+U C V)^{-1} v = A^{-1} v - A^{-1} U (C^{-1} + V A^{-1} U )^{-1} V A^{-1} v
+                first_term = A_inv * v  # (N, )
 
-            second_term = (A_inv**2) * U @ inner_solve  # (N, )
+                inner_inv = C_inv + A_inv * V @ U  # k, k
 
-            return first_term - second_term
+                inner_solve = jax.scipy.linalg.solve(inner_inv, V @ v, assume_a="pos")  # k,
 
-        return jax.jit(_fn)
+                second_term = (A_inv**2) * U @ inner_solve  # (N, )
+
+                return first_term - second_term
+
+            return jax.jit(_fn)
 
     def compute_representer_weights(
         self,
@@ -100,8 +155,23 @@ class CGGPModel(ExactGPModel):
         recompute: Optional[bool] = None,
         artifact_name: Optional[str] = None,
     ) -> Array:
+        """Compute representer weights alpha by solving a linear system using Conjugate Gradients.
+
+        Args:
+            key: The PRNG key.
+            train_ds: The training dataset.
+            test_ds: The test dataset.
+            config: The configuration dictionary.
+            metrics_list: The list of metrics to evaluate.
+            metrics_prefix: The prefix for metric names.
+            exact_metrics: The exact predictions tuple.
+            recompute: Whether to recompute the representer weights.
+            artifact_name: The name of the artifact.
+
+        Returns:
+            The representer weights alpha.
+        """
         del recompute
-        """Compute representer weights alpha by solving a linear system using Conjugate Gradients."""
 
         # To match the API.
         del key
@@ -241,6 +311,25 @@ class CGGPModel(ExactGPModel):
         metrics_prefix: str = "",
         compare_exact: bool = False,
     ):
+        """
+        Computes posterior samples using the given inputs.
+
+        Args:
+            key (chex.PRNGKey): The random key for generating samples.
+            n_samples (int): The number of posterior samples to generate.
+            train_ds (Dataset): The training dataset.
+            test_ds (Dataset): The test dataset.
+            config (ConfigDict): The configuration dictionary.
+            n_features (int, optional): The number of features. Defaults to 0.
+            L (Optional[Array], optional): The prior covariance factor. Defaults to None.
+            zero_mean (bool, optional): Whether to use zero mean. Defaults to True.
+            metrics_list (list, optional): The list of metrics to compute. Defaults to [].
+            metrics_prefix (str, optional): The prefix for metric names. Defaults to "".
+            compare_exact (bool, optional): Whether to compare with exact samples. Defaults to False.
+
+        Returns:
+            Tuple[Array, Array, Array]: A tuple containing the posterior samples, alphas, and w_samples.
+        """
         prior_covariance_key, prior_samples_key, _ = jr.split(key, 3)
 
         if L is None:

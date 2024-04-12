@@ -1,3 +1,4 @@
+"""Run Thompson Sampling experiments using different GP models."""
 import jax
 import jax.numpy as jnp
 import jax.random as jr

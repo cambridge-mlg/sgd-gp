@@ -93,6 +93,7 @@ def improved_grad_sample_batch_all(
     kernel_fn: Callable,
     noise_scale: float,
 ):
+    
     K = kernel_fn(x[idx], x)
     B, N = K.shape
 
@@ -114,6 +115,7 @@ def improved_grad_sample_random_kvp(
     kernel_fn: Callable,
     noise_scale: float,
 ):
+    
     err_grad = features @ (features.T @ params) - target_tuple.error_target
     reg_grad = (noise_scale**2) * params - target_tuple.regularizer_target
     grad = err_grad + reg_grad
@@ -129,6 +131,25 @@ def loss_fn(
     kernel_fn: Callable,
     noise_scale,
 ):
+    """
+    Calculates the loss function for the linear model.
+
+    Args:
+        params (Array): The model parameters.
+        idx (Array): The indices of the data points.
+        x (Array): The input data.
+        features (Array): The features of the data.
+        target_tuple (TargetTuple): The target tuple containing the error target and regularizer target.
+        kernel_fn (Callable): The kernel function.
+        noise_scale: The scale of the noise.
+
+    Returns:
+        float: The calculated loss.
+
+    Raises:
+        AssertionError: If the error and regularizer have a rank other than 0.
+    """
+    
     err = error(params, idx, x, target_tuple.error_target, kernel_fn)
     reg = regularizer(params, features, target_tuple.regularizer_target, noise_scale)
     chex.assert_rank([err, reg], 0)
@@ -144,6 +165,19 @@ def marginal_likelihood(
     hparams_tuple: HparamsTuple,
     transform: Optional[Callable] = None,
 ):
+    """
+    Calculate the marginal likelihood of a Gaussian process regression model.
+
+    Args:
+        x (Array): Input data points.
+        targets (Array): Target values.
+        kernel_fn (Callable): Kernel function used for computing the covariance matrix.
+        hparams_tuple (HparamsTuple): Tuple of hyperparameters for the kernel function.
+        transform (Optional[Callable]): Optional transformation function for the hyperparameters.
+
+    Returns:
+        float: The marginal likelihood of the Gaussian process regression model.
+    """
     N = targets.shape[0]
 
     if transform:
@@ -172,6 +206,17 @@ def marginal_likelihood(
 
 @partial(jax.jit, backend="cpu")
 def exact_solution(targets, K, noise_scale):
+    """
+    Computes the exact solution of a linear model using the given targets, covariance matrix, and noise scale.
+
+    Args:
+        targets: A 1-D array-like object representing the target values.
+        K: A 2-D array-like object representing the covariance matrix.
+        noise_scale: A scalar value representing the scale of the noise.
+
+    Returns:
+        A 1-D array-like object representing the exact solution of the linear model.
+    """
     return jax.scipy.linalg.solve(
         K + (noise_scale**2) * jnp.identity(targets.shape[0]), targets, assume_a="pos"
     )

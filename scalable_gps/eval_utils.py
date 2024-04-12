@@ -34,6 +34,22 @@ def grad_var_fn(
     num_evals: int = 100,
     key: chex.PRNGKey = jr.PRNGKey(12345),
 ):
+    """
+    Computes the variance of the gradients with respect to the parameters.
+
+    Args:
+        params (Array): The parameters.
+        grad_fn (Callable): The gradient function.
+        idx (Array): The indices.
+        features (Array): The features.
+        target_tuple (TargetTuple): The target tuple.
+        num_evals (int, optional): The number of evaluations. Defaults to 100.
+        key (chex.PRNGKey, optional): The random key. Defaults to jr.PRNGKey(12345).
+
+    Returns:
+        float: The variance of the gradients.
+    """
+    
     batch_size = idx.shape[0]
     n_train = params.shape[0]
     idx_fn = get_uniform_idx_fn(batch_size, n_train)
@@ -54,16 +70,50 @@ def grad_var_fn(
 
 
 def hilbert_space_RMSE(x: Array, x_hat: Array, K: Array):
+    """
+    Calculates the root mean squared error (RMSE) in the Hilbert space.
+
+    Parameters:
+    - x (Array): The true values.
+    - x_hat (Array): The predicted values.
+    - K (Array): The covariance matrix.
+
+    Returns:
+    - float: The RMSE in the Hilbert space.
+    """
     return jnp.sqrt(jnp.mean((x - x_hat).T * (K @ (x - x_hat))))
 
 
 def pred_space_RMSE(x: Array, x_hat: Array, K: Array):
+    """
+    Calculates the root mean squared error (RMSE) in the prediction space.
+
+    Parameters:
+    - x (Array): The true values.
+    - x_hat (Array): The predicted values.
+    - K (Array): The covariance matrix.
+
+    Returns:
+    - float: The RMSE in the prediction space.
+    """
     return jnp.sqrt(jnp.mean((K @ (x - x_hat)).T * (K @ (x - x_hat))))
 
 
 def RMSE(
     x: Array, x_hat: Array, mu: Optional[Array] = None, sigma: Optional[Array] = None
 ):
+    """
+    Calculates the root mean squared error (RMSE) between two arrays.
+
+    Parameters:
+        x (Array): The ground truth array.
+        x_hat (Array): The predicted array.
+        mu (Optional[Array]): The mean used for z-score normalization. Default is None.
+        sigma (Optional[Array]): The standard deviation used for z-score normalization. Default is None.
+
+    Returns:
+        float: The RMSE between x and x_hat.
+    """
     if mu is not None and sigma is not None:
         x = revert_z_score(x, mu, sigma)
         x_hat = revert_z_score(x_hat, mu, sigma)
@@ -89,6 +139,19 @@ def mean_LLH(
 def R2_score(
     x_hat: Array, x: Array, mu: Optional[Array] = None, sigma: Optional[Array] = None
 ):
+    """
+    Calculate the R-squared score between predicted values and true values.
+
+    Args:
+        x_hat (Array): Predicted values.
+        x (Array): True values.
+        mu (Optional[Array]): Mean used for z-score normalization. Default is None.
+        sigma (Optional[Array]): Standard deviation used for z-score normalization. Default is None.
+
+    Returns:
+        float: R-squared score.
+
+    """
     # TODO: implement check for zero denominator.
     if mu is not None and sigma is not None:
         x = revert_z_score(x, mu, sigma)
@@ -115,6 +178,24 @@ def get_eval_fn(
     exact_samples: Optional[ExactSamplesTuple] = None,
     vmap_and_pmap: bool = False,
 ):
+    """
+    Returns an evaluation function that calculates various metrics based on the given inputs.
+
+    Args:
+        metrics_list (List[str]): List of metrics to calculate.
+        train_ds (Dataset): Training dataset.
+        test_ds (Dataset): Test dataset.
+        kernel_fn (Callable): Kernel function.
+        noise_scale (float): Noise scale.
+        grad_fn (Optional[Callable], optional): Gradient function. Defaults to None.
+        metrics_prefix (str, optional): Prefix to add to metric names. Defaults to "".
+        exact_metrics (Optional[ExactPredictionsTuple], optional): Exact predictions tuple. Defaults to None.
+        exact_samples (Optional[ExactSamplesTuple], optional): Exact samples tuple. Defaults to None.
+        vmap_and_pmap (bool, optional): Flag indicating whether to use vmap and pmap. Defaults to False.
+
+    Returns:
+        Callable: Evaluation function.
+    """
     def _fn(params, idx, features, target_tuple):
         if not metrics_list:
             return {}
@@ -260,6 +341,25 @@ def get_inducing_eval_fn(
     exact_samples: Optional[ExactSamplesTuple] = None,
     vmap_and_pmap: bool = False,
 ):
+    """
+    Returns a function that calculates evaluation metrics for inducing point models.
+
+    Args:
+        metrics_list (List[str]): List of metric names to calculate.
+        train_ds (Dataset): Training dataset.
+        test_ds (Dataset): Test dataset.
+        kernel_fn (Callable): Kernel function.
+        noise_scale (float): Noise scale.
+        grad_fn (Optional[Callable], optional): Gradient function. Defaults to None.
+        metrics_prefix (str, optional): Prefix for metric names. Defaults to "".
+        exact_metrics (Optional[ExactPredictionsTuple], optional): Exact predictions tuple. Defaults to None.
+        exact_samples (Optional[ExactSamplesTuple], optional): Exact samples tuple. Defaults to None.
+        vmap_and_pmap (bool, optional): Flag indicating whether to use vmap and pmap. Defaults to False.
+
+    Returns:
+        Callable: Function that calculates evaluation metrics.
+    """
+    
     del exact_samples, grad_fn
 
     def _fn(params, idx, features_x, features_z, target_tuple):

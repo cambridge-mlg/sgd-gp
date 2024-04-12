@@ -12,15 +12,17 @@ For a quick start, you can refer to the extremely concise notebook [`sdd.ipynb`]
 In order to replicate our UCI Regression experiments from both papers, you can run the following command to calculate the posterior mean.
 
 ```bash
-python scripts/obtain_mean.py --config configs/default.py:<uci_dataset> --config.method_name <method>
+python scalable_gps/scripts/obtain_mean.py --config configs/default.py:<uci_dataset> --config.method_name <method>
 ```
+
+Here, you can specify the UCI dataset from the list in the `uci_datasets` repo, and the method from the list provided below. The script calculates the posterior mean, calculates metrics such as Test RMSE, and saves the posterior mean both as a Pickle file, and as a `wandb` artifact (if `config.wandb.log_artifact` is true). 
 
 In order to obtain samples from the posterior, you can then run the following command
 
 ```bash
-python scripts/obtain_samples.py --config configs/default.py:<uci_dataset> --config.method_name <method>
+python scalable_gps/scripts/obtain_samples.py --config configs/default.py:<uci_dataset> --config.method_name <method>
 ```
-We use `wandb` for logging, and the posterior mean is automatically saved as a `wandb` artifact, and loaded by the `obtain_samples.py` script. Furthermore, the scripts should automatically load the tuned GP hyperparameters for all datasets from our `wandb` project. We replicate these hyperparameters in the [`configs/uci_regression_hparams.txt`](https://github.com/cambridge-mlg/sgd-gp/blob/main/scalable_gps/configs/uci_regression_hparams.txt) file.
+The posterior mean is automatically saved as a `wandb` artifact, and loaded by the `obtain_samples.py` script. The script saves the posterior samples as a Pickle file, as well as a `wandb` artifact. Furthermore, the scripts should automatically load the tuned GP hyperparameters for all datasets from our `wandb` project. We replicate these hyperparameters in the [`configs/uci_regression_hparams.txt`](https://github.com/cambridge-mlg/sgd-gp/blob/main/scalable_gps/configs/uci_regression_hparams.txt) file.
 
 We use UCI regression datasets from the excellent `uci_datasets` [repo](https://github.com/treforevans/uci_datasets), and you can use the same name as specified in the repo.
 
@@ -33,7 +35,15 @@ We provide parallelised Jax code for the following methods:
 
 # Molecular Benchmarks
 
-In order to replicate our molecular benchmarks, you can specify the `--config.kernel_name` to use either the `TanimotoKernel` or `TanimotoL1Kernel`, and the dataset using `tanimoto_<target>`, where the targets include `esr2, f2, kit, parp1, pgr`.
+In order to replicate our molecular benchmarks, you can specify the `--config.kernel_name` to use either the `TanimotoKernel` or `TanimotoL1Kernel`, and the dataset using `tanimoto_<target>`, where the targets include `esr2, f2, kit, parp1, pgr`. For example, you can run
+
+```bash
+python scalable_gps/scripts/obtain_mean.py --config configs/default.py:tanimoto_<target> --config.kernel_name TanimotoKernel --config.method_name <method>
+```
+
+# Thompson Sampling Experiments
+
+TODO.
 
 # Navigating the code
 

@@ -43,6 +43,17 @@ def get_gpu_or_cpu_device():
 def apply_z_score(
     data: Array, mu: Optional[Array] = None, sigma: Optional[Array] = None
 ):
+    """
+    Applies z-score normalization to the input data.
+
+    Parameters:
+        data (Array): The input data to be normalized.
+        mu (Optional[Array]): The mean value of the data. If provided, the normalization will use this value.
+        sigma (Optional[Array]): The standard deviation of the data. If provided, the normalization will use this value.
+
+    Returns:
+        Tuple[Array, Array, Array]: A tuple containing the normalized data, the mean value, and the standard deviation.
+    """
     if (mu is not None) and (sigma is not None):
         return (data - mu) / sigma
     else:
@@ -52,11 +63,34 @@ def apply_z_score(
 
 
 def revert_z_score(data: Array, mu: Array, sigma: Array):
+    """
+    Reverts the z-score normalization of the given data using the provided mean and standard deviation.
+
+    Parameters:
+    data (Array): The normalized data.
+    mu (Array): The mean used for normalization.
+    sigma (Array): The standard deviation used for normalization.
+
+    Returns:
+    Array: The reverted data.
+
+    """
     return sigma * data + mu
 
 
 # Taken from https://stackoverflow.com/questions/6027558/flatten-nested-dictionaries-compressing-keys
 def flatten_nested_dict(nested_dict, parent_key="", sep="."):
+    """
+    Recursively flattens a nested dictionary into a single-level dictionary.
+
+    Args:
+        nested_dict (dict): The nested dictionary to be flattened.
+        parent_key (str, optional): The parent key to be used for the flattened keys. Defaults to "".
+        sep (str, optional): The separator to be used between the parent key and the child key. Defaults to ".".
+
+    Returns:
+        dict: The flattened dictionary.
+    """
     items = []
     for name, cfg in nested_dict.items():
         new_key = parent_key + sep + name if parent_key else name
@@ -69,6 +103,17 @@ def flatten_nested_dict(nested_dict, parent_key="", sep="."):
 
 
 def update_config_dict(config_dict: ml_collections.ConfigDict, run, new_vals: dict):
+    """
+    Updates the given `config_dict` with values from `run.config` and `new_vals`.
+
+    Args:
+        config_dict (ml_collections.ConfigDict): The configuration dictionary to be updated.
+        run: The run object containing the configuration values.
+        new_vals (dict): A dictionary of new values to be added to the configuration.
+
+    Returns:
+        None
+    """
     config_dict.unlock()
     config_dict.update_from_flattened_dict(run.config)
     config_dict.update_from_flattened_dict(new_vals)
@@ -106,6 +151,17 @@ def setup_training(wandb_run):
 
 
 def get_tuned_hparams(d_name: str, split: int):
+    """
+    Retrieves the tuned hyperparameters for a given dataset and split.
+
+    Args:
+        d_name (str): The name of the dataset.
+        split (int): The split number.
+
+    Returns:
+        HparamsTuple: The mean hyperparameters for the given dataset and split.
+    """
+    
     n_seeds = 10
     import pickle
 

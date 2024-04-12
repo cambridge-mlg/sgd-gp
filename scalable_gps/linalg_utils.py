@@ -22,6 +22,22 @@ def solve_K_inv_v(K: Array, v: Array, noise_scale: float):
 def KvP(
     x1: Array, x2: Array, v: Array, kernel_fn: Kernel_fn, batch_size=1, **kernel_kwargs
 ):
+    """
+    Compute the product of the kernel matrix and a vector.
+
+    Args:
+        x1 (Array): The first input array of shape (n1, d1).
+        x2 (Array): The second input array of shape (n2, d1).
+        v (Array): The vector of shape (n2,).
+        kernel_fn (Kernel_fn): The kernel function.
+        batch_size (int, optional): The batch size for computation. Defaults to 1.
+        **kernel_kwargs: Additional keyword arguments to be passed to the kernel function.
+
+    Returns:
+        Array: The result of the product of the kernel matrix and the vector, reshaped to (n1,).
+
+    """
+    
     def _KvP(_, idx):
         return _, kernel_fn(x1[idx], x2, **kernel_kwargs) @ v
 
@@ -41,6 +57,24 @@ def pivoted_cholesky(
     diag_rtol: float = 1e-3,
     jitter: float = 1e-3,
 ):
+    """
+    Performs pivoted Cholesky decomposition on a given kernel matrix.
+
+    Args:
+        kernel (Kernel): The kernel object representing the covariance function.
+        x (Array): The input data array of shape (n, d), where n is the number of data points and d is the dimensionality.
+        max_rank (int): The maximum rank of the Cholesky decomposition.
+        diag_rtol (float, optional): The relative tolerance for the maximum error in the diagonal elements. Defaults to 1e-3.
+        jitter (float, optional): The jitter value added to the diagonal elements for numerical stability. Defaults to 1e-3.
+
+    Returns:
+        Array: The pivoted Cholesky decomposition of the kernel matrix, of shape (max_rank, n).
+
+    Raises:
+        AssertionError: If max_rank is greater than the number of data points.
+
+    """
+    
     n = x.shape[0]
     assert max_rank <= n
 
