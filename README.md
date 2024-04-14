@@ -28,10 +28,10 @@ We use UCI regression datasets from the excellent `uci_datasets` [repo](https://
 
 We provide parallelised Jax code for the following methods:
 
-1. `--config.method_name sgd --config.grad_variant vanilla` replicates the algorithm from our NeurIPS paper.
-2. `--config.method_name sgd --config.grad_variant batch_kvp` replicates the improved SDD algorithm from our ICLR paper.
-3. `--config.method_name cg` refers to conjugate gradients as a baseline. You can use the `--config.cg_config.preconditioner` flag to use a preconditioner.
-4. `--config.method_name vi` refers to an SVGP baseline.
+- `--config.method_name sgd --config.grad_variant vanilla` replicates the algorithm from our NeurIPS paper.
+- `--config.method_name sgd --config.grad_variant batch_all` replicates the improved SDD algorithm from our ICLR paper.
+- `--config.method_name cg` refers to conjugate gradients as a baseline. You can use the `--config.cg_config.preconditioner` flag to use a preconditioner.
+- `--config.method_name vi` refers to an SVGP baseline.
 
 # Molecular Benchmarks
 
@@ -43,7 +43,20 @@ python scalable_gps/scripts/obtain_mean.py --config configs/default.py:tanimoto_
 
 # Thompson Sampling Experiments
 
-TODO.
+To replicate our parallel Thompson sampling experiment on synthetic data sampled from ground truth GP, use the following command:
+
+```bash
+python scalable_gps/scripts/thompson_sampling.py
+```
+
+The default configuration file is `scalable_gps/configs/thompson_config.py`.
+
+Use
+- `--config.thompson.model_name CGGP` to run the conjugate gradients baseline
+- `--config.thompson.model_name SVGP` to run the SVGP baseline
+- `--config.thompson.model_name SGDGP` to run our SGD algorithm together with
+  - `--config.train_config.grad_variant vanilla` for the algorithm from our NeurIPS paper or
+  - `--config.train_config.grad_variant batch_all` for the improved SDD algorithm from our ICLR paper.
 
 # Navigating the code
 
