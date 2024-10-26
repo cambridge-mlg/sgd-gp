@@ -78,18 +78,17 @@ We would also love to implement our method in your GP library of choice. Please 
 If you use this repository to run SGD/SDD on your own experiments, please consider citing our papers:
 
 ```
-@article{lin2024sampling,
-  title={Sampling from gaussian process posteriors using stochastic gradient descent},
-  author={Lin, Jihao Andreas and Antor{\'a}n, Javier and Padhy, Shreyas and Janz, David and Hern{\'a}ndez-Lobato, Jos{\'e} Miguel and Terenin, Alexander},
-  journal={Advances in Neural Information Processing Systems},
-  volume={36},
-  year={2024}
+@inproceedings{lin2023sampling,
+    title = {Sampling from Gaussian Process Posteriors using Stochastic Gradient Descent},
+    author = {Jihao Andreas Lin and Javier Antorán and Shreyas Padhy and David Janz and José Miguel Hernández-Lobato and Alexander Terenin},
+    booktitle = {Advances in Neural Information Processing Systems},
+    year = {2023}
 }
 
-@article{lin2023stochastic,
-  title={Stochastic Gradient Descent for Gaussian Processes Done Right},
-  author={Lin, Jihao Andreas and Padhy, Shreyas and Antor{\'a}n, Javier and Tripp, Austin and Terenin, Alexander and Szepesv{\'a}ri, Csaba and Hern{\'a}ndez-Lobato, Jos{\'e} Miguel and Janz, David},
-  journal={arXiv preprint arXiv:2310.20581},
-  year={2023}
+@inproceedings{lin2024stochastic,
+    title = {Stochastic Gradient Descent for Gaussian Processes Done Right},
+    author = {Jihao Andreas Lin and Shreyas Padhy and Javier Antorán and Austin Tripp and Alexander Terenin and Csaba Szepesvári and José Miguel Hernández-Lobato and David Janz},
+    booktitle = {International Conference on Learning Representations},
+    year = {2024}
 }
 ```
