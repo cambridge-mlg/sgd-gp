@@ -17,7 +17,6 @@ class FourierFeatureParams(NamedTuple):
 
 
 class TanimotoFeatureParams(NamedTuple):
-    
     M: int
     r: chex.Array
     c: chex.Array
@@ -64,7 +63,7 @@ class Kernel:
 
         Returns:
             The value of the hyperparameter.
-        
+
         Raises:
             ValueError: If the required hyperparameter is not present in the config dict or specified in kwargs.
         """
@@ -313,7 +312,7 @@ class RBFKernel(StationaryKernel):
 
         return (signal_scale**2) * jnp.exp(-0.5 * self._sq_dist(x, y, length_scale))
 
-    @partial(jax.jit, static_argnums=(0,))
+    @partial(jax.jit, static_argnums=(0, 2, 3))
     def omega_fn(self, key: chex.PRNGKey, n_input_dims: int, n_features: int):
         """
         Generates random features for the kernel.
@@ -382,7 +381,10 @@ class MaternKernel(StationaryKernel):
         Returns:
             A random matrix generated from the Matern kernel.
         """
-        return jr.t(key, df=self._df, shape=(n_input_dims, n_features))
+        key1, key2 = jr.split(key, 2)
+        omega = jr.normal(key1, shape=(n_input_dims, n_features))
+        u = jr.chisquare(key2, self._df, shape=(1, n_features))
+        return omega * jnp.sqrt(self._df / u)
 
     @property
     def _df(self):
